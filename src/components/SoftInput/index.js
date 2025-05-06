@@ -27,13 +27,23 @@ import SoftInputIconRoot from "components/SoftInput/SoftInputIconRoot";
 // Soft UI Dashboard React contexts
 import { useSoftUIController } from "context";
 
-const SoftInput = forwardRef(({ size, icon, error, success, disabled, ...rest }, ref) => {
-  let template;
+const SoftInput = forwardRef((props, ref) => {
+  const {
+    size = "medium",
+    icon = { component: false, direction: "none" },
+    error = false,
+    success = false,
+    disabled = false,
+    ...rest
+  } = props;
+
   const [controller] = useSoftUIController();
   const { direction } = controller;
-  const iconDirection = icon.direction;
+  const iconDirection = icon?.direction || "none";
 
-  if (icon.component && icon.direction === "left") {
+  let template;
+
+  if (icon?.component && icon?.direction === "left") {
     template = (
       <SoftInputWithIconRoot ref={ref} ownerState={{ error, success, disabled }}>
         <SoftInputIconBoxRoot ownerState={{ size }}>
@@ -47,7 +57,7 @@ const SoftInput = forwardRef(({ size, icon, error, success, disabled, ...rest },
         />
       </SoftInputWithIconRoot>
     );
-  } else if (icon.component && icon.direction === "right") {
+  } else if (icon?.component && icon?.direction === "right") {
     template = (
       <SoftInputWithIconRoot ref={ref} ownerState={{ error, success, disabled }}>
         <SoftInputRoot
@@ -69,6 +79,7 @@ const SoftInput = forwardRef(({ size, icon, error, success, disabled, ...rest },
 
   return template;
 });
+
 
 // Setting default values for the props of SoftInput
 SoftInput.defaultProps = {
