@@ -1,17 +1,4 @@
-/**
-=========================================================
-* Soft UI Dashboard React - v4.0.1
-=========================================================
-
-* Product Page: https://www.creative-tim.com/product/soft-ui-dashboard-react
-* Copyright 2023 Creative Tim (https://www.creative-tim.com)
-
-Coded by www.creative-tim.com
-
- =========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
+import { useEffect, useState } from "react";
 
 // @mui material components
 import Grid from "@mui/material/Grid";
@@ -50,47 +37,55 @@ import team2 from "assets/images/team-2.jpg";
 import team3 from "assets/images/team-3.jpg";
 import team4 from "assets/images/team-4.jpg";
 
+// Servicios
+import { getMyProfile } from "services/authService";
+
 function Overview() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    getMyProfile()
+      .then(setUser)
+      .catch((error) => {
+        console.error("Error al obtener el perfil:", error);
+      });
+  }, []);
+
   return (
     <DashboardLayout>
-      <Header />
-      <SoftBox mt={5} mb={3}>
+    <Header user={user} />
+     <SoftBox mt={5} mb={3}>
         <Grid container spacing={3}>
           <Grid item xs={12} md={6} xl={4}>
             <PlatformSettings />
           </Grid>
           <Grid item xs={12} md={6} xl={4}>
-            <ProfileInfoCard
-              title="profile information"
-              description="Hi, I’m Alec Thompson, Decisions: If you can’t decide, the answer is no. If two equally difficult paths, choose the one more painful in the short term (pain avoidance is creating an illusion of equality)."
-              info={{
-                fullName: "Alec M. Thompson",
-                mobile: "(44) 123 1234 123",
-                email: "alecthompson@mail.com",
-                location: "USA",
-              }}
-              social={[
-                {
-                  link: "https://www.facebook.com/CreativeTim/",
-                  icon: <FacebookIcon />,
-                  color: "facebook",
-                },
-                {
-                  link: "https://twitter.com/creativetim",
-                  icon: <TwitterIcon />,
-                  color: "twitter",
-                },
-                {
-                  link: "https://www.instagram.com/creativetimofficial/",
-                  icon: <InstagramIcon />,
-                  color: "instagram",
-                },
-              ]}
-              action={{ route: "", tooltip: "Edit Profile" }}
-            />
+            {user && (
+
+          <ProfileInfoCard
+          title="Información del perfil"
+          description="Esta es tu información personal."
+          info={{
+            "Nombre": user.name,
+            "Teléfono": user.phone || "Sin teléfono",
+            "Correo": user.email,
+            "Dirección": user.address || "Sin dirección",
+            "No. documento": user.documentNumber || "No disponible",
+            "Foto del documento": user.documentPhotoUrl
+              ? <a href={user.documentPhotoUrl} target="_blank" rel="noreferrer">Ver foto</a>
+              : "No cargada",
+            "Cuenta verificada": user.isVerified ? "Sí" : "No"
+          }}
+          social={[]}
+          action={{ route: "/editar-perfil", tooltip: "Editar perfil" }}
+          />
+
+
+
+            )}
           </Grid>
           <Grid item xs={12} xl={4}>
-            <ProfilesList title="conversations" profiles={profilesListData} />
+            <ProfilesList title="Conversaciones" profiles={profilesListData} />
           </Grid>
         </Grid>
       </SoftBox>
@@ -99,12 +94,12 @@ function Overview() {
           <SoftBox pt={2} px={2}>
             <SoftBox mb={0.5}>
               <SoftTypography variant="h6" fontWeight="medium">
-                Projects
+                Proyectos
               </SoftTypography>
             </SoftBox>
             <SoftBox mb={1}>
               <SoftTypography variant="button" fontWeight="regular" color="text">
-                Architects design houses
+                Los arquitectos diseñan casas
               </SoftTypography>
             </SoftBox>
           </SoftBox>
@@ -113,14 +108,14 @@ function Overview() {
               <Grid item xs={12} md={6} xl={3}>
                 <DefaultProjectCard
                   image={homeDecor1}
-                  label="project #2"
-                  title="modern"
-                  description="As Uber works through a huge amount of internal management turmoil."
+                  label="Proyecto #2"
+                  title="Moderno"
+                  description="Mientras Uber atraviesa una gran cantidad de turbulencias internas en la gestión."
                   action={{
                     type: "internal",
                     route: "/pages/profile/profile-overview",
                     color: "info",
-                    label: "view project",
+                    label: "Ver proyecto",
                   }}
                   authors={[
                     { image: team1, name: "Elena Morison" },
@@ -133,14 +128,14 @@ function Overview() {
               <Grid item xs={12} md={6} xl={3}>
                 <DefaultProjectCard
                   image={homeDecor2}
-                  label="project #1"
-                  title="scandinavian"
-                  description="Music is something that every person has his or her own specific opinion about."
+                  label="Proyecto #1"
+                  title="Escandinavo"
+                  description="La música es algo sobre lo que cada persona tiene su propia opinión específica."
                   action={{
                     type: "internal",
                     route: "/pages/profile/profile-overview",
                     color: "info",
-                    label: "view project",
+                    label: "Ver proyecto",
                   }}
                   authors={[
                     { image: team3, name: "Nick Daniel" },
@@ -153,14 +148,14 @@ function Overview() {
               <Grid item xs={12} md={6} xl={3}>
                 <DefaultProjectCard
                   image={homeDecor3}
-                  label="project #3"
-                  title="minimalist"
-                  description="Different people have different taste, and various types of music."
+                  label="Proyecto #3"
+                  title="Minimalista"
+                  description="Las personas tienen diferentes gustos y varios tipos de música."
                   action={{
                     type: "internal",
                     route: "/pages/profile/profile-overview",
                     color: "info",
-                    label: "view project",
+                    label: "Ver proyecto",
                   }}
                   authors={[
                     { image: team4, name: "Peterson" },
@@ -171,7 +166,7 @@ function Overview() {
                 />
               </Grid>
               <Grid item xs={12} md={6} xl={3}>
-                <PlaceholderCard title={{ variant: "h5", text: "New project" }} outlined />
+                <PlaceholderCard title={{ variant: "h5", text: "Nuevo proyecto" }} outlined />
               </Grid>
             </Grid>
           </SoftBox>

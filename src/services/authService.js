@@ -31,3 +31,29 @@ export const register = async (newUser) => {
     throw new Error(error.response?.data?.message || "Error desconocido");
   }
 };
+
+export const getMyProfile = async () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    const response = await axios.get(`${API_BASE_URL}/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error al obtener perfil:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// authService.js
+export const updateMyProfile = async (data) => {
+  const token = localStorage.getItem("token");
+  const response = await axios.put(`${API_BASE_URL}/api/Users/me`, data, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return response.data;
+};

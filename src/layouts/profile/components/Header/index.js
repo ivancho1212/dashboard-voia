@@ -1,26 +1,14 @@
-/**
-=========================================================
-* Soft UI Dashboard React - v4.0.1
-=========================================================
-
-* Product Page: https://www.creative-tim.com/product/soft-ui-dashboard-react
-* Copyright 2023 Creative Tim (https://www.creative-tim.com)
-
-Coded by www.creative-tim.com
-
- =========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
-import { useState, useEffect } from "react";
+import { useRef, useState, useEffect } from "react";
+import PropTypes from "prop-types";
+import axios from "axios";
+import { v4 as uuidv4 } from "uuid";
 
 // @mui material components
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
-import AppBar from "@mui/material/AppBar";
-import Tabs from "@mui/material/Tabs";
-import Tab from "@mui/material/Tab";
+import Icon from "@mui/material/Icon";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
@@ -30,43 +18,55 @@ import SoftAvatar from "components/SoftAvatar";
 // Soft UI Dashboard React examples
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 
-// Soft UI Dashboard React icons
-import Cube from "examples/Icons/Cube";
-import Document from "examples/Icons/Document";
-import Settings from "examples/Icons/Settings";
-
-// Soft UI Dashboard React base styles
-import breakpoints from "assets/theme/base/breakpoints";
-
-// Images
-import burceMars from "assets/images/bruce-mars.jpg";
+// Imagen de fondo
 import curved0 from "assets/images/curved-images/curved0.jpg";
 
-function Header() {
-  const [tabsOrientation, setTabsOrientation] = useState("horizontal");
-  const [tabValue, setTabValue] = useState(0);
+function Header({ user }) {
+  const fileInputRef = useRef(null);
+  const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
+  const [avatarUrl, setAvatarUrl] = useState("/default-avatar.png");
 
   useEffect(() => {
-    // A function that sets the orientation state of the tabs.
-    function handleTabsOrientation() {
-      return window.innerWidth < breakpoints.values.sm
-        ? setTabsOrientation("vertical")
-        : setTabsOrientation("horizontal");
+    if (user?.avatarUrl) {
+      setAvatarUrl(`${API_BASE_URL}${user.avatarUrl}`);
     }
+  }, [user]);
+  
+  
+  const handleAvatarClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
 
-    /** 
-     The event listener that's calling the handleTabsOrientation function when resizing the window.
-    */
-    window.addEventListener("resize", handleTabsOrientation);
-
-    // Call the handleTabsOrientation function to set the state with the initial value.
-    handleTabsOrientation();
-
-    // Remove event listener on cleanup
-    return () => window.removeEventListener("resize", handleTabsOrientation);
-  }, [tabsOrientation]);
-
-  const handleSetTabValue = (event, newValue) => setTabValue(newValue);
+  const handleImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+  
+    const fileExtension = file.name.split(".").pop();
+    const uniqueFileName = `${uuidv4()}.${fileExtension}`;
+    const formData = new FormData();
+    formData.append("file", file, uniqueFileName);
+  
+    const token = localStorage.getItem("token"); // ✅ Agregado aquí
+  
+    try {
+      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
+      const response = await axios.put(`${API_BASE_URL}/api/Users/me/avatar`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      
+  
+      const fullAvatarUrl = `${API_BASE_URL}${response.data.avatarUrl}`;
+      setAvatarUrl(fullAvatarUrl);
+          } catch (error) {
+      console.error("Error al subir la imagen:", error);
+    }
+  };
+  
 
   return (
     <SoftBox position="relative">
@@ -102,42 +102,101 @@ function Header() {
       >
         <Grid container spacing={3} alignItems="center">
           <Grid item>
-            <SoftAvatar
-              src={burceMars}
-              alt="profile-image"
-              variant="rounded"
-              size="xl"
-              shadow="sm"
-            />
+           
+          <SoftBox
+          position="relative"
+          sx={{ 
+            width: "100px",
+            height: "100px",
+          }}
+        >
+          {/* Imagen de perfil */}
+          <SoftAvatar
+          src={avatarUrl}
+          alt="Imagen de perfil"
+          variant="rounded"
+          shadow="sm"
+          sx={{
+            width: "100%",
+            height: "100%",
+            "& img": {
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            },
+          }}
+        />
+
+          {/* Icono flotante */}
+          <Tooltip title="Cambiar imagen">
+            <IconButton
+              size="small"
+              onClick={handleAvatarClick}
+              sx={{
+                position: "absolute",
+                bottom: 4,
+                right: 4,
+                zIndex: 2,
+                backgroundColor: "#17c1e8",
+                boxShadow: 2,
+                "&:hover": {
+                  backgroundColor: "#f0f0f0",
+                },
+              }}
+            >
+              <Icon>add</Icon>
+            </IconButton>
+          </Tooltip>
+
+          {/* Input oculto */}
+          <input
+            type="file"
+            accept="image/*"
+            ref={fileInputRef}
+            style={{ display: "none" }}
+            onChange={handleImageUpload}
+          />
+        </SoftBox>
+
+            
           </Grid>
           <Grid item>
             <SoftBox height="100%" mt={0.5} lineHeight={1}>
               <SoftTypography variant="h5" fontWeight="medium">
-                Alex Thompson
+                {user?.name || "Cargando..."}
               </SoftTypography>
               <SoftTypography variant="button" color="text" fontWeight="medium">
-                CEO / Co-Founder
+              <SoftTypography variant="caption" color="text">
+                {user?.subscription?.expiresAt
+                  ? `Vence el ${new Date(user.subscription.expiresAt).toLocaleDateString()}`
+                  : "Sin suscripción activa"}
+              </SoftTypography>
+
+
               </SoftTypography>
             </SoftBox>
-          </Grid>
-          <Grid item xs={12} md={6} lg={4} sx={{ ml: "auto" }}>
-            <AppBar position="static">
-              <Tabs
-                orientation={tabsOrientation}
-                value={tabValue}
-                onChange={handleSetTabValue}
-                sx={{ background: "transparent" }}
-              >
-                <Tab label="App" icon={<Cube />} />
-                <Tab label="Message" icon={<Document />} />
-                <Tab label="Settings" icon={<Settings />} />
-              </Tabs>
-            </AppBar>
           </Grid>
         </Grid>
       </Card>
     </SoftBox>
   );
 }
+
+// Validación de props
+Header.propTypes = {
+  user: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+    name: PropTypes.string,
+    avatarUrl: PropTypes.string,
+    plan: PropTypes.shape({
+      name: PropTypes.string,
+    }),
+    subscription: PropTypes.shape({
+      expiresAt: PropTypes.string, // o PropTypes.instanceOf(Date) si ya viene como objeto Date
+      status: PropTypes.string,
+    }),
+  }),
+};
+
 
 export default Header;

@@ -106,7 +106,6 @@ function SignUp() {
   return (
     <BasicLayout
       title="¡Bienvenido!"
-      description="Usa el formulario para crear tu cuenta."
       image={curved6}
     >
       <Card>
@@ -117,7 +116,7 @@ function SignUp() {
         </SoftBox>
         <SoftBox mb={2}><Socials /></SoftBox>
         <Separator />
-        <SoftBox pt={2} pb={3} px={3}>
+        <SoftBox pt={2} pb={3} px={2}>
           <SoftBox component="form" role="form" onSubmit={handleSubmit}>
           <SoftBox mb={2}>
             <SoftInput
