@@ -27,7 +27,7 @@ export const register = async (newUser) => {
     const response = await axios.post(`${API_BASE_URL}/register`, newUser);
     return response.data;
   } catch (error) {
-    console.error("Error al registrar:", error.response?.data?.message || error.message);
+    console.error("Error al registrar:", error.response?.data?.Details || error.message);
     throw new Error(error.response?.data?.message || "Error desconocido");
   }
 };
@@ -49,8 +49,8 @@ export const getMyProfile = async () => {
 
 // authService.js
 export const updateMyProfile = async (data) => {
-  const token = localStorage.getItem("token");
-  const response = await axios.put(`${API_BASE_URL}/api/Users/me`, data, {
+  const token = localStorage.getItem("authToken");
+    const response = await axios.put(`${API_BASE_URL}/me`, data, {
     headers: {
       Authorization: `Bearer ${token}`,
     },

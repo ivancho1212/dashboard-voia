@@ -212,9 +212,9 @@ function SignUp() {
               }}
             >
               <option value="">Seleccionar tipo de documento</option>
-              <option value="1">Cédula de Ciudadanía</option>
-              <option value="2">NIT</option>
-              <option value="3">Pasaporte</option>
+              <option value="23">Cédula de Ciudadanía</option>
+              <option value="24">NIT</option>
+              <option value="25">Pasaporte</option>
             </SoftBox>
           </SoftBox>
 

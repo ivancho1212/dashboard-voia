@@ -4,14 +4,12 @@ import { useEffect, useState } from "react";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 
-// @mui icons
-import FacebookIcon from "@mui/icons-material/Facebook";
-import TwitterIcon from "@mui/icons-material/Twitter";
-import InstagramIcon from "@mui/icons-material/Instagram";
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
+
+import SettingsIcon from "@mui/icons-material/Settings";  // Nuevo ícono
 
 // Soft UI Dashboard React examples
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -20,7 +18,7 @@ import ProfileInfoCard from "examples/Cards/InfoCards/ProfileInfoCard";
 import ProfilesList from "examples/Lists/ProfilesList";
 import DefaultProjectCard from "examples/Cards/ProjectCards/DefaultProjectCard";
 import PlaceholderCard from "examples/Cards/PlaceholderCard";
-
+import { TextField } from "@mui/material";  // Importa el componente TextField
 // Overview page components
 import Header from "layouts/profile/components/Header";
 import PlatformSettings from "layouts/profile/components/PlatformSettings";
@@ -39,49 +37,167 @@ import team4 from "assets/images/team-4.jpg";
 
 // Servicios
 import { getMyProfile } from "services/authService";
+import { updateMyProfile } from "services/authService";
+import SoftButton from "components/SoftButton";
+import EditIcon from "@mui/icons-material/Edit";
 
 function Overview() {
   const [user, setUser] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editedUser, setEditedUser] = useState({});
 
   useEffect(() => {
     getMyProfile()
-      .then(setUser)
+      .then((data) => {
+        setUser(data);
+        setEditedUser(data);
+      })
       .catch((error) => {
         console.error("Error al obtener el perfil:", error);
       });
   }, []);
 
+  const handleChange = (field, value) => {
+    setEditedUser((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSave = async () => {
+    try {
+      const updated = await updateMyProfile(editedUser);
+      setUser(updated);
+      setEditMode(false);
+    } catch (error) {
+      console.error("Error al actualizar perfil:", error);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditedUser(user);
+    setEditMode(false);
+  };
+
   return (
     <DashboardLayout>
-    <Header user={user} />
-     <SoftBox mt={5} mb={3}>
+      <Header user={user} />
+      <SoftBox mt={5} mb={3}>
         <Grid container spacing={3}>
           <Grid item xs={12} md={6} xl={4}>
             <PlatformSettings />
           </Grid>
           <Grid item xs={12} md={6} xl={4}>
             {user && (
+              <ProfileInfoCard
+                title="Información del perfil"
+                description="Esta es tu información personal."
+                info={{
+                  "Teléfono": editMode ? (
+                    <TextField
+                      value={editedUser.phone || ""}
+                      onChange={(e) => handleChange("phone", e.target.value)}
+                      variant="outlined"
+                      size="small"
+                      sx={{
+                        backgroundColor: "#f0f0f0",
+                        borderRadius: "8px",
+                        marginTop: "-6px",
+                        marginBottom: "-10px",
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "8px", // Bordes redondeados
+                        },
+                        "& .MuiInputBase-root": {
+                           padding: "0px 0px", // Controlamos el padding
+                        },
+                      }}
+                    />
+                  ) : (user.phone || "Sin teléfono"),
 
-          <ProfileInfoCard
-          title="Información del perfil"
-          description="Esta es tu información personal."
-          info={{
-            "Nombre": user.name,
-            "Teléfono": user.phone || "Sin teléfono",
-            "Correo": user.email,
-            "Dirección": user.address || "Sin dirección",
-            "No. documento": user.documentNumber || "No disponible",
-            "Foto del documento": user.documentPhotoUrl
-              ? <a href={user.documentPhotoUrl} target="_blank" rel="noreferrer">Ver foto</a>
-              : "No cargada",
-            "Cuenta verificada": user.isVerified ? "Sí" : "No"
-          }}
-          social={[]}
-          action={{ route: "/editar-perfil", tooltip: "Editar perfil" }}
-          />
+                  "Correo": editMode ? (
+                    <TextField
+                      value={editedUser.email}
+                      onChange={(e) => handleChange("email", e.target.value)}
+                      variant="outlined"
+                      size="small"
+                      sx={{
+                        backgroundColor: "#f0f0f0",
+                        borderRadius: "8px",
+                        marginTop: "-6px",
+                        marginBottom: "-10px",                       
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "8px", // Bordes redondeados
+                        },
+                        "& .MuiInputBase-root": {
+                           padding: "0px 0px", // Controlamos el padding
+                        },
+                      }}
+                    />
+                  ) : user.email,
 
+                  "Dirección": editMode ? (
+                    <TextField
+                      value={editedUser.address || ""}
+                      onChange={(e) => handleChange("address", e.target.value)}
+                      variant="outlined"
+                      size="small"
+                      sx={{
+                        backgroundColor: "#f0f0f0",
+                        borderRadius: "8px",
+                        marginTop: "-6px",
+                        marginBottom: "-10px",                        
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "8px", // Bordes redondeados
+                        },
+                        "& .MuiInputBase-root": {
+                           padding: "0px 0px", // Controlamos el padding
+                        },
+                      }}
+                    />
+                  ) : (user.address || "Sin dirección"),
 
+                  "No. documento": editMode ? (
+                    <TextField
+                      value={editedUser.documentNumber || ""}
+                      onChange={(e) => handleChange("documentNumber", e.target.value)}
+                      variant="outlined"
+                      size="small"
+                      sx={{
+                        backgroundColor: "#f0f0f0",
+                        borderRadius: "8px",
+                        marginTop: "-6px",
+                        marginBottom: "-10px",                        
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "8px", // Bordes redondeados
+                        },
+                        "& .MuiInputBase-root": {
+                           padding: "0px 0px", // Controlamos el padding
+                        },
+                      }}
+                    />
+                  ) : (user.documentNumber || "No disponible"),
 
+                  "Foto del documento": user.documentPhotoUrl
+                    ? <a href={user.documentPhotoUrl} target="_blank" rel="noreferrer">Ver foto</a>
+                    : "No cargada",
+
+                  "Cuenta verificada": user.isVerified ? "Sí" : "No"
+                }}
+
+                social={[]}
+                action={{
+                  tooltip: editMode ? "" : "Editar perfil",
+                  icon: <EditIcon />,
+                  onClick: () => setEditMode(true),
+                }}
+              />
+            )}
+            {editMode && (
+              <SoftBox mt={2} display="flex" gap={2}>
+                <SoftButton color="success" onClick={handleSave}>
+                  Guardar
+                </SoftButton>
+                <SoftButton color="secondary" onClick={handleCancel}>
+                  Cancelar
+                </SoftButton>
+              </SoftBox>
             )}
           </Grid>
           <Grid item xs={12} xl={4}>

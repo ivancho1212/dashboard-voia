@@ -15,6 +15,7 @@ Coded by www.creative-tim.com
 
 // react-routers components
 import { Link } from "react-router-dom";
+import IconButton from "@mui/material/IconButton";  // Asegúrate de importar IconButton
 
 // prop-types is library for typechecking of props
 import PropTypes from "prop-types";
@@ -91,9 +92,12 @@ function ProfileInfoCard({ title, description, info, social, action }) {
           {title}
         </SoftTypography>
         <SoftTypography component={Link} to={action.route} variant="body2" color="secondary">
-          <Tooltip title={action.tooltip} placement="top">
-            <Icon>edit</Icon>
-          </Tooltip>
+        <Tooltip title={action.tooltip} placement="top">
+          <IconButton onClick={action.onClick}>
+            {action.icon}
+          </IconButton>
+        </Tooltip>
+
         </SoftTypography>
       </SoftBox>
       <SoftBox p={2}>
@@ -128,7 +132,10 @@ ProfileInfoCard.propTypes = {
   action: PropTypes.shape({
     route: PropTypes.string.isRequired,
     tooltip: PropTypes.string.isRequired,
+    onClick: PropTypes.func.isRequired,  // Validación para la función onClick
+    icon: PropTypes.element.isRequired,  // Validación para el icono
   }).isRequired,
 };
+
 
 export default ProfileInfoCard;
