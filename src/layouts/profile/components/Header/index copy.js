@@ -13,6 +13,7 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import { IconButton, Link } from "@mui/material";
 import TextField from "@mui/material/TextField";
+import Snackbar from '@mui/material/Snackbar'; // Asegúrate de usar la ruta correcta según tu versión de Material-UI
 
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
@@ -32,29 +33,11 @@ function Header({ user }) {
   const [editingName, setEditingName] = useState(false);
 
   useEffect(() => {
-    const fetchUser = async () => {
-      const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/api/users/me`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      const userData = await response.json();
-
-      if (response.ok) {
-        setLocalUser(userData); // Actualiza el estado con los datos del usuario
-      } else {
-        console.error("Error al obtener datos del usuario:", userData.message);
-      }
-    };
-
-    fetchUser();
-  }, []);
+    setTempName(user?.name || "");
+  }, [user]); // Esto asegura que 'tempName' se sincronice con 'user.name' cuando 'user' cambie
 
   const [tempName, setTempName] = useState(user?.name || "");
+  const [isLoadingAvatar, setIsLoadingAvatar] = useState(true);  // Aquí se agrega el estado para el avatar
   const [localUser, setLocalUser] = useState(user);
 
   useEffect(() => {
@@ -107,8 +90,8 @@ function Header({ user }) {
 
   const handleSaveName = async () => {
     if (tempName.trim() && tempName !== user.name) {
-      const token = localStorage.getItem("token");
-
+      const token = localStorage.getItem("token"); // Asegúrate de obtener el token antes de usarlo
+  
       try {
         const response = await fetch(`${API_BASE_URL}/api/users/me`, {
           method: "PUT",
@@ -124,20 +107,16 @@ function Header({ user }) {
             documentNumber: user.documentNumber,
           }),
         });
-
+  
         const result = await response.json();
-
-        if (response.ok) {
-          // Si la actualización fue exitosa, actualiza el estado local
-          setLocalUser((prevUser) => ({
-            ...prevUser,
-            name: tempName, // Actualiza solo el nombre
-          }));
-          alert("Nombre actualizado correctamente");
-        } else {
+  
+        if (!response.ok) {
           console.error("Error al actualizar nombre:", result.message);
           setErrorMessage(result.message || "No se pudo actualizar el nombre");
           setErrorOpen(true);
+        } else {
+          setLocalUser({ ...user, name: tempName });
+          alert("Nombre actualizado correctamente");
         }
       } catch (error) {
         console.error("Error de red:", error);
@@ -150,14 +129,17 @@ function Header({ user }) {
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-
+  
+    // Cambiar estado a "cargando" al iniciar la carga
+    setIsLoadingAvatar(true);
+  
     const fileExtension = file.name.split(".").pop();
     const uniqueFileName = `${uuidv4()}.${fileExtension}`;
     const formData = new FormData();
     formData.append("file", file, uniqueFileName);
-
+  
     const token = getToken();
-
+  
     try {
       const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
       const response = await axios.put(`${API_BASE_URL}/api/Users/me/avatar`, formData, {
@@ -166,13 +148,18 @@ function Header({ user }) {
           Authorization: `Bearer ${token}`,
         },
       });
-
+  
+      // Establecer la URL completa del avatar después de la carga
       const fullAvatarUrl = `${API_BASE_URL}${response.data.avatarUrl}`;
       setAvatarUrl(fullAvatarUrl);
     } catch (error) {
       console.error("Error al subir la imagen:", error);
+    } finally {
+      // Establecer el estado a "no cargando" después de terminar la carga
+      setIsLoadingAvatar(false);
     }
   };
+  
 
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -190,7 +177,7 @@ function Header({ user }) {
           backgroundColor: "rgba(255, 255, 255, 0.7)",
           borderRadius: 1,
           input: {
-            color: "#000",
+            color: "#000", // puedes ajustar si el fondo es más oscuro
           },
           backgroundImage: ({ functions: { rgba, linearGradient }, palette: { gradients } }) =>
             `${linearGradient(
@@ -225,7 +212,7 @@ function Header({ user }) {
             >
               {/* Imagen de perfil */}
               <SoftAvatar
-                src={avatarUrl}
+                src={isLoadingAvatar ? "/default-avatar.png" : avatarUrl} // Avatar por defecto mientras se carga
                 alt="Imagen de perfil"
                 variant="rounded"
                 shadow="sm"
@@ -238,6 +225,7 @@ function Header({ user }) {
                     objectFit: "cover",
                   },
                 }}
+                onLoad={() => setIsLoadingAvatar(false)} // Cuando la imagen se carga, actualizar el estado
               />
 
               {/* Icono flotante */}
@@ -286,29 +274,24 @@ function Header({ user }) {
                       }}
                       variant="standard"
                       autoFocus
-                      InputProps={{
-                        disableUnderline: false,
-                      }}
+                      InputProps={{ disableUnderline: false }}
                       sx={{
                         maxWidth: "200px",
                         mr: 1,
                         "& .MuiInputBase-root": {
-                          backgroundColor: "transparent !important", // Forzamos que el fondo sea transparente
-                          boxShadow: "none !important", // Forzamos la eliminación de la sombra
-                          border: "none !important", // Eliminamos cualquier borde que pudiera aparecer
-                          marginTop: "-5px !important", // Forzamos el margin-top
-                        },
-                        "& .MuiInputBase-input": {
-                          backgroundColor: "transparent !important", // También forzamos el fondo del input
+                          background: "transparent",
+                          boxShadow: "none",
+                          border: "none",
+                          marginTop: "-5px",
                         },
                         "& .MuiInput-underline:before": {
-                          borderBottom: "1px solid #ccc !important", // Línea debajo en estado normal
+                          borderBottom: "1px solid #ccc",
                         },
                         "& .MuiInput-underline:hover:before": {
-                          borderBottom: "1px solid #999 !important", // Línea debajo en hover
+                          borderBottom: "1px solid #999",
                         },
                         "& .MuiInput-underline:after": {
-                          borderBottom: "2px solid #1976d2 !important", // Línea debajo después de editar
+                          borderBottom: "2px solid #1976d2",
                         },
                       }}
                     />
@@ -322,7 +305,7 @@ function Header({ user }) {
                   </>
                 ) : (
                   <>
-                    {localUser?.name || "Cargando..."}
+                    {user?.name || "Cargando..."}
                     <IconButton size="small" onClick={() => setEditingName(true)} sx={{ ml: 1 }}>
                       <EditIcon fontSize="small" />
                     </IconButton>
@@ -355,8 +338,16 @@ function Header({ user }) {
           </Grid>
         </Grid>
       </Card>
+      <Snackbar 
+        open={errorOpen} 
+        autoHideDuration={6000} 
+        onClose={() => setErrorOpen(false)} 
+        message={errorMessage} 
+      />
     </SoftBox>
-  );
+
+);
+
 }
 
 // Validación de props
@@ -371,11 +362,11 @@ Header.propTypes = {
     avatarUrl: PropTypes.string,
     plan: PropTypes.shape({
       name: PropTypes.string,
-      subscription: PropTypes.shape({
+    subscription: PropTypes.shape({
         expiresAt: PropTypes.string,
         status: PropTypes.string,
       }),
-      plan: PropTypes.shape({
+    plan: PropTypes.shape({
         name: PropTypes.string,
       }),
     }),

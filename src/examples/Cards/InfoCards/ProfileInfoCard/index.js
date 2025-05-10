@@ -1,21 +1,6 @@
-/**
-=========================================================
-* Soft UI Dashboard React - v4.0.1
-=========================================================
-
-* Product Page: https://www.creative-tim.com/product/soft-ui-dashboard-react
-* Copyright 2023 Creative Tim (https://www.creative-tim.com)
-
-Coded by www.creative-tim.com
-
- =========================================================
-
-* The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-*/
-
 // react-routers components
 import { Link } from "react-router-dom";
-import IconButton from "@mui/material/IconButton";  // Asegúrate de importar IconButton
+import IconButton from "@mui/material/IconButton"; // Asegúrate de importar IconButton
 
 // prop-types is library for typechecking of props
 import PropTypes from "prop-types";
@@ -29,12 +14,22 @@ import Icon from "@mui/material/Icon";
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
+import SoftButton from "components/SoftButton";
 
 // Soft UI Dashboard React base styles
 import colors from "assets/theme/base/colors";
 import typography from "assets/theme/base/typography";
 
-function ProfileInfoCard({ title, description, info, social, action }) {
+function ProfileInfoCard({
+  title,
+  description,
+  info,
+  social,
+  action,
+  editMode,
+  handleSave,
+  handleCancel,
+}) {
   const labels = [];
   const values = [];
   const { socialMediaColors } = colors;
@@ -86,37 +81,40 @@ function ProfileInfoCard({ title, description, info, social, action }) {
   ));
 
   return (
-    <Card sx={{ height: "100%" }}>
+    <Card>
       <SoftBox display="flex" justifyContent="space-between" alignItems="center" pt={2} px={2}>
         <SoftTypography variant="h6" fontWeight="medium" textTransform="capitalize">
           {title}
         </SoftTypography>
         <SoftTypography component={Link} to={action.route} variant="body2" color="secondary">
-        <Tooltip title={action.tooltip} placement="top">
-          <IconButton onClick={action.onClick}>
-            {action.icon}
-          </IconButton>
-        </Tooltip>
-
+          <Tooltip title={action.tooltip} placement="top">
+            <IconButton onClick={action.onClick}>{action.icon}</IconButton>
+          </Tooltip>
         </SoftTypography>
       </SoftBox>
       <SoftBox p={2}>
-        <SoftBox mb={2} lineHeight={1}>
+        <SoftBox mb={-4}>
           <SoftTypography variant="button" color="text" fontWeight="regular">
             {description}
           </SoftTypography>
         </SoftBox>
+
         <SoftBox opacity={0.3}>
           <Divider />
         </SoftBox>
         <SoftBox>
           {renderItems}
-          <SoftBox display="flex" py={1} pr={2}>
-            <SoftTypography variant="button" fontWeight="bold" textTransform="capitalize">
-              social: &nbsp;
-            </SoftTypography>
-            {renderSocial}
-          </SoftBox>
+
+          {editMode && (
+            <SoftBox mt={2} display="flex" gap={2}>
+              <SoftButton color="success" onClick={handleSave}>
+                GUARDAR
+              </SoftButton>
+              <SoftButton color="secondary" onClick={handleCancel}>
+                CANCELAR
+              </SoftButton>
+            </SoftBox>
+          )}
         </SoftBox>
       </SoftBox>
     </Card>
@@ -132,10 +130,12 @@ ProfileInfoCard.propTypes = {
   action: PropTypes.shape({
     route: PropTypes.string.isRequired,
     tooltip: PropTypes.string.isRequired,
-    onClick: PropTypes.func.isRequired,  // Validación para la función onClick
-    icon: PropTypes.element.isRequired,  // Validación para el icono
+    onClick: PropTypes.func.isRequired,
+    icon: PropTypes.element.isRequired,
   }).isRequired,
+  editMode: PropTypes.bool,
+  handleSave: PropTypes.func,
+  handleCancel: PropTypes.func,
 };
-
 
 export default ProfileInfoCard;

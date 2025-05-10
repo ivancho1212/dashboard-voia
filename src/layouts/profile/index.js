@@ -4,12 +4,11 @@ import { useEffect, useState } from "react";
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 
-
 // Soft UI Dashboard React components
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 
-import SettingsIcon from "@mui/icons-material/Settings";  // Nuevo ícono
+import SettingsIcon from "@mui/icons-material/Settings"; // Nuevo ícono
 
 // Soft UI Dashboard React examples
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -18,7 +17,7 @@ import ProfileInfoCard from "examples/Cards/InfoCards/ProfileInfoCard";
 import ProfilesList from "examples/Lists/ProfilesList";
 import DefaultProjectCard from "examples/Cards/ProjectCards/DefaultProjectCard";
 import PlaceholderCard from "examples/Cards/PlaceholderCard";
-import { TextField } from "@mui/material";  // Importa el componente TextField
+import { TextField } from "@mui/material"; // Importa el componente TextField
 // Overview page components
 import Header from "layouts/profile/components/Header";
 import PlatformSettings from "layouts/profile/components/PlatformSettings";
@@ -63,13 +62,15 @@ function Overview() {
 
   const handleSave = async () => {
     try {
-      const updated = await updateMyProfile(editedUser);
-      setUser(updated);
+      await updateMyProfile(editedUser);
+      const updatedProfile = await getMyProfile();
+      setUser(updatedProfile);
       setEditMode(false);
     } catch (error) {
       console.error("Error al actualizar perfil:", error);
     }
   };
+  
 
   const handleCancel = () => {
     setEditedUser(user);
@@ -88,116 +89,144 @@ function Overview() {
             {user && (
               <ProfileInfoCard
                 title="Información del perfil"
-                description="Esta es tu información personal."
                 info={{
-                  "Teléfono": editMode ? (
+                  Teléfono: editMode ? (
                     <TextField
                       value={editedUser.phone || ""}
                       onChange={(e) => handleChange("phone", e.target.value)}
-                      variant="outlined"
-                      size="small"
+                      variant="standard"
+                      fullWidth
+                      InputProps={{ disableUnderline: false }}
                       sx={{
-                        backgroundColor: "#f0f0f0",
-                        borderRadius: "8px",
-                        marginTop: "-6px",
-                        marginBottom: "-10px",
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "8px", // Bordes redondeados
-                        },
+                        maxWidth: "160px",
                         "& .MuiInputBase-root": {
-                           padding: "0px 0px", // Controlamos el padding
+                          background: "transparent",
+                          boxShadow: "none",
+                          border: "none",
+                          marginTop: "-10px",
+                        },
+                        "& .MuiInput-underline:before": {
+                          borderBottom: "1px solid #ccc",
+                        },
+                        "& .MuiInput-underline:hover:before": {
+                          borderBottom: "1px solid #999",
+                        },
+                        "& .MuiInput-underline:after": {
+                          borderBottom: "2px solid #1976d2",
                         },
                       }}
                     />
-                  ) : (user.phone || "Sin teléfono"),
+                  ) : (
+                    user.phone || "Sin teléfono"
+                  ),
 
-                  "Correo": editMode ? (
+                  Correo: editMode ? (
                     <TextField
                       value={editedUser.email}
                       onChange={(e) => handleChange("email", e.target.value)}
-                      variant="outlined"
-                      size="small"
+                      variant="standard"
+                      fullWidth
                       sx={{
-                        backgroundColor: "#f0f0f0",
-                        borderRadius: "8px",
-                        marginTop: "-6px",
-                        marginBottom: "-10px",                       
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "8px", // Bordes redondeados
-                        },
+                        maxWidth: "160px",
                         "& .MuiInputBase-root": {
-                           padding: "0px 0px", // Controlamos el padding
+                          background: "transparent",
+                          boxShadow: "none",
+                          border: "none",
+                          marginTop: "-10px",
+                        },
+                        "& .MuiInput-underline:before": {
+                          borderBottom: "1px solid #ccc",
+                        },
+                        "& .MuiInput-underline:hover:before": {
+                          borderBottom: "1px solid #999",
+                        },
+                        "& .MuiInput-underline:after": {
+                          borderBottom: "2px solid #1976d2",
                         },
                       }}
                     />
-                  ) : user.email,
+                  ) : (
+                    user.email
+                  ),
 
-                  "Dirección": editMode ? (
+                  Dirección: editMode ? (
                     <TextField
                       value={editedUser.address || ""}
                       onChange={(e) => handleChange("address", e.target.value)}
-                      variant="outlined"
-                      size="small"
+                      variant="standard"
+                      fullWidth
                       sx={{
-                        backgroundColor: "#f0f0f0",
-                        borderRadius: "8px",
-                        marginTop: "-6px",
-                        marginBottom: "-10px",                        
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "8px", // Bordes redondeados
-                        },
+                        maxWidth: "160px",
                         "& .MuiInputBase-root": {
-                           padding: "0px 0px", // Controlamos el padding
+                          background: "transparent",
+                          boxShadow: "none",
+                          border: "none",
+                          marginTop: "-10px",
+                        },
+                        "& .MuiInput-underline:before": {
+                          borderBottom: "1px solid #ccc",
+                        },
+                        "& .MuiInput-underline:hover:before": {
+                          borderBottom: "1px solid #999",
+                        },
+                        "& .MuiInput-underline:after": {
+                          borderBottom: "2px solid #1976d2",
                         },
                       }}
                     />
-                  ) : (user.address || "Sin dirección"),
+                  ) : (
+                    user.address || "Sin dirección"
+                  ),
 
                   "No. documento": editMode ? (
                     <TextField
                       value={editedUser.documentNumber || ""}
                       onChange={(e) => handleChange("documentNumber", e.target.value)}
-                      variant="outlined"
-                      size="small"
+                      variant="standard"
+                      fullWidth
                       sx={{
-                        backgroundColor: "#f0f0f0",
-                        borderRadius: "8px",
-                        marginTop: "-6px",
-                        marginBottom: "-10px",                        
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "8px", // Bordes redondeados
-                        },
+                        maxWidth: "160px",
                         "& .MuiInputBase-root": {
-                           padding: "0px 0px", // Controlamos el padding
+                          background: "transparent",
+                          boxShadow: "none",
+                          border: "none",
+                          marginTop: "-10px",
+                        },
+                        "& .MuiInput-underline:before": {
+                          borderBottom: "1px solid #ccc",
+                        },
+                        "& .MuiInput-underline:hover:before": {
+                          borderBottom: "1px solid #999",
+                        },
+                        "& .MuiInput-underline:after": {
+                          borderBottom: "2px solid #1976d2",
                         },
                       }}
                     />
-                  ) : (user.documentNumber || "No disponible"),
+                  ) : (
+                    user.documentNumber || "No disponible"
+                  ),
 
-                  "Foto del documento": user.documentPhotoUrl
-                    ? <a href={user.documentPhotoUrl} target="_blank" rel="noreferrer">Ver foto</a>
-                    : "No cargada",
+                  "Foto del documento": user.documentPhotoUrl ? (
+                    <a href={user.documentPhotoUrl} target="_blank" rel="noreferrer">
+                      Ver foto
+                    </a>
+                  ) : (
+                    "No cargada"
+                  ),
 
-                  "Cuenta verificada": user.isVerified ? "Sí" : "No"
+                  "Cuenta verificada": user.isVerified ? "Sí" : "No",
                 }}
-
                 social={[]}
                 action={{
                   tooltip: editMode ? "" : "Editar perfil",
                   icon: <EditIcon />,
                   onClick: () => setEditMode(true),
                 }}
+                editMode={editMode}
+                handleSave={handleSave}
+                handleCancel={handleCancel}
               />
-            )}
-            {editMode && (
-              <SoftBox mt={2} display="flex" gap={2}>
-                <SoftButton color="success" onClick={handleSave}>
-                  Guardar
-                </SoftButton>
-                <SoftButton color="secondary" onClick={handleCancel}>
-                  Cancelar
-                </SoftButton>
-              </SoftBox>
             )}
           </Grid>
           <Grid item xs={12} xl={4}>
