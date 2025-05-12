@@ -156,7 +156,7 @@ function Header({ user }) {
     const formData = new FormData();
     formData.append("file", file, uniqueFileName);
 
-    const token = getToken();
+    const token = localStorage.getItem("token");
 
     try {
       const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
