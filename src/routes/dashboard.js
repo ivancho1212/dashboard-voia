@@ -1,5 +1,5 @@
 import Dashboard from "layouts/dashboard";
-import SpaceShipIcon from "examples/Icons/SpaceShip"; // Aquí importas el ícono que tienes disponible
+import SpaceShipIcon from "examples/Icons/SpaceShip"; 
 
 const dashboardRoutes = [
   {
