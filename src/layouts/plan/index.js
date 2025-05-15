@@ -10,6 +10,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
+import { createSubscription } from "services/planService";
 
 const getPlanColor = (name) => {
   const lower = name.toLowerCase();
@@ -47,6 +48,20 @@ const Plans = () => {
   useEffect(() => {
     fetchPlans();
   }, []);
+
+  const fetchUserId = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.get("http://localhost:5006/api/Users/me", {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
+      setUserId(response.data.id);
+    } catch (error) {
+      console.error("Error al obtener el usuario:", error);
+    }
+  };
 
   if (loading)
     return (
@@ -124,6 +139,7 @@ const Plans = () => {
                 <SoftBox mt={3} textAlign="center">
                   <Button
                     variant="contained"
+                    onClick={() => createSubscription(plan.id)}
                     sx={{
                       background: "linear-gradient(145deg, #d3d3d3, #000000)", // gris claro a negro, en diagonal
                       color: "#fff",
