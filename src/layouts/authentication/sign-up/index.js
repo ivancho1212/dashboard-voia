@@ -37,8 +37,14 @@ function SignUp() {
 
   // Manejar el cambio de los inputs del formulario
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+  
+    setForm({
+      ...form,
+      [name]: name === "documentTypeId" ? parseInt(value) || "" : value,
+    });
   };
+  
 
   // Validación del formulario
   const validateForm = () => {
@@ -82,7 +88,7 @@ function SignUp() {
         email: form.email,
         password: form.password,
         roleId: 2, // Aquí puedes cambiar si necesitas un rol diferente
-        documentTypeId: form.documentTypeId, // Usar el valor seleccionado
+        documentTypeId: parseInt(form.documentTypeId, 10), // Asegura que sea int
         phone: form.phone,
         address: form.address,
         documentNumber: form.documentNumber,
@@ -212,9 +218,9 @@ function SignUp() {
               }}
             >
               <option value="">Seleccionar tipo de documento</option>
-              <option value="23">Cédula de Ciudadanía</option>
-              <option value="24">NIT</option>
-              <option value="25">Pasaporte</option>
+              <option value="1">Cédula de Ciudadanía</option>
+              <option value="2">NIT</option>
+              <option value="3">Pasaporte</option>
             </SoftBox>
           </SoftBox>
 
