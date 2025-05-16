@@ -11,6 +11,8 @@ import SoftTypography from "components/SoftTypography";
 import Header from "layouts/profile/components/Header";
 import { getMyProfile } from "services/authService";
 import { getMyPlan } from "services/planService"; // <<-- nuevo servicio
+import Button from "@mui/material/Button";
+import SoftButton from "components/SoftButton";
 
 const Plans = () => {
   const [user, setUser] = useState(null);
@@ -74,8 +76,7 @@ const Plans = () => {
                   <strong>Máx Tokens:</strong> {plan.maxTokens}
                 </SoftTypography>
                 <SoftTypography variant="body2">
-                  <strong>Límite de Bots:</strong>{" "}
-                  {plan.botsLimit ?? "Ilimitado"}
+                  <strong>Límite de Bots:</strong> {plan.botsLimit ?? "Ilimitado"}
                 </SoftTypography>
                 <SoftTypography variant="body2">
                   <strong>Activo:</strong> {plan.isActive ? "Sí" : "No"}
@@ -86,6 +87,43 @@ const Plans = () => {
                 <SoftTypography variant="body2">
                   <strong>Vence:</strong> {new Date(plan.expiresAt).toLocaleDateString()}
                 </SoftTypography>
+
+                <SoftBox mt={3} textAlign="center">
+                  <SoftButton
+                    variant="contained"
+                    onClick={async () => {
+                      if (!plan) {
+                        await createSubscription(plan.id);
+                        fetchCurrentPlan(); // actualizar después de suscribirse
+                      } else {
+                        // Si el plan actual es distinto, cambiarlo
+                        await updateSubscription(plan.id);
+                        fetchCurrentPlan(); // actualizar después de cambiar
+                      }
+                    }}
+                    disabled={plan && plan.isActive}
+                    sx={{
+                      background:
+                        plan && plan.isActive
+                          ? "#aaa"
+                          : "linear-gradient(145deg, #d3d3d3, #000000)",
+                      color: "#fff",
+                      borderRadius: 2,
+                      px: 4,
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                      textTransform: "none",
+                      fontWeight: "bold",
+                      "&:hover": {
+                        background:
+                          plan && plan.isActive
+                            ? "#aaa"
+                            : "linear-gradient(145deg, #e0e0e0, #111111)",
+                      },
+                    }}
+                  >
+                    {plan && plan.isActive ? "Plan actual" : "Suscribirme"}
+                  </SoftButton>
+                </SoftBox>
               </Card>
             </Grid>
           </Grid>
