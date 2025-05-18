@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import { v4 as uuidv4 } from "uuid";
 
 // @mui material components
@@ -30,6 +31,7 @@ function Header({ user }) {
   const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
   const [avatarUrl, setAvatarUrl] = useState("/default-avatar.png");
   const [editingName, setEditingName] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -173,6 +175,13 @@ function Header({ user }) {
       console.error("Error al subir la imagen:", error);
     }
   };
+
+  const isSubscriptionActive = () => {
+    if (!user?.subscription?.expiresAt || !user?.subscription?.status) return false;
+    const now = new Date();
+    const expiresAt = new Date(user.subscription.expiresAt);
+    return user.subscription.status === "active" && expiresAt > now;
+  }; 
 
   const [errorOpen, setErrorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -331,9 +340,9 @@ function Header({ user }) {
               </SoftTypography>
 
               {/* SUSCRIPCIÓN */}
-              {user?.subscription?.expiresAt ? (
+              {isSubscriptionActive() ? (
                 <SoftTypography variant="caption" color="text">
-                  Vence el {new Date(user.subscription.expiresAt).toLocaleDateString()}
+                  Tu plan vence el {new Date(user.subscription.expiresAt).toLocaleDateString()}
                 </SoftTypography>
               ) : (
                 <>
@@ -342,10 +351,9 @@ function Header({ user }) {
                   </SoftTypography>
                   <SoftTypography
                     variant="button"
-                    component={Link}
-                    href="/planes"
-                    color="secundary"
-                    sx={{ display: "block", mt: 0.5 }}
+                    color="secondary"
+                    sx={{ display: "block", mt: 0.5, cursor: "pointer" }}
+                    onClick={() => navigate("/plans", { state: { currentPlanId: user?.plan?.id } })}
                   >
                     Suscríbete
                   </SoftTypography>
@@ -370,6 +378,7 @@ Header.propTypes = {
     documentNumber: PropTypes.string,
     avatarUrl: PropTypes.string,
     plan: PropTypes.shape({
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // <--- Agregado id aquí
       name: PropTypes.string,
       subscription: PropTypes.shape({
         expiresAt: PropTypes.string,
@@ -382,6 +391,7 @@ Header.propTypes = {
     subscription: PropTypes.shape({
       expiresAt: PropTypes.string,
       status: PropTypes.string,
+      isActive: PropTypes.bool, // ✅ Bien agregado
     }),
   }),
 };

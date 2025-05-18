@@ -4,26 +4,44 @@ import axios from "axios";
 export const getMyPlan = async () => {
   const token = localStorage.getItem("token");
 
-  const response = await axios.get("http://localhost:5006/api/subscriptions/me", {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
-  });
+  try {
+    const response = await axios.get("http://localhost:5006/api/subscriptions/me", {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    });
 
-  const subscription = response.data;
+    const subscription = response.data;
 
-  // Formatea los datos combinando la info de la suscripción y del plan
-  return {
-    name: subscription.planName,
-    description: subscription.planDescription || "Plan actual",
-    price: subscription.planPrice || 0,
-    maxTokens: subscription.planMaxTokens,
-    botsLimit: subscription.planBotsLimit,
-    isActive: subscription.status === "active",
-    startedAt: subscription.startedAt,
-    expiresAt: subscription.expiresAt,
-    id: subscription.planId, // importante para comparar en frontend
-  };
+    if (
+      !subscription ||
+      subscription.status === "cancelled" ||
+      subscription.status === "inactive"
+    ) {
+      return {
+        isActive: false,
+        message: "No tienes un plan activo. Puedes suscribirte nuevamente.",
+      };
+    }
+
+    return {
+      name: subscription.planName || "Plan actual",
+      description: subscription.planDescription || "Sin descripción disponible",
+      price: subscription.planPrice != null ? subscription.planPrice : 0,
+      maxTokens: subscription.planMaxTokens != null ? subscription.planMaxTokens : 0,
+      botsLimit: subscription.planBotsLimit != null ? subscription.planBotsLimit : 1,
+      isActive: subscription.status === "active",
+      startedAt: subscription.startedAt ? new Date(subscription.startedAt) : null,
+      expiresAt: subscription.expiresAt ? new Date(subscription.expiresAt) : null,
+      id: subscription.planId,
+    };
+  } catch (error) {
+    console.error("Error al obtener el plan del usuario:", error);
+    return {
+      isActive: false,
+      message: error.response?.data?.message || "No tienes un plan activo o hubo un error.",
+    };
+  }
 };
 
 // Crea una nueva suscripción
@@ -52,10 +70,7 @@ export const createSubscription = async (planId) => {
     alert("Suscripción realizada con éxito");
   } catch (error) {
     console.error("Error al suscribirse:", error);
-    alert(
-      error.response?.data?.message ||
-        "Ocurrió un error al intentar suscribirte al plan."
-    );
+    alert(error.response?.data?.message || "Ocurrió un error al intentar suscribirte al plan.");
   }
 };
 
@@ -85,10 +100,7 @@ export const updateSubscription = async (planId) => {
     alert("Cambio de plan realizado con éxito");
   } catch (error) {
     console.error("Error al cambiar de plan:", error);
-    alert(
-      error.response?.data?.message ||
-        "Ocurrió un error al intentar cambiar de plan."
-    );
+    alert(error.response?.data?.message || "Ocurrió un error al intentar cambiar de plan.");
   }
 };
 
@@ -96,4 +108,50 @@ export const updateSubscription = async (planId) => {
 export const getAllPlans = async () => {
   const response = await axios.get("http://localhost:5006/api/plans");
   return response.data;
+};
+
+export const createPlan = async (plan) => {
+  const token = localStorage.getItem("token");
+  const response = await axios.post(API_URL, plan, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+export const updatePlan = async (id, plan) => {
+  const token = localStorage.getItem("token");
+  await axios.put(`${API_URL}/${id}`, plan, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+export const deletePlan = async (id) => {
+  const token = localStorage.getItem("token");
+  await axios.delete(`${API_URL}/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+};
+
+export const cancelMyPlan = async () => {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    alert("No estás autenticado.");
+    return;
+  }
+
+  try {
+    await axios.put(
+      "http://localhost:5006/api/subscriptions/cancel",
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    alert("Suscripción cancelada correctamente");
+  } catch (error) {
+    console.error("Error al cancelar el plan:", error);
+    alert(error.response?.data?.message || "Error al cancelar la suscripción.");
+  }
 };

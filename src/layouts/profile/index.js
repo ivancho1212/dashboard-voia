@@ -8,8 +8,6 @@ import Card from "@mui/material/Card";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 
-import SettingsIcon from "@mui/icons-material/Settings"; // Nuevo ícono
-
 // Soft UI Dashboard React examples
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import Footer from "examples/Footer";
@@ -20,7 +18,7 @@ import PlaceholderCard from "examples/Cards/PlaceholderCard";
 import { TextField } from "@mui/material"; // Importa el componente TextField
 // Overview page components
 import Header from "layouts/profile/components/Header";
-import PlatformSettings from "layouts/profile/components/PlatformSettings";
+import MyPlanCard from "layouts/plan/current";
 
 // Data
 import profilesListData from "layouts/profile/data/profilesListData";
@@ -70,7 +68,6 @@ function Overview() {
       console.error("Error al actualizar perfil:", error);
     }
   };
-  
 
   const handleCancel = () => {
     setEditedUser(user);
@@ -82,9 +79,7 @@ function Overview() {
       <Header user={user} />
       <SoftBox mt={5} mb={3}>
         <Grid container spacing={3}>
-          <Grid item xs={12} md={6} xl={4}>
-            <PlatformSettings />
-          </Grid>
+
           <Grid item xs={12} md={6} xl={4}>
             {user && (
               <ProfileInfoCard
@@ -228,6 +223,9 @@ function Overview() {
                 handleCancel={handleCancel}
               />
             )}
+          </Grid>
+          <Grid item xs={12} md={6} xl={4}>
+            <MyPlanCard />
           </Grid>
           <Grid item xs={12} xl={4}>
             <ProfilesList title="Conversaciones" profiles={profilesListData} />

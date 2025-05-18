@@ -1,139 +1,189 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+// @mui components
 import CircularProgress from "@mui/material/CircularProgress";
-import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 
-import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
-import Footer from "examples/Footer";
+// Soft UI components
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
-
-import Header from "layouts/profile/components/Header";
-import { getMyProfile } from "services/authService";
-import { getMyPlan } from "services/planService"; // <<-- nuevo servicio
-import Button from "@mui/material/Button";
 import SoftButton from "components/SoftButton";
 
-const Plans = () => {
-  const [user, setUser] = useState(null);
+// Services
+import { getMyPlan, cancelMyPlan } from "services/planService";
+
+function MyPlanCard() {
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const fetchData = async () => {
-    try {
-      const [userData, planData] = await Promise.all([getMyProfile(), getMyPlan()]);
-      setUser(userData);
-      setPlan(planData);
-    } catch (error) {
-      console.error("Error al cargar datos:", error);
-      setError(error.response?.data?.message || "Hubo un error al obtener los datos.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const navigate = useNavigate(); // Navegación
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const planData = await getMyPlan();
+        setPlan(planData);
+        setError(null);
+      } catch (error) {
+        console.error("Error al cargar plan:", error);
+        setError(error.response?.data?.message || "Hubo un error al obtener el plan.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchData();
   }, []);
 
-  if (loading)
-    return (
-      <DashboardLayout>
-        <Header user={user} />
-        <SoftBox display="flex" justifyContent="center" mt={10}>
-          <CircularProgress />
-        </SoftBox>
-      </DashboardLayout>
-    );
-
   return (
-    <DashboardLayout>
-      <Header user={user} />
-      <SoftBox py={3}>
-        <SoftTypography variant="h4" fontWeight="bold" mb={2}>
-          Mi Plan Actual
+    <Card>
+      <SoftBox pt={2} px={2}>
+        <SoftTypography variant="h6" fontWeight="medium" textTransform="capitalize">
+          Mi plan actual
         </SoftTypography>
+      </SoftBox>
 
-        {error && (
-          <SoftTypography color="error" variant="body2" mb={2}>
+      <SoftBox pt={1.5} pb={2} px={2} lineHeight={1.25}>
+        {loading ? (
+          <SoftBox display="flex" justifyContent="center" py={2}>
+            <CircularProgress />
+          </SoftBox>
+        ) : error ? (
+          <SoftTypography color="error" variant="body2">
             {error}
           </SoftTypography>
-        )}
+        ) : plan && plan.isActive ? (
+          <>
+            <SoftTypography
+              variant="caption"
+              fontWeight="bold"
+              color="text"
+              textTransform="uppercase"
+              mb={1}
+            >
+              detalles del plan
+            </SoftTypography>
 
-        {plan ? (
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6} lg={4}>
-              <Card sx={{ p: 3, borderRadius: 3 }}>
-                <SoftTypography variant="h5" fontWeight="bold" gutterBottom>
-                  {plan.name}
-                </SoftTypography>
-                <SoftTypography variant="body2">{plan.description}</SoftTypography>
-                <SoftTypography variant="h6" color="primary" mt={2}>
-                  Precio: ${plan.price}
-                </SoftTypography>
-                <SoftTypography variant="body2">
-                  <strong>Máx Tokens:</strong> {plan.maxTokens}
-                </SoftTypography>
-                <SoftTypography variant="body2">
-                  <strong>Límite de Bots:</strong> {plan.botsLimit ?? "Ilimitado"}
-                </SoftTypography>
-                <SoftTypography variant="body2">
-                  <strong>Activo:</strong> {plan.isActive ? "Sí" : "No"}
-                </SoftTypography>
-                <SoftTypography variant="body2">
-                  <strong>Inicio:</strong> {new Date(plan.startedAt).toLocaleDateString()}
-                </SoftTypography>
-                <SoftTypography variant="body2">
-                  <strong>Vence:</strong> {new Date(plan.expiresAt).toLocaleDateString()}
-                </SoftTypography>
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Nombre:</strong> {plan.name}
+              </SoftTypography>
+            </SoftBox>
 
-                <SoftBox mt={3} textAlign="center">
-                  <SoftButton
-                    variant="contained"
-                    onClick={async () => {
-                      if (!plan) {
-                        await createSubscription(plan.id);
-                        fetchCurrentPlan(); // actualizar después de suscribirse
-                      } else {
-                        // Si el plan actual es distinto, cambiarlo
-                        await updateSubscription(plan.id);
-                        fetchCurrentPlan(); // actualizar después de cambiar
-                      }
-                    }}
-                    disabled={plan && plan.isActive}
-                    sx={{
-                      background:
-                        plan && plan.isActive
-                          ? "#aaa"
-                          : "linear-gradient(145deg, #d3d3d3, #000000)",
-                      color: "#fff",
-                      borderRadius: 2,
-                      px: 4,
-                      boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                      textTransform: "none",
-                      fontWeight: "bold",
-                      "&:hover": {
-                        background:
-                          plan && plan.isActive
-                            ? "#aaa"
-                            : "linear-gradient(145deg, #e0e0e0, #111111)",
-                      },
-                    }}
-                  >
-                    {plan && plan.isActive ? "Plan actual" : "Suscribirme"}
-                  </SoftButton>
-                </SoftBox>
-              </Card>
-            </Grid>
-          </Grid>
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Descripción:</strong> {plan.description}
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Precio:</strong> ${plan.price}
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Máx Tokens:</strong> {plan.maxTokens}
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Límite de Bots:</strong> {plan.botsLimit ?? "Ilimitado"}
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Activo:</strong> {plan.isActive ? "Sí" : "No"}
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Inicio:</strong>{" "}
+                {plan.startedAt ? new Date(plan.startedAt).toLocaleDateString() : "N/A"}
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox py={1}>
+              <SoftTypography variant="button" fontWeight="regular" color="text">
+                <strong>Vence:</strong>{" "}
+                {plan.expiresAt ? new Date(plan.expiresAt).toLocaleDateString() : "N/A"}
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox mt={3} display="flex" flexDirection="column" alignItems="flex-start" gap={1}>
+              <SoftButton
+                variant="text"
+                onClick={() => navigate("/plans", { state: { currentPlanId: plan?.id } })}
+                sx={{
+                  color: "#1a73e8",
+                  fontWeight: "bold",
+                  textTransform: "none",
+                  padding: 0,
+                  minHeight: "auto",
+                  minWidth: "auto",
+                  "&:hover": {
+                    textDecoration: "underline",
+                    backgroundColor: "transparent",
+                    color: "#0f5bb5",
+                  },
+                }}
+              >
+                Cambiar plan
+              </SoftButton>
+
+              <SoftButton
+                variant="text"
+                onClick={async () => {
+                  if (window.confirm("¿Estás seguro de cancelar tu plan?")) {
+                    try {
+                      setLoading(true);
+                      await cancelMyPlan(plan.id); // Llama al servicio para cancelar
+                
+                      // Refrescar el plan después de cancelar
+                      const updatedPlan = await getMyPlan();
+                      setPlan(updatedPlan);
+                      setError(null);
+                    } catch (error) {
+                      setError(error.response?.data?.message || "Error al cancelar el plan.");
+                    } finally {
+                      setLoading(false);
+                      // 🔄 Recargar la página para actualizar el header
+                      window.location.reload();
+                    }
+                  }
+                }}
+                
+                sx={{
+                  color: "#1a73e8",
+                  fontWeight: "bold",
+                  textTransform: "none",
+                  padding: 0,
+                  minHeight: "auto",
+                  minWidth: "auto",
+                  "&:hover": {
+                    textDecoration: "underline",
+                    backgroundColor: "transparent",
+                    color: "#0f5bb5",
+                  },
+                }}
+              >
+                Cancelar plan
+              </SoftButton>
+            </SoftBox>
+          </>
         ) : (
-          <SoftTypography variant="body2">No tienes un plan activo.</SoftTypography>
+          <SoftTypography variant="body2">
+            {plan?.message || "No tienes un plan activo."}
+          </SoftTypography>
         )}
       </SoftBox>
-      <Footer />
-    </DashboardLayout>
+    </Card>
   );
-};
+}
 
-export default Plans;
+export default MyPlanCard;
