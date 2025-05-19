@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import MyBotCard from "layouts/bot/components/MyBotCard";
 
 // @mui material components
 import Grid from "@mui/material/Grid";
@@ -79,7 +80,6 @@ function Overview() {
       <Header user={user} />
       <SoftBox mt={5} mb={3}>
         <Grid container spacing={3}>
-
           <Grid item xs={12} md={6} xl={4}>
             {user && (
               <ProfileInfoCard
@@ -224,8 +224,13 @@ function Overview() {
               />
             )}
           </Grid>
+
           <Grid item xs={12} md={6} xl={4}>
             <MyPlanCard />
+          </Grid>
+
+          <Grid item xs={12} md={6} xl={4}>
+            <MyBotCard />
           </Grid>
           <Grid item xs={12} xl={4}>
             <ProfilesList title="Conversaciones" profiles={profilesListData} />
