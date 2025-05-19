@@ -1,5 +1,7 @@
 import axios from "axios";
 
+const API_URL = "http://localhost:5006/api/plans"; // o usar process.env si ya tienes .env
+
 // Obtiene el plan actual del usuario
 export const getMyPlan = async () => {
   const token = localStorage.getItem("token");
@@ -84,7 +86,7 @@ export const updateSubscription = async (planId) => {
     expiresAt.setMonth(now.getMonth() + 1);
 
     await axios.put(
-      "http://localhost:5006/api/subscriptions/change", // ✅ URL correcta
+      "http://localhost:5006/api/subscriptions/change",
       {
         planId,
         startedAt: now.toISOString(),
@@ -110,6 +112,17 @@ export const getAllPlans = async () => {
   return response.data;
 };
 
+// Obtener todos los planes (solo para admins)
+export const getAllPlansForAdmin = async () => {
+  const token = localStorage.getItem("token");
+  const response = await axios.get("http://localhost:5006/api/plans/admin", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  return response.data;
+};
+
 export const createPlan = async (plan) => {
   const token = localStorage.getItem("token");
   const response = await axios.post(API_URL, plan, {
@@ -120,9 +133,23 @@ export const createPlan = async (plan) => {
 
 export const updatePlan = async (id, plan) => {
   const token = localStorage.getItem("token");
-  await axios.put(`${API_URL}/${id}`, plan, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  if (!token) {
+    console.error("No hay token guardado en localStorage");
+    return;
+  }
+
+  try {
+    const response = await axios.put(`http://localhost:5006/api/plans/${id}`, plan, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error al actualizar el plan:", error.response?.data || error.message);
+    throw error;
+  }
 };
 
 export const deletePlan = async (id) => {
