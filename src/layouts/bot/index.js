@@ -13,10 +13,10 @@ import SoftTypography from "components/SoftTypography";
 
 import MyBotCard from "./components/MyBotCard";
 import BotCreate from "./create"; // ✅ si estás en src/layouts/bot/index.js
-// import BotCreate from "../bot/create"; // ✅ si estás en otro subdirectorio
 
 function BotsDashboard() {
   const [showCreate, setShowCreate] = useState(false);
+  const [userBot, setUserBot] = useState(null); // en el futuro, aquí puedes usar useEffect para cargarlo
 
   const handleShowCreate = () => setShowCreate(true);
   const handleCancelCreate = () => setShowCreate(false);
@@ -29,56 +29,57 @@ function BotsDashboard() {
           Mis Bots
         </SoftTypography>
 
-        {!showCreate && (
-          <Grid container spacing={3} mb={4} alignItems="center" justifyContent="space-between">
-            <Grid item>
-              <SoftBox
-                display="flex"
-                alignItems="center"
-                justifyContent="center"
-                height="100%"
-                p={2}
-                sx={{
-                  background: "linear-gradient(135deg, #F0F8FF, #87CEFA)",
-                  borderRadius: 2,
-                }}
-              >
-                <Icon sx={{ fontSize: 40, color: "#003B73" }}>smart_toy</Icon>
-                <SoftTypography variant="h6" ml={2} fontWeight="bold" color="#003B73">
-                  Bots Activos
-                </SoftTypography>
-              </SoftBox>
-            </Grid>
-
-            <Grid item>
-              <SoftButton
-                variant="gradient"
-                onClick={handleShowCreate}
-                sx={{
-                  background: "linear-gradient(135deg, #F0F8FF, #87CEFA)",
-                  color: "#003B73",
-                  fontWeight: "bold",
-                  "&:hover": {
-                    background: "linear-gradient(135deg, #e6f2fb, #7ec8f5)",
-                  },
-                }}
-              >
-                Crear Bot
-              </SoftButton>
-            </Grid>
-          </Grid>
-        )}
-
-        {showCreate ? (
-          <BotCreate onCancel={handleCancelCreate} />
-        ) : (
-          <Grid container spacing={3}>
+        <Grid container spacing={3}>
+          {showCreate ? (
             <Grid item xs={12} md={6} lg={4}>
-              <MyBotCard />
+              <BotCreate onCancel={handleCancelCreate} />
             </Grid>
-            {/* Aquí puedes mapear más bots si lo deseas */}
-          </Grid>
-        )}
+
+          ) : (
+            <>
+              {userBot ? (
+                <Grid item xs={12} md={6} lg={4}>
+                  <MyBotCard bot={userBot} />
+                </Grid>
+              ) : (
+                <Grid item xs={12}>
+                  <SoftTypography variant="h6" color="text" mb={2}>
+                    Mi Bot Asociado
+                  </SoftTypography>
+                  <SoftTypography variant="body2" color="textSecondary">
+                    No tienes ningún bot asociado.
+                  </SoftTypography>
+                </Grid>
+              )}
+
+              <Grid item xs={12} md={6} lg={4}>
+                <SoftBox
+                  onClick={handleShowCreate}
+                  sx={{
+                    cursor: "pointer",
+                    height: "100%",
+                    borderRadius: 2,
+                    background: "linear-gradient(135deg, #F0F8FF, #D1ECFF)",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    border: "2px dashed #87CEFA",
+                    padding: 4,
+                    "&:hover": {
+                      background: "linear-gradient(135deg, #e6f7ff, #cfeefe)",
+                    },
+                  }}
+                >
+                  <Icon sx={{ fontSize: 50, color: "#0077b6" }}>add_circle_outline</Icon>
+                  <SoftTypography variant="h6" mt={2} color="#0077b6">
+                    Crear Nuevo Bot
+                  </SoftTypography>
+                </SoftBox>
+              </Grid>
+            </>
+          )}
+        </Grid>
       </SoftBox>
       <Footer />
     </DashboardLayout>

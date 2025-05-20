@@ -14,7 +14,7 @@ import SoftButton from "components/SoftButton";
 import SoftTypography from "components/SoftTypography";
 
 // Servicio para crear bots
-import { createBot } from "services/bots";
+import { createBot } from "services/botService";
 
 function BotCreate({ onCancel }) {
   const [bot, setBot] = useState({
