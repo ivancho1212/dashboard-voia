@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useEffect } from "react";
 import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftInput from "components/SoftInput";
 import SoftSelect from "components/SoftSelect";
 import SoftTypography from "components/SoftTypography";
 import MenuItem from "@mui/material/MenuItem";
-import AvatarUploader from "./AvatarUploader"; // Asegúrate de tener este archivo creado
+import AvatarUploader from "./AvatarUploader";
 import SaveApplyButtons from "./SaveApplyButtons";
 
 export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
@@ -50,8 +50,27 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
     }
   };
 
+  useEffect(() => {
+    setStyle((prev) => {
+      if (prev.theme === "light") {
+        return {
+          ...prev,
+          primary_color: "#ffffff",
+          secondary_color: "#000000",
+        };
+      } else if (prev.theme === "dark") {
+        return {
+          ...prev,
+          primary_color: "#000000",
+          secondary_color: "#ffffff",
+        };
+      }
+      return prev; // Si es "custom" no tocamos nada
+    });
+  }, []); // Ejecutar solo una vez al montar
+
   return (
-    <SoftBox flex="1 1 40%" minWidth="300px" maxWidth="550px">
+    <SoftBox width="100%" maxWidth="900px" px={2}>
       <SoftTypography variant="h6" gutterBottom>
         Editor de Estilo
       </SoftTypography>
@@ -81,6 +100,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
           value={style.primary_color}
           onChange={handleChange}
           fullWidth
+          disabled={style.theme !== "custom"}
         />
       </SoftBox>
 
@@ -92,6 +112,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
           value={style.secondary_color}
           onChange={handleChange}
           fullWidth
+          disabled={style.theme !== "custom"}
         />
       </SoftBox>
 
@@ -144,7 +165,6 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
         </SoftSelect>
       </SoftBox>
       <SaveApplyButtons style={style} />
-
     </SoftBox>
   );
 }

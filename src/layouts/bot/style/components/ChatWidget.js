@@ -1,9 +1,9 @@
-import React, { useState } from "react";
-import { FaPaperPlane, FaImage, FaComments, FaRobot } from "react-icons/fa";
+import React, { useState, useEffect } from "react"; // <-- import useEffect
+import { FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 
 export default function ChatWidget({
-  theme,
+  theme: initialTheme,
   primary_color,
   secondary_color,
   font_family,
@@ -11,6 +11,24 @@ export default function ChatWidget({
   position,
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [theme, setTheme] = useState(() => initialTheme || "light");
+  useEffect(() => {
+    if (initialTheme && initialTheme !== theme) {
+      setTheme(initialTheme);
+    }
+  }, [initialTheme]);
+
+  const [primaryColor, setPrimaryColor] = useState(primary_color || "#000000");
+  const [secondaryColor, setSecondaryColor] = useState(secondary_color || "#ffffff");
+
+  useEffect(() => {
+    if (primary_color && primary_color !== primaryColor) {
+      setPrimaryColor(primary_color);
+    }
+    if (secondary_color && secondary_color !== secondaryColor) {
+      setSecondaryColor(secondary_color);
+    }
+  }, [primary_color, secondary_color]);
 
   const themeConfig = {
     light: {
@@ -20,7 +38,7 @@ export default function ChatWidget({
       inputBg: "#ffffff",
       inputText: "#000000",
       inputBorder: "#dddddd",
-      buttonBg: primary_color || "#000",
+      buttonBg: primaryColor,
       buttonColor: "#ffffff",
     },
     dark: {
@@ -30,31 +48,23 @@ export default function ChatWidget({
       inputBg: "#2a2a2a",
       inputText: "#ffffff",
       inputBorder: "#444444",
-      buttonBg: primary_color || "#ffffff",
+      buttonBg: primaryColor,
       buttonColor: "#000000",
     },
     custom: {
-      backgroundColor: secondary_color || "#ffffff",
-      textColor: primary_color || "#000000",
-      borderColor: secondary_color || "#cccccc",
-      inputBg: secondary_color || "#ffffff",
-      inputText: primary_color || "#000000",
-      inputBorder: secondary_color || "#cccccc",
-      buttonBg: primary_color || "#000000",
+      backgroundColor: secondaryColor,
+      textColor: primaryColor,
+      borderColor: secondaryColor,
+      inputBg: secondaryColor,
+      inputText: primaryColor,
+      inputBorder: secondaryColor,
+      buttonBg: primaryColor,
       buttonColor: "#ffffff",
     },
   };
 
-  const {
-    backgroundColor,
-    textColor,
-    borderColor,
-    inputBg,
-    inputText,
-    inputBorder,
-    buttonBg,
-    buttonColor,
-  } = themeConfig[theme] || themeConfig.light;
+  const { backgroundColor, textColor, inputBg, inputText, inputBorder, buttonBg, buttonColor } =
+    themeConfig[theme] || themeConfig.light;
 
   const widgetStyle = {
     backgroundColor,
@@ -70,20 +80,12 @@ export default function ChatWidget({
     padding: "16px",
   };
 
-  const avatarStyle = {
-    width: "40px",
-    height: "40px",
-    borderRadius: "50%",
-    objectFit: "cover",
-    border: `2px solid ${textColor}`,
-  };
-
   const avatarFloatingStyle = {
-    width: "76px",
-    height: "76px",
+    width: "68px",
+    height: "68px",
     borderRadius: "50%",
-    objectFit: "cover",
-    border: `2px solid ${buttonColor}`,
+    objectFit: "contain",
+    border: "none",
   };
 
   const inputContainerStyle = {
@@ -93,7 +95,7 @@ export default function ChatWidget({
   };
 
   const inputStyle = {
-    width: "100%",
+    width: "80%",
     padding: "10px 40px 10px 35px",
     borderRadius: "12px",
     border: `1.5px solid ${inputBorder}`,
@@ -145,6 +147,7 @@ export default function ChatWidget({
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Abrir chat"
+          aria-expanded={isOpen} // <-- accesibilidad
           style={{
             backgroundColor: buttonBg,
             borderRadius: "50%",
@@ -161,16 +164,25 @@ export default function ChatWidget({
             padding: 0,
           }}
         >
-          {avatar_url ? (
-            <img src={avatar_url} alt="Avatar" style={avatarFloatingStyle} />
-          ) : (
-            <FaRobot size={36} color={textColor} />
-          )}
+          <div
+            style={{
+              width: "72px",
+              height: "72px",
+              borderRadius: "50%",
+              backgroundColor: "#eee",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+            }}
+          >
+            <img src={avatar_url || "/bot.png"} alt="Avatar" style={avatarFloatingStyle} />
+          </div>
         </button>
       ) : (
         <div style={widgetStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {avatar_url && <img src={avatar_url} alt="Bot Avatar" style={avatarStyle} />}
+            <img src={avatar_url || "/bot.png"} alt="Avatar" style={avatarFloatingStyle} />
             <strong style={{ fontSize: "14px", color: textColor }}>Soy el bot</strong>
             <button
               onClick={() => setIsOpen(false)}

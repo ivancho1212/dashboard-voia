@@ -2,7 +2,6 @@ import React, { useRef } from "react";
 import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
-import SoftTypography from "components/SoftTypography";
 
 export default function AvatarUploader({ style, setStyle }) {
   const inputRef = useRef();
@@ -22,30 +21,31 @@ export default function AvatarUploader({ style, setStyle }) {
     inputRef.current.click();
   };
 
+  const avatarSrc = style.avatar_url || "/bot.png";
+
   return (
     <SoftBox display="flex" flexDirection="column" alignItems="center" gap={1} mb={2}>
-      <SoftTypography variant="caption">Avatar</SoftTypography>
-
-      {style.avatar_url ? (
+      <SoftBox
+        width="120px"
+        height="120px"
+        borderRadius="50%"
+        overflow="hidden"
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        boxShadow="sm"
+        bgcolor="#eee"
+      >
         <img
-          src={style.avatar_url}
+          src={avatarSrc}
           alt="Avatar preview"
-          style={{ width: 50, height: 50, borderRadius: "50%", objectFit: "cover" }}
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "contain",
+          }}
         />
-      ) : (
-        <SoftBox
-          width={80}
-          height={80}
-          borderRadius="50%"
-          bgcolor="#ddd"
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          color="#999"
-        >
-          Sin avatar
-        </SoftBox>
-      )}
+      </SoftBox>
 
       <input
         type="file"

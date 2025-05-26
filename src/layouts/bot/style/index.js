@@ -194,11 +194,19 @@ function BotStylePage() {
             </>
           )}
           {activeTab === 1 && viewMode === "create" && styleEditing && (
-            <StyleEditor
-              style={styleEditing}
-              setStyle={setStyleEditing}
-              setShowPreviewWidget={() => {}}
-            />
+            <SoftBox
+              mt={3}
+              display="flex"
+              justifyContent="center"
+              alignItems="flex-start"
+              width="100%"
+            >
+              <StyleEditor
+                style={styleEditing}
+                setStyle={setStyleEditing}
+                setShowPreviewWidget={() => {}}
+              />
+            </SoftBox>
           )}
         </SoftBox>
 
@@ -208,8 +216,7 @@ function BotStylePage() {
             <SoftBox flex="1 1 40%" minWidth="300px">
               <StylePreview style={styleToPreview} />
             </SoftBox>
-            <SoftBox flex="1 1 40%" minWidth="300px">
-            </SoftBox>
+            <SoftBox flex="1 1 40%" minWidth="300px"></SoftBox>
           </SoftBox>
         )}
       </SoftBox>
