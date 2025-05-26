@@ -1,5 +1,4 @@
 import BotsList from "layouts/bot";
-import BotCreate from "layouts/bot/create";
 import BotSettings from "layouts/bot/settings";
 import BotTraining from "layouts/bot/training";
 import BotStyle from "layouts/bot/style";
@@ -29,13 +28,13 @@ const botRoutes = [
   },
   {
     type: "collapse",
-    name: "Crear Bot",
-    key: "bot-create",
-    route: "/bots/create",
-    icon: <FaPlusCircle size={14} />,
-    component: <BotCreate />,
+    name: "Estilos del Bot", // Cambia esto si quieres mostrar solo "Estilos"
+    key: "bot-style",        // clave única más descriptiva
+    route: "/bots/style",    // nueva ruta en la URL
+    icon: <FaPalette size={14} />,
+    component: <BotStyle />,     // renómbralo si vas a cambiar el nombre del componente también
     noCollapse: true,
-  },
+  },  
   {
     type: "collapse",
     name: "Administrar Bots",
@@ -49,7 +48,7 @@ const botRoutes = [
     key: "bot-settings",
     route: "/bots/settings",
     name: "Configuración del Bot",
-    icon: <FaTools size={14} />,
+    icon: <FaCogs size={14} />,
     component: <BotSettings />,
   },
   {
@@ -58,13 +57,6 @@ const botRoutes = [
     name: "Entrenamiento del Bot",
     icon: <FaBrain size={14} />,
     component: <BotTraining />,
-  },
-  {
-    key: "bot-style",
-    route: "/bots/style",
-    name: "Estilo del Bot",
-    icon: <FaPalette size={14} />,
-    component: <BotStyle />,
   },
   {
     key: "bot-integration",

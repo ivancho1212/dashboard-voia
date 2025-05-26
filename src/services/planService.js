@@ -123,12 +123,42 @@ export const getAllPlansForAdmin = async () => {
   return response.data;
 };
 
-export const createPlan = async (plan) => {
+const createPlan = async (e) => {
+  e.preventDefault();
   const token = localStorage.getItem("token");
-  const response = await axios.post(API_URL, plan, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return response.data;
+
+  try {
+    await axios.post(
+      API_URL,
+      {
+        ...newPlan,
+        price: Number(newPlan.price),
+        maxTokens: Number(newPlan.maxTokens),
+        botsLimit: Number(newPlan.botsLimit),
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    setMessage("✅ Plan creado correctamente.");
+    setNewPlan({
+      name: "",
+      description: "",
+      price: "",
+      maxTokens: "",
+      botsLimit: "",
+      isActive: true,
+    });
+    setShowForm(false);
+    fetchPlans();
+  } catch (error) {
+    const msg = error?.response?.data?.message || "Error al crear el plan.";
+    setMessage(`❌ ${msg}`);
+    console.error(error);
+  }
 };
 
 export const updatePlan = async (id, plan) => {
@@ -154,9 +184,23 @@ export const updatePlan = async (id, plan) => {
 
 export const deletePlan = async (id) => {
   const token = localStorage.getItem("token");
-  await axios.delete(`${API_URL}/${id}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  if (!token) {
+    console.error("No hay token guardado en localStorage");
+    return;
+  }
+
+  try {
+    const response = await axios.delete(`http://localhost:5006/api/plans/${id}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error al actualizar el plan:", error.response?.data || error.message);
+    throw error;
+  }
 };
 
 export const cancelMyPlan = async () => {

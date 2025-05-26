@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import SoftBox from "components/SoftBox";
-import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
 import SoftTypography from "components/SoftTypography";
 import PropTypes from "prop-types";
@@ -9,9 +8,6 @@ import PropTypes from "prop-types";
 function IaProviderForm({ onSubmit }) {
   const [providers, setProviders] = useState([]);
   const [selectedId, setSelectedId] = useState("");
-  const [name, setName] = useState("");
-  const [apiEndpoint, setApiEndpoint] = useState("");
-  const [apiKey, setApiKey] = useState("");
 
   useEffect(() => {
     // Simulación local para evitar la llamada real y el error 404
@@ -54,7 +50,7 @@ function IaProviderForm({ onSubmit }) {
   return (
     <SoftBox component="form" onSubmit={handleSubmit} p={2}>
       <SoftTypography variant="h6" mb={2}>
-        Selecciona o crea un proveedor IA
+        Selecciona proveedor
       </SoftTypography>
 
       <select
@@ -70,22 +66,6 @@ function IaProviderForm({ onSubmit }) {
         ))}
       </select>
 
-      <SoftTypography variant="body2" mb={1}>
-        O crea uno nuevo:
-      </SoftTypography>
-      <SoftInput placeholder="Nombre" value={name} onChange={(e) => setName(e.target.value)} />
-      <SoftInput
-        placeholder="API Endpoint"
-        value={apiEndpoint}
-        onChange={(e) => setApiEndpoint(e.target.value)}
-        mt={1}
-      />
-      <SoftInput
-        placeholder="API Key"
-        value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
-        mt={1}
-      />
 
       <SoftButton type="submit" color="info" fullWidth mt={2}>
         Continuar

@@ -1,5 +1,4 @@
 import { useState } from "react";
-import axios from "axios";
 import SoftBox from "components/SoftBox";
 import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
@@ -9,21 +8,29 @@ import PropTypes from "prop-types";
 function TemplatePromptForm({ botTemplateId, onSubmit }) {
   const [content, setContent] = useState("");
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
 
-    const res = await axios.post("/api/BotTemplatePrompts", {
+    // Simulación de la respuesta como si viniera de un backend
+    const fakeResponse = {
+      id: Math.floor(Math.random() * 100000), // ID simulado
       botTemplateId,
       role: "system",
       content,
-    });
+      createdAt: new Date().toISOString(),
+    };
 
-    onSubmit(res.data);
+    onSubmit(fakeResponse); // Enviar datos simulados al componente padre
+
+    // Limpiar el contenido del input después de guardar
+    setContent("");
   };
 
   return (
     <SoftBox component="form" onSubmit={handleSubmit} p={2}>
-      <SoftTypography variant="h6" mb={2}>Prompt Base del Bot</SoftTypography>
+      <SoftTypography variant="h6" mb={2}>
+        Prompt Base del Bot
+      </SoftTypography>
 
       <SoftInput
         placeholder="Prompt de sistema (rol 'system')"
@@ -32,6 +39,7 @@ function TemplatePromptForm({ botTemplateId, onSubmit }) {
         multiline
         rows={10}
         mb={2}
+        required
       />
 
       <SoftButton type="submit" color="info" fullWidth>

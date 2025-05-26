@@ -18,13 +18,14 @@ import Footer from "examples/Footer";
 // React y axios
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { getAllPlansForAdmin } from "services/planService"; // Ajusta la ruta según tu estructura
+import { getAllPlansForAdmin, deletePlan } from "services/planService"; // Ajusta la ruta según tu estructura
 
 // Material UI Icons
 import EditIcon from "@mui/icons-material/Edit";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 // Definición fija de la URL base de la API
 const API_URL = "http://localhost:5006/api/plans";
@@ -35,6 +36,7 @@ function AdminPlans() {
   const [editingId, setEditingId] = useState(null);
   const [editData, setEditData] = useState({});
   const [showForm, setShowForm] = useState(false);
+  const [loadingDelete, setLoadingDelete] = useState(false);
 
   const [newPlan, setNewPlan] = useState({
     name: "",
@@ -72,14 +74,32 @@ function AdminPlans() {
 
   const createPlan = async (e) => {
     e.preventDefault();
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      setMessage("No se encontró el token de autenticación.");
+      return;
+    }
+
     try {
-      await axios.post(API_URL, {
-        ...newPlan,
-        price: Number(newPlan.price),
-        maxTokens: Number(newPlan.maxTokens),
-        botsLimit: Number(newPlan.botsLimit),
-      });
-      setMessage("Plan creado correctamente.");
+      await axios.post(
+        API_URL,
+        {
+          ...newPlan,
+          price: Number(newPlan.price),
+          maxTokens: Number(newPlan.maxTokens),
+          botsLimit: Number(newPlan.botsLimit),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      setMessage("✅ Plan creado correctamente.");
       setNewPlan({
         name: "",
         description: "",
@@ -91,8 +111,9 @@ function AdminPlans() {
       setShowForm(false);
       fetchPlans();
     } catch (error) {
-      setMessage("Error al crear el plan.");
-      console.error(error);
+      const errorMsg = error?.response?.data?.message || "Error al crear el plan.";
+      setMessage(`❌ ${errorMsg}`);
+      console.error("❌ Error al crear el plan:", error);
     }
   };
 
@@ -164,6 +185,21 @@ function AdminPlans() {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
     }));
+  };
+
+  const handleDelete = async (planId) => {
+    try {
+      // Paso 1: Desactivar el plan
+      await planService.updatePlan(planId, { active: false });
+
+      // Paso 2: Ahora sí eliminar
+      await planService.deletePlan(planId);
+
+      // Opcional: refrescar la lista de planes
+      fetchPlans();
+    } catch (error) {
+      console.error("Error al eliminar el plan:", error.message || error);
+    }
   };
 
   return (
@@ -265,6 +301,9 @@ function AdminPlans() {
                       <td>
                         <IconButton onClick={() => startEdit(plan)}>
                           <EditIcon />
+                        </IconButton>
+                        <IconButton onClick={() => handleDelete(plan.id)} color="error">
+                          <DeleteIcon />
                         </IconButton>
                       </td>
                     </>

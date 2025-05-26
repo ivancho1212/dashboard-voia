@@ -11,13 +11,13 @@ import otherRoutes from "./others";
 
 const routes = [
   ...dashboardRoutes,
-  ...botRoutes,
   ...userRoutes,
   ...planRoutes,
+  ...configRoutes,
+  ...botRoutes,
+  ...dataRoutes,
   ...billingRoutes,
   ...supportRoutes,
-  ...dataRoutes,
-  ...configRoutes,
   ...authRoutes,
   ...otherRoutes, 
 ];
