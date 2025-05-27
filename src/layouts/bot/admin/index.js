@@ -72,8 +72,8 @@ function BotAdminDashboard() {
         </SoftTypography>
 
         <Tabs value={activeTab} onChange={onTabChange}>
-          <Tab label="Bots de la Plataforma" />
-          <Tab label="Crear Bot" />
+          <Tab label="Plantillas de Bots" />
+          <Tab label="Crear plantila del Bot" />
         </Tabs>
 
         <SoftBox mt={3}>

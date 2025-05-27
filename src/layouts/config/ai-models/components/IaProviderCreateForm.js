@@ -10,6 +10,7 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
     name: "",
     api_endpoint: "",
     api_key: "",
+    status: "active", // ✅ Valor por defecto
   });
 
   const handleChange = (e) => {
@@ -65,6 +66,28 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
+      {/* ✅ Campo nuevo: Estado */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" fontWeight="bold">
+          Estado
+        </SoftTypography>
+        <select
+          name="status"
+          value={form.status}
+          onChange={handleChange}
+          style={{
+            width: "100%",
+            padding: "10px",
+            borderRadius: "8px",
+            border: "1px solid #ccc",
+            fontSize: "14px",
+          }}
+        >
+          <option value="active">Activo</option>
+          <option value="inactive">Inactivo</option>
+        </select>
+      </SoftBox>
+
       <SoftBox display="flex" justifyContent="space-between" mt={3}>
         <SoftButton color="dark" type="submit">
           Guardar Proveedor
@@ -80,8 +103,8 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
 }
 
 IaProviderCreateForm.propTypes = {
-    onSubmit: PropTypes.func,
-    onCancel: PropTypes.func,
-  };
+  onSubmit: PropTypes.func,
+  onCancel: PropTypes.func,
+};
 
 export default IaProviderCreateForm;

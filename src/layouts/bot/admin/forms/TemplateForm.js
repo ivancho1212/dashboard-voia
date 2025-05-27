@@ -29,20 +29,22 @@ function TemplateForm({ onSubmit, iaProviderId }) {
         Crear plantilla de bot
       </SoftTypography>
 
-      <SoftInput
-        placeholder="Nombre"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        mb={2}
-        required
-      />
+      <SoftBox mb={2}>
+        <SoftInput
+          placeholder="Nombre"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+      </SoftBox>
 
-      <SoftInput
-        placeholder="Descripción"
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        mb={2}
-      />
+      <SoftBox mb={2}>
+        <SoftInput
+          placeholder="Descripción"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </SoftBox>
 
       <SoftTypography variant="caption" mb={1}>
         Estilo por defecto (opcional)
@@ -60,8 +62,8 @@ function TemplateForm({ onSubmit, iaProviderId }) {
         }}
       >
         <option value="">Seleccionar estilo</option>
-        <option value="1">Estilo clásico</option>
-        <option value="2">Estilo moderno</option>
+        <option value="1">Tema Claro</option>
+        <option value="2">Tema Oscuro</option>
       </select>
 
       <SoftButton type="submit" color="info" fullWidth>

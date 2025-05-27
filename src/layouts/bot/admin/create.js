@@ -34,7 +34,7 @@ function BotCreate() {
   return (
     <SoftBox>
       <SoftTypography variant="h4" mb={3}>
-        Crear nuevo bot
+        Crear nueva plantilla bot
       </SoftTypography>
 
       {/* Paso 1: Proveedor IA */}

@@ -30,15 +30,6 @@ const dataRoutes = [
   },
   {
     type: "collapse",
-    name: "Prompts",
-    key: "data-prompts",
-    route: "/data/prompts",
-    icon: <FaKeyboard size={14} />,
-    component: <Prompts />,
-    noCollapse: true,
-  },
-  {
-    type: "collapse",
     name: "Recursos",
     key: "data-resources",
     route: "/data/resources",

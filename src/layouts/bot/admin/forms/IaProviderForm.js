@@ -7,58 +7,64 @@ import PropTypes from "prop-types";
 
 function IaProviderForm({ onSubmit }) {
   const [providers, setProviders] = useState([]);
-  const [selectedId, setSelectedId] = useState("");
+  const [modelsByProvider, setModelsByProvider] = useState({});
+  const [selectedProviderId, setSelectedProviderId] = useState("");
+  const [selectedModelId, setSelectedModelId] = useState("");
 
   useEffect(() => {
-    // Simulación local para evitar la llamada real y el error 404
-    setProviders([
-      { id: 1, name: "Proveedor IA de prueba", apiEndpoint: "http://fake-endpoint", apiKey: "fake-key" },
-    ]);
+    // Simulación local de proveedores con modelos asociados
+    const fakeProviders = [
+      { id: 1, name: "OpenAI", apiEndpoint: "https://api.openai.com", apiKey: "openai-key" },
+      { id: 2, name: "Anthropic", apiEndpoint: "https://api.anthropic.com", apiKey: "anthropic-key" },
+    ];
 
-    // Si quieres hacer llamada real luego, descomenta y usa try/catch:
-    /*
-    axios.get("/api/BotIaProviders")
-      .then((res) => setProviders(res.data))
-      .catch((err) => {
-        console.warn("No se pudo cargar proveedores IA:", err.message);
-        setProviders([]);
-      });
-    */
+    const fakeModels = {
+      1: [ // OpenAI
+        { id: "gpt-3.5", name: "GPT-3.5" },
+        { id: "gpt-4", name: "GPT-4" },
+      ],
+      2: [ // Anthropic
+        { id: "claude-2", name: "Claude 2" },
+        { id: "claude-3", name: "Claude 3" },
+      ],
+    };
+
+    setProviders(fakeProviders);
+    setModelsByProvider(fakeModels);
+
+    // Si luego quieres llamada real, puedes cargar modelos desde el backend al seleccionar un proveedor
   }, []);
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
 
-    if (selectedId) {
-      const selected = providers.find((p) => p.id === parseInt(selectedId));
-      return onSubmit(selected);
-    }
+    if (selectedProviderId && selectedModelId) {
+      const provider = providers.find(p => p.id === parseInt(selectedProviderId));
+      const model = modelsByProvider[selectedProviderId]?.find(m => m.id === selectedModelId);
 
-    try {
-      const res = await axios.post("/api/BotIaProviders", {
-        name,
-        apiEndpoint,
-        apiKey,
-      });
-      onSubmit(res.data);
-    } catch (error) {
-      console.error("Error creando proveedor IA:", error);
-      // Aquí puedes mostrar un mensaje al usuario si quieres
+      if (provider && model) {
+        onSubmit({ ...provider, selectedModel: model });
+      }
     }
   };
+
+  const selectedModels = modelsByProvider[selectedProviderId] || [];
 
   return (
     <SoftBox component="form" onSubmit={handleSubmit} p={2}>
       <SoftTypography variant="h6" mb={2}>
-        Selecciona proveedor
+        Selecciona proveedor IA
       </SoftTypography>
 
       <select
-        value={selectedId}
-        onChange={(e) => setSelectedId(e.target.value)}
+        value={selectedProviderId}
+        onChange={(e) => {
+          setSelectedProviderId(e.target.value);
+          setSelectedModelId(""); // Reinicia modelo al cambiar proveedor
+        }}
         style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
       >
-        <option value="">-- Selecciona uno existente --</option>
+        <option value="">-- Selecciona un proveedor --</option>
         {providers.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
@@ -66,8 +72,34 @@ function IaProviderForm({ onSubmit }) {
         ))}
       </select>
 
+      {selectedProviderId && (
+        <>
+          <SoftTypography variant="subtitle2" mb={1}>
+            Selecciona modelo
+          </SoftTypography>
 
-      <SoftButton type="submit" color="info" fullWidth mt={2}>
+          <select
+            value={selectedModelId}
+            onChange={(e) => setSelectedModelId(e.target.value)}
+            style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
+          >
+            <option value="">-- Selecciona un modelo --</option>
+            {selectedModels.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+
+      <SoftButton
+        type="submit"
+        color="info"
+        fullWidth
+        mt={2}
+        disabled={!selectedProviderId || !selectedModelId}
+      >
         Continuar
       </SoftButton>
     </SoftBox>

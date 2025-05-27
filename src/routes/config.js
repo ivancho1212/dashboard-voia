@@ -27,15 +27,7 @@ const configRoutes = [
     component: <Logs />,
     noCollapse: true,
   },
-  {
-    type: "collapse",
-    name: "Alertas",
-    key: "config-alerts",
-    route: "/config/alerts",
-    icon: <FaBell size={14} />,
-    component: <Alerts />,
-    noCollapse: true,
-  },
+
 ];
 
 export default configRoutes;

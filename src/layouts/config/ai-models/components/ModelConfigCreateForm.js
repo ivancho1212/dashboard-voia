@@ -27,10 +27,7 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption">Bot ID</SoftTypography>
-        <SoftInput name="bot_id" value={form.bot_id} onChange={handleChange} required />
-      </SoftBox>
+
       <SoftBox mb={2}>
         <SoftTypography variant="caption">Nombre del Modelo</SoftTypography>
         <SoftInput name="model_name" value={form.model_name} onChange={handleChange} required />
@@ -45,15 +42,7 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
           onChange={handleChange}
         />
       </SoftBox>
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption">Máx Tokens</SoftTypography>
-        <SoftInput
-          type="number"
-          name="max_tokens"
-          value={form.max_tokens}
-          onChange={handleChange}
-        />
-      </SoftBox>
+
       <SoftBox mb={2}>
         <SoftTypography variant="caption">Frecuencia Penalty</SoftTypography>
         <SoftInput

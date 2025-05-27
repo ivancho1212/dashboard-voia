@@ -19,7 +19,7 @@ const botRoutes = [
   },
   {
     type: "collapse",
-    name: "Mis Bots",
+    name: "Bots",
     key: "bots-list",
     route: "/bots",
     icon: <FaRobot size={14} />,
@@ -52,6 +52,8 @@ const botRoutes = [
     component: <BotSettings />,
   },
   {
+    type: "collapse",
+    name: "Entrenamiento del Bot",
     key: "bot-training",
     route: "/bots/training",
     name: "Entrenamiento del Bot",
@@ -59,6 +61,8 @@ const botRoutes = [
     component: <BotTraining />,
   },
   {
+    type: "collapse",
+    name: "Integracion del Bots",
     key: "bot-integration",
     route: "/bots/integration",
     name: "Integración del Bot",
@@ -73,6 +77,7 @@ const botRoutes = [
     component: <BotPreview />,
   },
   {
+    
     key: "bot-widget",
     route: "/bots/widget",
     name: "Widget del Bot",
