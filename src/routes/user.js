@@ -30,24 +30,6 @@ const userRoutes = [
   },
   {
     type: "collapse",
-    name: "Preferencias",
-    key: "user-preferences",
-    route: "/profile/preferences", // Ruta actualizada
-    icon: <FaSlidersH size={14} />,
-    component: <Preferences />, // Ahora apunta a 'layouts/profile/preferences'
-    noCollapse: true,
-  },
-  {
-    type: "collapse",
-    name: "Intereses",
-    key: "user-interests",
-    route: "/profile/interests", // Ruta actualizada
-    icon: <FaHeart size={14} />,
-    component: <Interests />, // Ahora apunta a 'layouts/profile/interests'
-    noCollapse: true,
-  },
-  {
-    type: "collapse",
     name: "Consentimientos",
     key: "user-consents",
     route: "/profile/consents", // Ruta actualizada
@@ -57,7 +39,7 @@ const userRoutes = [
   },
   {
     type: "collapse",
-    name: "Lista de Usuarios",
+    name: "Administrar de Usuarios",
     key: "users-list",
     route: "/admin/users", // Ruta sigue apuntando a admin
     icon: <FaUsers size={14} />,
