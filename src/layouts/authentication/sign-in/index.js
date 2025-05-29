@@ -40,6 +40,7 @@ function SignIn() {
       title="Bienvenido de nuevo"
       description="Ingresa tu email y contraseña para iniciar sesión"
       image={curved9}
+      top={18}
     >
       <SoftBox component="form" role="form" onSubmit={handleSubmit}>
         <SoftBox mb={2}>

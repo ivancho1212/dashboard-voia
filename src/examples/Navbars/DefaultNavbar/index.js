@@ -79,21 +79,19 @@ function DefaultNavbar({ transparent, light, action }) {
       >
         <SoftBox component={Link} to="/" py={transparent ? 1.5 : 0.75} lineHeight={1}>
           <SoftTypography variant="button" fontWeight="bold" color={light ? "white" : "dark"}>
-            Soft UI Dashboard
+            VOIA
           </SoftTypography>
         </SoftBox>
         <SoftBox color="inherit" display={{ xs: "none", lg: "flex" }} m={0} p={0}>
-          <DefaultNavbarLink icon="donut_large" name="dashboard" route="/dashboard" light={light} />
-          <DefaultNavbarLink icon="person" name="profile" route="/profile" light={light} />
           <DefaultNavbarLink
             icon="account_circle"
-            name="sign up"
+            name="Resgistrarse"
             route="/authentication/sign-up"
             light={light}
           />
           <DefaultNavbarLink
             icon="key"
-            name="sign in"
+            name="Iniciar sesión"
             route="/authentication/sign-in"
             light={light}
           />
@@ -114,18 +112,7 @@ function DefaultNavbar({ transparent, light, action }) {
             </SoftBox>
           ) : (
             <SoftBox display={{ xs: "none", lg: "inline-block" }}>
-              <SoftButton
-                component="a"
-                href={action.route}
-                target="_blank"
-                rel="noreferrer"
-                variant="gradient"
-                color={action.color ? action.color : "info"}
-                size="small"
-                circular
-              >
-                {action.label}
-              </SoftButton>
+              
             </SoftBox>
           ))}
         <SoftBox

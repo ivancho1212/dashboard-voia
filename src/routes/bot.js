@@ -14,12 +14,12 @@ import { FaRobot, FaClipboardList, FaCogs, FaBrain, FaPalette, FaPlug, FaEye, Fa
 const botRoutes = [
   {
     type: "title",
-    title: "Bots",
+    title: "Modelos",
     key: "bots-title",
   },
   {
     type: "collapse",
-    name: "Bots",
+    name: "Modelo",
     key: "bots-list",
     route: "/bots",
     icon: <FaRobot size={14} />,
@@ -28,10 +28,9 @@ const botRoutes = [
   }, 
   {
     type: "collapse",
-    name: "Entrenamiento del Bot",
     key: "bot-training",
     route: "/bots/training",
-    name: "Entrenamiento del Bot",
+    name: "Entrenamiento",
     icon: <FaBrain size={14} />,
     component: <BotTraining />,
   },
@@ -45,7 +44,7 @@ const botRoutes = [
   },
   {
     type: "collapse",
-    name: "Estilos del Bot", // Cambia esto si quieres mostrar solo "Estilos"
+    name: "Estilos", // Cambia esto si quieres mostrar solo "Estilos"
     key: "bot-style",        // clave única más descriptiva
     route: "/bots/style",    // nueva ruta en la URL
     icon: <FaPalette size={14} />,
@@ -54,16 +53,15 @@ const botRoutes = [
   }, 
   {
     type: "collapse",
-    name: "Integracion del Bots",
     key: "bot-integration",
     route: "/bots/integration",
-    name: "Integración del Bot",
+    name: "Integración",
     icon: <FaPlug size={14} />,
     component: <BotIntegration />,
   },
   {
     type: "collapse",
-    name: "Administrar Bots",
+    name: "Administrar",
     key: "bots-admin",
     route: "/admin/bots",
     icon: <FaCogs size={14} />,

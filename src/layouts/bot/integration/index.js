@@ -120,8 +120,8 @@ function BotAdminDashboard() {
             en la ubicacion definida.
           </SoftTypography>
 
-          <SoftTypography variant="body2" color="warning" sx={{ mt: 2 }}>
-            Nota: El script solo funcionará si tu bot está activo y tu cuenta está verificada.
+          <SoftTypography variant="body2" color="primary" sx={{ mt: 2 }}>
+            Nota: El script solo funcionará si tu bot está activo, tu cuenta está verificada y activa.
           </SoftTypography>
         </Card>
       </SoftBox>
