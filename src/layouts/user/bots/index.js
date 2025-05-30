@@ -3,21 +3,21 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
-import UsersTable from "./components/UsersTable"; // esta ruta es correcta
+import BotsTable from "./components/BotsTable"; // Asegúrate que la ruta sea correcta
 
-function UserProfileList() {
+function BotsAssociated() {
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
         <SoftTypography variant="h4" fontWeight="bold" mb={2}>
-          Usuarios Registrados
+          Bots Asociados a Usuarios
         </SoftTypography>
-        <UsersTable />
+        <BotsTable />
       </SoftBox>
       <Footer />
     </DashboardLayout>
   );
 }
 
-export default UserProfileList;
+export default BotsAssociated;

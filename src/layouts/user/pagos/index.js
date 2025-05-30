@@ -3,21 +3,21 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
-import UsersTable from "./components/UsersTable"; // esta ruta es correcta
+import PagosTable from "./PagosTable";
 
-function UserProfileList() {
+function PagosList() {
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3}>
         <SoftTypography variant="h4" fontWeight="bold" mb={2}>
-          Usuarios Registrados
+          Pagos
         </SoftTypography>
-        <UsersTable />
+        <PagosTable />
       </SoftBox>
       <Footer />
     </DashboardLayout>
   );
 }
 
-export default UserProfileList;
+export default PagosList;
