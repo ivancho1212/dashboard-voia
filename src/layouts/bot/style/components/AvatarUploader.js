@@ -2,6 +2,8 @@ import React, { useRef } from "react";
 import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
+import voaiGif from '../../../../assets/images/voai.gif';
+
 
 export default function AvatarUploader({ style, setStyle }) {
   const inputRef = useRef();
@@ -21,7 +23,7 @@ export default function AvatarUploader({ style, setStyle }) {
     inputRef.current.click();
   };
 
-  const avatarSrc = style.avatar_url || "/bot.png";
+  const avatarSrc = style.avatar_url || voaiGif;
 
   return (
     <SoftBox display="flex" flexDirection="column" alignItems="center" gap={1} mb={2}>

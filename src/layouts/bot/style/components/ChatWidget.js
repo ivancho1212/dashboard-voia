@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react"; // <-- import useEffect
+import socket from "../../../../services/socket"; // ajusta según tu estructura
 import { FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
+import voaiGif from "../../../../assets/images/voai.gif";
 
-export default function ChatWidget({
+function ChatWidget({
   theme: initialTheme,
   primary_color,
   secondary_color,
@@ -17,6 +19,28 @@ export default function ChatWidget({
       setTheme(initialTheme);
     }
   }, [initialTheme]);
+
+  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState([]);
+
+  useEffect(() => {
+    socket.connect();
+
+    socket.on("bot_response", (msg) => {
+      setMessages((prev) => [...prev, { from: "bot", text: msg }]);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
+
+  const sendMessage = () => {
+    if (message.trim() === "") return;
+    socket.emit("user_message", message);
+    setMessages((prev) => [...prev, { from: "user", text: message }]);
+    setMessage("");
+  };
 
   const [primaryColor, setPrimaryColor] = useState(primary_color || "#000000");
   const [secondaryColor, setSecondaryColor] = useState(secondary_color || "#ffffff");
@@ -81,8 +105,16 @@ export default function ChatWidget({
   };
 
   const avatarFloatingStyle = {
-    width: "68px",
-    height: "68px",
+    width: "70px",
+    height: "70px",
+    borderRadius: "50%",
+    objectFit: "contain",
+    border: "none",
+  };
+
+  const avatarHeaderStyle = {
+    width: "36px",
+    height: "36px",
     borderRadius: "50%",
     objectFit: "contain",
     border: "none",
@@ -147,7 +179,7 @@ export default function ChatWidget({
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Abrir chat"
-          aria-expanded={isOpen} // <-- accesibilidad
+          aria-expanded={isOpen}
           style={{
             backgroundColor: buttonBg,
             borderRadius: "50%",
@@ -176,13 +208,14 @@ export default function ChatWidget({
               overflow: "hidden",
             }}
           >
-            <img src={avatar_url || "/bot.png"} alt="Avatar" style={avatarFloatingStyle} />
+            <img src={avatar_url || voaiGif} alt="Avatar" style={avatarFloatingStyle} />
           </div>
         </button>
       ) : (
         <div style={widgetStyle}>
+          {/* Header */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <img src={avatar_url || "/bot.png"} alt="Avatar" style={avatarFloatingStyle} />
+            <img src={avatar_url || voaiGif} alt="Avatar" style={avatarHeaderStyle} />
             <strong style={{ fontSize: "14px", color: textColor }}>Soy el bot</strong>
             <button
               onClick={() => setIsOpen(false)}
@@ -200,20 +233,57 @@ export default function ChatWidget({
             </button>
           </div>
 
-          <div style={{ flex: 1, marginTop: "15px", fontSize: "14px", color: textColor }}>
-            Hola, ¿en qué puedo ayudarte?
+          {/* Mensajes */}
+          <div
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              marginTop: "15px",
+              marginBottom: "10px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "6px",
+            }}
+          >
+            <div style={{ fontSize: "14px", color: textColor }}>Hola, ¿en qué puedo ayudarte?</div>
+
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                style={{
+                  alignSelf: msg.from === "user" ? "flex-end" : "flex-start",
+                  backgroundColor: msg.from === "user" ? primaryColor : "#eee",
+                  color: msg.from === "user" ? "#fff" : "#000",
+                  padding: "8px 12px",
+                  borderRadius: "12px",
+                  maxWidth: "80%",
+                  wordBreak: "break-word",
+                }}
+              >
+                {msg.text}
+              </div>
+            ))}
           </div>
 
+          {/* Input */}
           <div style={inputContainerStyle}>
             <FaImage style={iconStyleLeft} />
-            <input type="text" placeholder="Escribe un mensaje..." style={inputStyle} />
-            <FaPaperPlane style={iconStyleRight} />
+            <input
+              type="text"
+              placeholder="Escribe un mensaje..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              style={inputStyle}
+            />
+            <FaPaperPlane style={iconStyleRight} onClick={sendMessage} />
           </div>
         </div>
       )}
     </div>
   );
 }
+export default ChatWidget;
 
 ChatWidget.propTypes = {
   theme: PropTypes.oneOf(["light", "dark", "custom"]).isRequired,
