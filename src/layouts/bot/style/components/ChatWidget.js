@@ -27,7 +27,16 @@ function ChatWidget({
     socket.connect();
 
     socket.on("bot_response", (msg) => {
-      setMessages((prev) => [...prev, { from: "bot", text: msg }]);
+      // Verifica si el mensaje indica éxito y extrae la respuesta de texto
+      if (msg.success) {
+        setMessages((prev) => [...prev, { from: "bot", text: msg.response }]);
+      } else {
+        // Maneja error
+        setMessages((prev) => [
+          ...prev,
+          { from: "bot", text: "Error: " + (msg.error || "unknown") },
+        ]);
+      }
     });
 
     return () => {
@@ -37,8 +46,17 @@ function ChatWidget({
 
   const sendMessage = () => {
     if (message.trim() === "") return;
-    socket.emit("user_message", message);
-    setMessages((prev) => [...prev, { from: "user", text: message }]);
+
+    // Aquí defines los datos necesarios para enviar al backend
+    const payload = {
+      botId: "1",
+      userId: 1, // <- Asegúrate que aquí sea el usuario que existe en BD
+      message: message.trim(),
+    };
+
+    socket.emit("user_message", payload);
+
+    setMessages((prev) => [...prev, { from: "user", text: message.trim() }]);
     setMessage("");
   };
 
