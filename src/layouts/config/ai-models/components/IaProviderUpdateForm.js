@@ -1,17 +1,28 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
 import PropTypes from "prop-types";
 
-function IaProviderCreateForm({ onSubmit, onCancel }) {
+function IaProviderUpdateForm({ initialData, onSubmit, onCancel }) {
   const [form, setForm] = useState({
     name: "",
     api_endpoint: "",
     api_key: "",
-    status: "active", // ✅ Valor por defecto
+    status: "active",
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setForm({
+        name: initialData.name || "",
+        api_endpoint: initialData.apiEndpoint || "",
+        api_key: initialData.apiKey || "",
+        status: initialData.status || "active",
+      });
+    }
+  }, [initialData]);
 
   const handleChange = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -21,10 +32,11 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
     e.preventDefault();
 
     const payload = {
+      id: initialData.id, // ⚠️ asegúrate de pasar el ID para que sepa a quién actualizar
       name: form.name,
       apiEndpoint: form.api_endpoint,
       apiKey: form.api_key,
-      status: form.status, // ✅ AÑADIDO
+      status: form.status,
     };
 
     if (onSubmit) onSubmit(payload);
@@ -33,7 +45,7 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
   return (
     <SoftBox component="form" onSubmit={handleSubmit} p={2} shadow="sm" borderRadius="lg">
       <SoftTypography variant="h5" fontWeight="bold" mb={2}>
-        Crear Conexión con Proveedor de IA
+        Editar Proveedor de IA
       </SoftTypography>
 
       <SoftBox mb={2}>
@@ -74,7 +86,6 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
-      {/* ✅ Campo nuevo: Estado */}
       <SoftBox mb={2}>
         <SoftTypography variant="caption" fontWeight="bold">
           Estado
@@ -97,8 +108,8 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
       </SoftBox>
 
       <SoftBox display="flex" justifyContent="space-between" mt={3}>
-        <SoftButton color="dark" type="submit">
-          Guardar Proveedor
+        <SoftButton color="info" type="submit">
+          Actualizar Proveedor
         </SoftButton>
         {onCancel && (
           <SoftButton color="secondary" onClick={onCancel}>
@@ -110,9 +121,10 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
   );
 }
 
-IaProviderCreateForm.propTypes = {
+IaProviderUpdateForm.propTypes = {
+  initialData: PropTypes.object.isRequired,
   onSubmit: PropTypes.func,
   onCancel: PropTypes.func,
 };
 
-export default IaProviderCreateForm;
+export default IaProviderUpdateForm;

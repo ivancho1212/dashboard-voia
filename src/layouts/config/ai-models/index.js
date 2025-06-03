@@ -10,23 +10,32 @@ import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
 
-import IaProviderForm from "layouts/bot/admin/forms/IaProviderForm";
+import IaProviderUpdateForm from "./components/IaProviderUpdateForm";
 import ModelConfigList from "./components/ModelConfigList";
 import ModelConfigCreateForm from "./components/ModelConfigCreateForm";
-
+import {
+  getIaProviders,
+  createIaProvider,
+  updateIaProvider,
+  deleteIaProvider,
+} from "services/botIaProviderService";
 function AIModelsConfig() {
   const [activeTab, setActiveTab] = useState(0);
   const [viewMode, setViewMode] = useState("list"); // list | view | edit
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [providers, setProviders] = useState([]);
 
-  // 🔁 Cargar datos (simulado por ahora)
   useEffect(() => {
-    // Simulación inicial
-    setProviders([
-      { id: 1, name: "OpenAI", apiEndpoint: "https://api.openai.com", apiKey: "••••" },
-      { id: 2, name: "IA Local", apiEndpoint: "http://localhost:3000", apiKey: "123456" },
-    ]);
+    const fetchProviders = async () => {
+      try {
+        const data = await getIaProviders();
+        setProviders(data);
+      } catch (err) {
+        console.error("Error cargando proveedores:", err);
+      }
+    };
+
+    fetchProviders();
   }, []);
 
   const handleTabChange = (_, newValue) => {
@@ -35,21 +44,52 @@ function AIModelsConfig() {
     setSelectedProvider(null);
   };
 
-  const handleCreate = (provider) => {
-    setProviders((prev) => [...prev, { ...provider, id: Date.now() }]);
-    setActiveTab(0);
-    setViewMode("list");
+  const handleCreate = async (form) => {
+    try {
+      const payload = {
+        Name: form.name,
+        ApiEndpoint: form.api_endpoint,
+        ApiKey: form.api_key,
+      };
+
+      const created = await createIaProvider(payload);
+      console.log("Proveedor creado:", created);
+      // ... tu lógica
+    } catch (err) {
+      console.error("Error al crear proveedor:", err.response?.data ?? err.message);
+    }
   };
 
-  const handleEdit = (updated) => {
-    setProviders((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    setViewMode("list");
-    setSelectedProvider(null);
+  const handleEdit = async (updated) => {
+    try {
+      const payload = {
+        Name: updated.name,
+        ApiEndpoint: updated.apiEndpoint,
+        ApiKey: updated.apiKey,
+        Status: updated.status || "active",
+      };
+
+      await updateIaProvider(updated.id, payload);
+      const refreshed = await getIaProviders();
+      setProviders(refreshed);
+      setViewMode("list");
+      setSelectedProvider(null);
+    } catch (err) {
+      console.error("Error al editar proveedor:", err.response?.data ?? err.message);
+      alert("Error al editar proveedor.");
+    }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (confirm("¿Seguro que quieres eliminar este proveedor?")) {
-      setProviders((prev) => prev.filter((p) => p.id !== id));
+      try {
+        await deleteIaProvider(id);
+        const updated = await getIaProviders();
+        setProviders(updated);
+      } catch (err) {
+        console.error("Error al eliminar proveedor:", err.response?.data ?? err.message);
+        alert("Error al eliminar proveedor.");
+      }
     }
   };
 
@@ -121,22 +161,24 @@ function AIModelsConfig() {
 
           {activeTab === 1 && viewMode === "create" && (
             <IaProviderCreateForm
-              onSubmit={(data) => {
-                const newProvider = {
-                  ...data,
-                  id: Date.now(),
-                  created_at: new Date().toISOString(),
-                };
-                setProviders([...providers, newProvider]);
-                setViewMode("list");
-                setActiveTab(0);
+              onSubmit={async (data) => {
+                try {
+                  await createIaProvider(data);
+                  const updated = await getIaProviders();
+                  setProviders(updated);
+                  setViewMode("list");
+                  setActiveTab(0);
+                } catch (err) {
+                  console.error("Error al crear proveedor:", err);
+                  alert("Error al crear proveedor.");
+                }
               }}
               onCancel={handleBack}
             />
           )}
 
           {activeTab === 2 && <ModelConfigList />}
-          
+
           {activeTab === 3 && (
             <ModelConfigCreateForm
               onSubmit={(data) => {
@@ -149,9 +191,20 @@ function AIModelsConfig() {
           )}
 
           {viewMode === "edit" && selectedProvider && activeTab === 0 && (
-            <IaProviderForm
-              onSubmit={(provider) => handleEdit({ ...selectedProvider, ...provider })}
+            <IaProviderUpdateForm
               initialData={selectedProvider}
+              onSubmit={async (data) => {
+                try {
+                  await handleEdit(data); // <-- ya contiene el ID
+                  setViewMode("list");
+                  setSelectedProvider(null);
+                  setActiveTab(0);
+                } catch (err) {
+                  console.error("Error al editar proveedor:", err);
+                  alert("Error al editar proveedor.");
+                }
+              }}
+              onCancel={handleBack}
             />
           )}
 

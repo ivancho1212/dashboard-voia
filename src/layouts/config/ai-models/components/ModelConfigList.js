@@ -91,10 +91,14 @@ function ModelConfigList() {
             <div>
               <SoftTypography variant="h6">Modelo: {config.modelName}</SoftTypography>
               <SoftTypography variant="body2" color="text">
+                Proveedor: {config.iaProvider?.name || "Desconocido"}
+              </SoftTypography>
+              <SoftTypography variant="body2" color="text">
                 Temperature: {config.temperature} | Frequency Penalty: {config.frequencyPenalty} |
                 Presence Penalty: {config.presencePenalty}
               </SoftTypography>
             </div>
+
             <div>
               <SoftButton size="small" color="info" onClick={() => handleView(config)}>
                 Ver
