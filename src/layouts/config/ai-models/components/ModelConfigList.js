@@ -2,40 +2,39 @@ import { useState, useEffect } from "react";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
-import Icon from "@mui/material/Icon";
+import {
+  getModelConfigs,
+  deleteModelConfig,
+  updateModelConfig,
+} from "services/aiModelConfigService";
+import ModelConfigEditForm from "./ModelConfigEditForm";
 
 function ModelConfigList() {
   const [modelConfigs, setModelConfigs] = useState([]);
   const [viewMode, setViewMode] = useState("list"); // list | edit | view | create
   const [selectedConfig, setSelectedConfig] = useState(null);
 
-  // Simulación de carga inicial
   useEffect(() => {
-    setModelConfigs([
-      {
-        id: 1,
-        bot_id: 101,
-        model_name: "gpt-4",
-        temperature: 0.7,
-        max_tokens: 512,
-        frequency_penalty: 0.0,
-        presence_penalty: 0.0,
-      },
-      {
-        id: 2,
-        bot_id: 102,
-        model_name: "gpt-3.5-turbo",
-        temperature: 0.9,
-        max_tokens: 1024,
-        frequency_penalty: 0.1,
-        presence_penalty: 0.3,
-      },
-    ]);
+    const fetchConfigs = async () => {
+      try {
+        const data = await getModelConfigs();
+        setModelConfigs(data);
+      } catch (error) {
+        console.error("Error al obtener configuraciones de IA:", error);
+      }
+    };
+    fetchConfigs();
   }, []);
 
-  const handleDelete = (id) => {
-    if (confirm("¿Seguro que deseas eliminar esta configuración?")) {
-      setModelConfigs((prev) => prev.filter((c) => c.id !== id));
+  const handleDelete = async (id) => {
+    if (window.confirm("¿Seguro que deseas eliminar esta configuración?")) {
+      try {
+        await deleteModelConfig(id);
+        setModelConfigs((prev) => prev.filter((c) => c.id !== id));
+      } catch (error) {
+        console.error("Error eliminando la configuración:", error);
+        alert("No se pudo eliminar la configuración. Inténtalo de nuevo.");
+      }
     }
   };
 
@@ -52,6 +51,23 @@ function ModelConfigList() {
   const handleBack = () => {
     setViewMode("list");
     setSelectedConfig(null);
+  };
+
+  // Ejemplo función para guardar cambios (a adaptar cuando tengas el formulario)
+  const handleSave = async (updatedData) => {
+    try {
+      await updateModelConfig(selectedConfig.id, updatedData);
+
+      // Actualiza la lista local con los datos modificados
+      setModelConfigs((prev) =>
+        prev.map((item) => (item.id === selectedConfig.id ? { ...item, ...updatedData } : item))
+      );
+      setViewMode("list");
+      setSelectedConfig(null);
+    } catch (error) {
+      console.error("Error actualizando la configuración:", error);
+      alert("No se pudo actualizar la configuración. Inténtalo de nuevo.");
+    }
   };
 
   return (
@@ -73,33 +89,20 @@ function ModelConfigList() {
             alignItems="center"
           >
             <div>
-              <SoftTypography variant="h6">
-                Modelo: {config.model_name}
-              </SoftTypography>
+              <SoftTypography variant="h6">Modelo: {config.modelName}</SoftTypography>
               <SoftTypography variant="body2" color="text">
-                Temp: {config.temperature} | Tokens: {config.max_tokens}
+                Temperature: {config.temperature} | Frequency Penalty: {config.frequencyPenalty} |
+                Presence Penalty: {config.presencePenalty}
               </SoftTypography>
             </div>
             <div>
-              <SoftButton
-                size="small"
-                color="info"
-                onClick={() => handleView(config)}
-              >
+              <SoftButton size="small" color="info" onClick={() => handleView(config)}>
                 Ver
               </SoftButton>{" "}
-              <SoftButton
-                size="small"
-                color="warning"
-                onClick={() => handleEdit(config)}
-              >
+              <SoftButton size="small" color="warning" onClick={() => handleEdit(config)}>
                 Editar
               </SoftButton>{" "}
-              <SoftButton
-                size="small"
-                color="error"
-                onClick={() => handleDelete(config.id)}
-              >
+              <SoftButton size="small" color="error" onClick={() => handleDelete(config.id)}>
                 Eliminar
               </SoftButton>
             </div>
@@ -108,14 +111,13 @@ function ModelConfigList() {
 
       {viewMode === "view" && selectedConfig && (
         <SoftBox>
-          <SoftTypography variant="h5">
-            {selectedConfig.model_name}
-          </SoftTypography>
-          <SoftTypography>Bot ID: {selectedConfig.bot_id}</SoftTypography>
+          <SoftTypography variant="h5">{selectedConfig.modelName}</SoftTypography>
           <SoftTypography>Temperature: {selectedConfig.temperature}</SoftTypography>
-          <SoftTypography>Max Tokens: {selectedConfig.max_tokens}</SoftTypography>
-          <SoftTypography>Frequency Penalty: {selectedConfig.frequency_penalty}</SoftTypography>
-          <SoftTypography>Presence Penalty: {selectedConfig.presence_penalty}</SoftTypography>
+          <SoftTypography>Frequency Penalty: {selectedConfig.frequencyPenalty}</SoftTypography>
+          <SoftTypography>Presence Penalty: {selectedConfig.presencePenalty}</SoftTypography>
+          <SoftTypography>
+            Creado: {new Date(selectedConfig.createdAt).toLocaleString()}
+          </SoftTypography>
           <SoftBox mt={2}>
             <SoftButton onClick={handleBack}>Volver</SoftButton>
           </SoftBox>
@@ -125,11 +127,11 @@ function ModelConfigList() {
       {viewMode === "edit" && selectedConfig && (
         <SoftBox>
           <SoftTypography variant="h5">Editar configuración</SoftTypography>
-          {/* Aquí puedes incluir un formulario tipo <ModelConfigForm /> */}
-          <SoftTypography mt={2}> (Formulario en construcción...) </SoftTypography>
-          <SoftBox mt={2}>
-            <SoftButton onClick={handleBack}>Cancelar</SoftButton>
-          </SoftBox>
+          <ModelConfigEditForm
+            initialData={selectedConfig}
+            onSave={handleSave}
+            onCancel={handleBack}
+          />
         </SoftBox>
       )}
     </SoftBox>
