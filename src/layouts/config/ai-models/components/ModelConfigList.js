@@ -8,11 +8,13 @@ import {
   updateModelConfig,
 } from "services/aiModelConfigService";
 import ModelConfigEditForm from "./ModelConfigEditForm";
+import Loader from "components/Loader";
 
 function ModelConfigList() {
   const [modelConfigs, setModelConfigs] = useState([]);
   const [viewMode, setViewMode] = useState("list"); // list | edit | view | create
   const [selectedConfig, setSelectedConfig] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchConfigs = async () => {
@@ -21,11 +23,21 @@ function ModelConfigList() {
         setModelConfigs(data);
       } catch (error) {
         console.error("Error al obtener configuraciones de IA:", error);
+      } finally {
+        setIsLoading(false); // cuando termina de cargar
       }
     };
     fetchConfigs();
   }, []);
 
+  if (isLoading) {
+    return (
+      <SoftBox mt={5} display="flex" justifyContent="center" alignItems="center" height="200px">
+        <Loader />
+      </SoftBox>
+    );
+  }
+  
   const handleDelete = async (id) => {
     if (window.confirm("¿Seguro que deseas eliminar esta configuración?")) {
       try {
@@ -73,7 +85,7 @@ function ModelConfigList() {
   return (
     <SoftBox mt={5}>
       <SoftTypography variant="h4" fontWeight="bold" mb={3}>
-        Configuraciones del Modelo IA
+        Lista de Modelos
       </SoftTypography>
 
       {viewMode === "list" &&
@@ -91,8 +103,9 @@ function ModelConfigList() {
             <div>
               <SoftTypography variant="h6">Modelo: {config.modelName}</SoftTypography>
               <SoftTypography variant="body2" color="text">
-                Proveedor: {config.iaProvider?.name || "Desconocido"}
+                Proveedor: {config.iaProviderName || "Desconocido"}
               </SoftTypography>
+
               <SoftTypography variant="body2" color="text">
                 Temperature: {config.temperature} | Frequency Penalty: {config.frequencyPenalty} |
                 Presence Penalty: {config.presencePenalty}

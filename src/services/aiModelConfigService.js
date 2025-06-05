@@ -7,6 +7,11 @@ export const getModelConfigs = async () => {
   return response.data;
 };
 
+export async function getModelConfigsByProvider(providerId) {
+    const response = await api.get(`/aiModelConfigs/by-provider/${providerId}`);
+    return response.data;
+  }
+  
 export const createModelConfig = async (data) => {
   const response = await axios.post(`${API_BASE_URL}/api/AiModelConfigs`, data);
   return response.data;

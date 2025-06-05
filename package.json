@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "@emotion/cache": "11.11.0",
-    "@emotion/react": "^11.11.0",
-    "@emotion/styled": "^11.11.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "5.11.16",
-    "@mui/material": "^5.13.0",
+    "@mui/material": "^5.17.1",
     "@mui/styled-engine": "5.12.3",
     "@mui/x-data-grid": "^8.5.0",
     "@testing-library/jest-dom": "5.16.5",

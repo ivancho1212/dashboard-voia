@@ -22,3 +22,10 @@ export const deleteIaProvider = async (id) => {
   const response = await axios.delete(`${API_BASE_URL}/api/BotIaProviders/${id}`);
   return response.data;
 };
+
+// Obtener modelos por proveedor
+export const getIaModelsByProvider = async (providerId) => {
+    const response = await axios.get(`${API_BASE_URL}/api/AiModels/by-provider/${providerId}`);
+    return response.data;
+  };
+  

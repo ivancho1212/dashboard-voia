@@ -19,19 +19,25 @@ import {
   updateIaProvider,
   deleteIaProvider,
 } from "services/botIaProviderService";
+import Loader from "components/Loader";
+
 function AIModelsConfig() {
   const [activeTab, setActiveTab] = useState(0);
-  const [viewMode, setViewMode] = useState("list"); // list | view | edit
+  const [viewMode, setViewMode] = useState("list");
   const [selectedProvider, setSelectedProvider] = useState(null);
   const [providers, setProviders] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchProviders = async () => {
       try {
+        setIsLoading(true); // 👈 comienza carga
         const data = await getIaProviders();
         setProviders(data);
       } catch (err) {
         console.error("Error cargando proveedores:", err);
+      } finally {
+        setIsLoading(false); // 👈 finaliza carga
       }
     };
 
@@ -126,36 +132,40 @@ function AIModelsConfig() {
         <SoftBox mt={3}>
           {activeTab === 0 && viewMode === "list" && (
             <>
-              {providers.map((p) => (
-                <SoftBox
-                  key={p.id}
-                  p={2}
-                  mb={2}
-                  border="1px solid #ccc"
-                  borderRadius="md"
-                  display="flex"
-                  justifyContent="space-between"
-                  alignItems="center"
-                >
-                  <div>
-                    <SoftTypography variant="h6">{p.name}</SoftTypography>
-                    <SoftTypography variant="body2" color="text">
-                      {p.apiEndpoint}
-                    </SoftTypography>
-                  </div>
-                  <div>
-                    <SoftButton size="small" color="info" onClick={() => handleView(p)}>
-                      Ver
-                    </SoftButton>{" "}
-                    <SoftButton size="small" color="warning" onClick={() => handleEditMode(p)}>
-                      Editar
-                    </SoftButton>{" "}
-                    <SoftButton size="small" color="error" onClick={() => handleDelete(p.id)}>
-                      Eliminar
-                    </SoftButton>
-                  </div>
-                </SoftBox>
-              ))}
+              {isLoading ? (
+                <Loader />
+              ) : (
+                providers.map((p) => (
+                  <SoftBox
+                    key={p.id}
+                    p={2}
+                    mb={2}
+                    border="1px solid #ccc"
+                    borderRadius="md"
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                  >
+                    <div>
+                      <SoftTypography variant="h6">{p.name}</SoftTypography>
+                      <SoftTypography variant="body2" color="text">
+                        {p.apiEndpoint}
+                      </SoftTypography>
+                    </div>
+                    <div>
+                      <SoftButton size="small" color="info" onClick={() => handleView(p)}>
+                        Ver
+                      </SoftButton>{" "}
+                      <SoftButton size="small" color="warning" onClick={() => handleEditMode(p)}>
+                        Editar
+                      </SoftButton>{" "}
+                      <SoftButton size="small" color="error" onClick={() => handleDelete(p.id)}>
+                        Eliminar
+                      </SoftButton>
+                    </div>
+                  </SoftBox>
+                ))
+              )}
             </>
           )}
 

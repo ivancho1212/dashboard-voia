@@ -1,54 +1,61 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
 import SoftTypography from "components/SoftTypography";
 import PropTypes from "prop-types";
+import {
+  getIaProviders,
+  getIaModelsByProvider,
+} from "services/botIaProviderService"; // ✅ Usamos solo getIaModelsByProvider
 
 function IaProviderForm({ onSubmit }) {
   const [providers, setProviders] = useState([]);
-  const [modelsByProvider, setModelsByProvider] = useState({});
+  const [models, setModels] = useState([]);
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
 
+  // Obtener proveedores al montar
   useEffect(() => {
-    // Simulación local de proveedores con modelos asociados
-    const fakeProviders = [
-      { id: 1, name: "OpenAI", apiEndpoint: "https://api.openai.com", apiKey: "openai-key" },
-      { id: 2, name: "Anthropic", apiEndpoint: "https://api.anthropic.com", apiKey: "anthropic-key" },
-    ];
-
-    const fakeModels = {
-      1: [ // OpenAI
-        { id: "gpt-3.5", name: "GPT-3.5" },
-        { id: "gpt-4", name: "GPT-4" },
-      ],
-      2: [ // Anthropic
-        { id: "claude-2", name: "Claude 2" },
-        { id: "claude-3", name: "Claude 3" },
-      ],
+    const fetchProviders = async () => {
+      try {
+        const data = await getIaProviders();
+        setProviders(data);
+      } catch (error) {
+        console.error("Error al obtener proveedores:", error);
+      }
     };
 
-    setProviders(fakeProviders);
-    setModelsByProvider(fakeModels);
-
-    // Si luego quieres llamada real, puedes cargar modelos desde el backend al seleccionar un proveedor
+    fetchProviders();
   }, []);
+
+  // Obtener modelos cuando cambia el proveedor seleccionado
+  useEffect(() => {
+    const fetchModels = async () => {
+      if (!selectedProviderId) return;
+
+      try {
+        const data = await getIaModelsByProvider(selectedProviderId);
+        setModels(data);
+      } catch (error) {
+        console.error("Error al obtener modelos IA:", error);
+      }
+    };
+
+    fetchModels();
+  }, [selectedProviderId]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
     if (selectedProviderId && selectedModelId) {
-      const provider = providers.find(p => p.id === parseInt(selectedProviderId));
-      const model = modelsByProvider[selectedProviderId]?.find(m => m.id === selectedModelId);
+      const provider = providers.find((p) => p.id === parseInt(selectedProviderId));
+      const model = models.find((m) => m.id === parseInt(selectedModelId));
 
       if (provider && model) {
         onSubmit({ ...provider, selectedModel: model });
       }
     }
   };
-
-  const selectedModels = modelsByProvider[selectedProviderId] || [];
 
   return (
     <SoftBox component="form" onSubmit={handleSubmit} p={2}>
@@ -60,7 +67,7 @@ function IaProviderForm({ onSubmit }) {
         value={selectedProviderId}
         onChange={(e) => {
           setSelectedProviderId(e.target.value);
-          setSelectedModelId(""); // Reinicia modelo al cambiar proveedor
+          setSelectedModelId("");
         }}
         style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
       >
@@ -84,7 +91,7 @@ function IaProviderForm({ onSubmit }) {
             style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
           >
             <option value="">-- Selecciona un modelo --</option>
-            {selectedModels.map((m) => (
+            {models.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>
