@@ -13,3 +13,39 @@ export const getIaModelsByProvider = async (providerId) => {
   const response = await axios.get(`${API_BASE_URL}/api/AiModels/by-provider/${providerId}`);
   return response.data;
 };
+
+// --- FUNCIONES PARA BOT TEMPLATES ---
+
+// Crear plantilla de bot
+export const createBotTemplate = async (payload) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/api/bottemplates`, payload);
+    return response.data;
+  } catch (error) {
+    console.error("Error al crear la plantilla:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// Actualizar plantilla de bot
+export const updateBotTemplate = async (templateId, payload) => {
+  try {
+    const response = await axios.put(`${API_BASE_URL}/api/bottemplates/${templateId}`, payload);
+    return response.data;
+  } catch (error) {
+    console.error("Error al actualizar la plantilla:", error.response?.data || error.message);
+    throw error;
+  }
+};
+
+// Obtener plantilla por id
+export const getBotTemplateById = async (templateId) => {
+  const response = await axios.get(`${API_BASE_URL}/api/bottemplates/${templateId}`);
+  return response.data;
+};
+
+// Listar todas las plantillas de bot
+export const getBotTemplates = async () => {
+  const response = await axios.get(`${API_BASE_URL}/api/bottemplates`);
+  return response.data;
+};

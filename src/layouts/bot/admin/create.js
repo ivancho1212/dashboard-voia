@@ -32,40 +32,51 @@ function BotCreate() {
   };
 
   return (
-    <SoftBox>
-      <SoftTypography variant="h4" mb={3}>
-        Crear nueva plantilla bot
+    <SoftBox p={3}>
+      <SoftTypography variant="h4" fontWeight="bold" mb={4}>
+        Crear nueva plantilla de bot
       </SoftTypography>
 
       {/* Paso 1: Proveedor IA */}
-      <SoftBox mb={2} p={2} border="1px solid #ccc" borderRadius="lg">
-        <SoftTypography variant="h6" onClick={() => toggleSection(1)} style={{ cursor: "pointer" }}>
-          1. Seleccionar un proveedor IA {provider && "✅"}
+      <SoftBox
+        mb={3}
+        p={3}
+        borderRadius="lg"
+        shadow="sm"
+        bgColor="white"
+        sx={{ border: "1px solid #e0e0e0" }}
+      >
+        <SoftTypography
+          variant="h6"
+          fontWeight="bold"
+          color="info"
+          onClick={() => toggleSection(1)}
+          sx={{ cursor: "pointer", userSelect: "none" }}
+        >
+          Plantilla de IA {provider && "✅"}
         </SoftTypography>
         {expanded === 1 && <IaProviderForm onSubmit={handleIaProviderSubmit} />}
       </SoftBox>
 
-      {/* Paso 2: Plantilla */}
-      <SoftBox mb={2} p={2} border="1px solid #ccc" borderRadius="lg" opacity={provider ? 1 : 0.5}>
-        <SoftTypography
-          variant="h6"
-          onClick={() => provider && toggleSection(2)}
-          style={{ cursor: provider ? "pointer" : "not-allowed" }}
-        >
-          2. Crear plantilla {template && "✅"}
-        </SoftTypography>
-
-        {provider && expanded === 2 && (
-          <TemplateForm iaProviderId={provider.id} onSubmit={handleTemplateSubmit} />
-        )}
-      </SoftBox>
-
       {/* Paso 3: Prompt */}
-      <SoftBox mb={2} p={2} border="1px solid #ccc" borderRadius="lg" opacity={template ? 1 : 0.5}>
+      <SoftBox
+        mb={3}
+        p={3}
+        borderRadius="lg"
+        shadow="sm"
+        bgColor="white"
+        sx={{
+          border: "1px solid #e0e0e0",
+          opacity: template ? 1 : 0.5,
+          cursor: template ? "default" : "not-allowed",
+        }}
+      >
         <SoftTypography
           variant="h6"
+          fontWeight="bold"
+          color="info"
           onClick={() => template && toggleSection(3)}
-          style={{ cursor: template ? "pointer" : "not-allowed" }}
+          sx={{ cursor: template ? "pointer" : "not-allowed", userSelect: "none" }}
         >
           3. Crear prompt para la plantilla {prompt && "✅"}
         </SoftTypography>
@@ -76,9 +87,11 @@ function BotCreate() {
 
       {/* Confirmación */}
       {prompt && expanded === 4 && (
-        <SoftTypography variant="h6" color="success" mt={3}>
-          ✅ Bot creado exitosamente.
-        </SoftTypography>
+        <SoftBox mt={3}>
+          <SoftTypography variant="h6" fontWeight="bold" color="success">
+            ✅ Bot creado exitosamente.
+          </SoftTypography>
+        </SoftBox>
       )}
     </SoftBox>
   );

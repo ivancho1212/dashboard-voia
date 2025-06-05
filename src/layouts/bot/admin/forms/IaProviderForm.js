@@ -1,20 +1,24 @@
 import { useState, useEffect } from "react";
-import SoftBox from "components/SoftBox";
-import SoftButton from "components/SoftButton";
-import SoftTypography from "components/SoftTypography";
 import PropTypes from "prop-types";
-import {
-  getIaProviders,
-  getIaModelsByProvider,
-} from "services/botIaProviderService"; // ✅ Usamos solo getIaModelsByProvider
+import SoftBox from "components/SoftBox";
+import SoftTypography from "components/SoftTypography";
+import SoftButton from "components/SoftButton";
+import SoftInput from "components/SoftInput"; // Asumo que SoftInput viene de ahí
+import { getIaProviders } from "services/botIaProviderService";
+import { getModelConfigsByProvider } from "services/aiModelConfigService";
 
 function IaProviderForm({ onSubmit }) {
   const [providers, setProviders] = useState([]);
   const [models, setModels] = useState([]);
+
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
 
-  // Obtener proveedores al montar
+  // Nuevos campos del formulario
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [defaultStyleId, setDefaultStyleId] = useState("");
+
   useEffect(() => {
     const fetchProviders = async () => {
       try {
@@ -24,91 +28,184 @@ function IaProviderForm({ onSubmit }) {
         console.error("Error al obtener proveedores:", error);
       }
     };
-
     fetchProviders();
   }, []);
 
-  // Obtener modelos cuando cambia el proveedor seleccionado
   useEffect(() => {
     const fetchModels = async () => {
       if (!selectedProviderId) return;
-
       try {
-        const data = await getIaModelsByProvider(selectedProviderId);
+        const data = await getModelConfigsByProvider(selectedProviderId);
         setModels(data);
       } catch (error) {
         console.error("Error al obtener modelos IA:", error);
       }
     };
-
     fetchModels();
   }, [selectedProviderId]);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e) => {
+  e.preventDefault();
 
-    if (selectedProviderId && selectedModelId) {
-      const provider = providers.find((p) => p.id === parseInt(selectedProviderId));
-      const model = models.find((m) => m.id === parseInt(selectedModelId));
+  if (!selectedProviderId) {
+    alert("Por favor selecciona un proveedor válido.");
+    return;
+  }
+  if (!selectedModelId) {
+    alert("Por favor selecciona un modelo válido.");
+    return;
+  }
+  if (!name.trim()) {
+    alert("Por favor ingresa un nombre para la plantilla.");
+    return;
+  }
 
-      if (provider && model) {
-        onSubmit({ ...provider, selectedModel: model });
-      }
-    }
+  const newTemplate = {
+    name: name.trim(),
+    description: description.trim(),
+    iaProviderId: parseInt(selectedProviderId, 10),
+    aiModelConfigId: parseInt(selectedModelId, 10),
+    defaultStyleId: defaultStyleId ? parseInt(defaultStyleId, 10) : null,
   };
+  console.log("Enviando template:", newTemplate);
+
+  try {
+    const response = await fetch("http://localhost:5006/api/bottemplates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newTemplate),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Error al crear el template");
+    }
+
+    const data = await response.json();
+    console.log("Plantilla creada:", data);
+    onSubmit(data);
+  } catch (error) {
+    console.error("Error al enviar datos:", error);
+    alert("Error al crear la plantilla: " + error.message);
+  }
+};
+
 
   return (
-    <SoftBox component="form" onSubmit={handleSubmit} p={2}>
-      <SoftTypography variant="h6" mb={2}>
-        Selecciona proveedor IA
+    <SoftBox component="form" onSubmit={handleSubmit} p={2} shadow="sm" borderRadius="lg">
+      <SoftTypography variant="h5" fontWeight="bold" mb={2}>
+        Crear Plantilla IA
       </SoftTypography>
 
-      <select
-        value={selectedProviderId}
-        onChange={(e) => {
-          setSelectedProviderId(e.target.value);
-          setSelectedModelId("");
-        }}
-        style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
-      >
-        <option value="">-- Selecciona un proveedor --</option>
-        {providers.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.name}
-          </option>
-        ))}
-      </select>
+      {/* Proveedor IA */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" fontWeight="bold">
+          Proveedor de IA
+        </SoftTypography>
+        <select
+          name="provider"
+          value={selectedProviderId}
+          onChange={(e) => {
+            setSelectedProviderId(e.target.value);
+            setSelectedModelId("");
+          }}
+          required
+          style={{
+            width: "100%",
+            padding: "10px",
+            borderRadius: "8px",
+            border: "1px solid #ccc",
+            fontSize: "14px",
+          }}
+        >
+          <option value="">-- Selecciona un proveedor --</option>
+          {providers.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </SoftBox>
 
+      {/* Modelo IA */}
       {selectedProviderId && (
-        <>
-          <SoftTypography variant="subtitle2" mb={1}>
-            Selecciona modelo
+        <SoftBox mb={2}>
+          <SoftTypography variant="caption" fontWeight="bold">
+            Modelo de IA
           </SoftTypography>
-
           <select
+            name="model"
             value={selectedModelId}
             onChange={(e) => setSelectedModelId(e.target.value)}
-            style={{ width: "100%", padding: "0.5rem", marginBottom: "1rem" }}
+            required
+            style={{
+              width: "100%",
+              padding: "10px",
+              borderRadius: "8px",
+              border: "1px solid #ccc",
+              fontSize: "14px",
+            }}
           >
             <option value="">-- Selecciona un modelo --</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
-                {m.name}
+                {m.modelName}
               </option>
             ))}
           </select>
-        </>
+        </SoftBox>
       )}
 
-      <SoftButton
-        type="submit"
-        color="info"
-        fullWidth
-        mt={2}
-        disabled={!selectedProviderId || !selectedModelId}
+      {/* Nombre plantilla */}
+      <SoftBox mb={2}>
+        <SoftInput
+          placeholder="Nombre"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          required
+        />
+      </SoftBox>
+
+      {/* Descripción */}
+      <SoftBox mb={2}>
+        <SoftInput
+          placeholder="Descripción"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
+      </SoftBox>
+
+      {/* Estilo por defecto */}
+      <SoftTypography variant="caption" mb={1}>
+        Estilo por defecto (opcional)
+      </SoftTypography>
+      <select
+        value={defaultStyleId}
+        onChange={(e) => setDefaultStyleId(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "10px",
+          borderRadius: "8px",
+          border: "1px solid #ccc",
+          marginBottom: "16px",
+        }}
       >
-        Continuar
-      </SoftButton>
+        <option value="">Seleccionar estilo</option>
+        <option value="1">Tema Claro</option>
+        <option value="2">Tema Oscuro</option>
+      </select>
+
+      {/* Botón enviar */}
+      <SoftBox mt={3}>
+        <SoftButton
+          type="submit"
+          color="info"
+          fullWidth
+          disabled={!selectedProviderId || !selectedModelId || !name.trim()}
+        >
+          Crear plantilla
+        </SoftButton>
+      </SoftBox>
     </SoftBox>
   );
 }
