@@ -6,6 +6,7 @@ import SoftButton from "components/SoftButton";
 import SoftInput from "components/SoftInput"; // Asumo que SoftInput viene de ahí
 import { getIaProviders } from "services/botIaProviderService";
 import { getModelConfigsByProvider } from "services/aiModelConfigService";
+import { getStyleTemplates } from "services/styleTemplateService";
 
 function IaProviderForm({ onSubmit }) {
   const [providers, setProviders] = useState([]);
@@ -18,6 +19,8 @@ function IaProviderForm({ onSubmit }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [defaultStyleId, setDefaultStyleId] = useState("");
+
+  const [styles, setStyles] = useState([]);
 
   useEffect(() => {
     const fetchProviders = async () => {
@@ -44,52 +47,64 @@ function IaProviderForm({ onSubmit }) {
     fetchModels();
   }, [selectedProviderId]);
 
+  useEffect(() => {
+    const fetchStyles = async () => {
+      try {
+        const data = await getStyleTemplates();
+        console.log("Styles recibidos:", data); // <-- aquí lo agregas
+        setStyles(data);
+      } catch (error) {
+        console.error("Error al obtener estilos:", error);
+      }
+    };
+    fetchStyles();
+  }, []);
+
   const handleSubmit = async (e) => {
-  e.preventDefault();
+    e.preventDefault();
 
-  if (!selectedProviderId) {
-    alert("Por favor selecciona un proveedor válido.");
-    return;
-  }
-  if (!selectedModelId) {
-    alert("Por favor selecciona un modelo válido.");
-    return;
-  }
-  if (!name.trim()) {
-    alert("Por favor ingresa un nombre para la plantilla.");
-    return;
-  }
-
-  const newTemplate = {
-    name: name.trim(),
-    description: description.trim(),
-    iaProviderId: parseInt(selectedProviderId, 10),
-    aiModelConfigId: parseInt(selectedModelId, 10),
-    defaultStyleId: defaultStyleId ? parseInt(defaultStyleId, 10) : null,
-  };
-  console.log("Enviando template:", newTemplate);
-
-  try {
-    const response = await fetch("http://localhost:5006/api/bottemplates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newTemplate),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || "Error al crear el template");
+    if (!selectedProviderId) {
+      alert("Por favor selecciona un proveedor válido.");
+      return;
+    }
+    if (!selectedModelId) {
+      alert("Por favor selecciona un modelo válido.");
+      return;
+    }
+    if (!name.trim()) {
+      alert("Por favor ingresa un nombre para la plantilla.");
+      return;
     }
 
-    const data = await response.json();
-    console.log("Plantilla creada:", data);
-    onSubmit(data);
-  } catch (error) {
-    console.error("Error al enviar datos:", error);
-    alert("Error al crear la plantilla: " + error.message);
-  }
-};
+    const newTemplate = {
+      name: name.trim(),
+      description: description.trim(),
+      iaProviderId: parseInt(selectedProviderId, 10),
+      aiModelConfigId: parseInt(selectedModelId, 10),
+      defaultStyleId: defaultStyleId ? parseInt(defaultStyleId, 10) : null,
+    };
+    console.log("Enviando template:", newTemplate);
 
+    try {
+      const response = await fetch("http://localhost:5006/api/bottemplates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTemplate),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al crear el template");
+      }
+
+      const data = await response.json();
+      console.log("Plantilla creada:", data);
+      onSubmit(newTemplate, data);
+    } catch (error) {
+      console.error("Error al enviar datos:", error);
+      alert("Error al crear la plantilla: " + error.message);
+    }
+  };
 
   return (
     <SoftBox component="form" onSubmit={handleSubmit} p={2} shadow="sm" borderRadius="lg">
@@ -181,18 +196,23 @@ function IaProviderForm({ onSubmit }) {
       </SoftTypography>
       <select
         value={defaultStyleId}
-        onChange={(e) => setDefaultStyleId(e.target.value)}
+        onChange={(e) =>
+          setDefaultStyleId(e.target.value === "" ? null : parseInt(e.target.value, 10))
+        }
         style={{
           width: "100%",
           padding: "10px",
           borderRadius: "8px",
           border: "1px solid #ccc",
-          marginBottom: "16px",
+          fontSize: "14px",
         }}
       >
-        <option value="">Seleccionar estilo</option>
-        <option value="1">Tema Claro</option>
-        <option value="2">Tema Oscuro</option>
+        <option value="">-- Selecciona un estilo --</option>
+        {styles.map((style) => (
+          <option key={style.id} value={style.id}>
+            {style.name} ({style.theme})
+          </option>
+        ))}
       </select>
 
       {/* Botón enviar */}

@@ -3,27 +3,44 @@ import SoftBox from "components/SoftBox";
 import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
 import SoftTypography from "components/SoftTypography";
-import PropTypes from "prop-types"; 
+import PropTypes from "prop-types";
+import { createBotTemplatePrompt } from "services/botTemplatePromptsService";  // <--- Importas el servicio correcto
 
 function TemplatePromptForm({ botTemplateId, onSubmit }) {
   const [content, setContent] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Simulación de la respuesta como si viniera de un backend
-    const fakeResponse = {
-      id: Math.floor(Math.random() * 100000), // ID simulado
-      botTemplateId,
-      role: "system",
-      content,
-      createdAt: new Date().toISOString(),
+    if (!content.trim()) {
+      alert("El prompt no puede estar vacío.");
+      return;
+    }
+
+    setLoading(true);
+
+    const newPrompt = {
+      BotTemplateId: botTemplateId,   // el ID de la template
+      Role: "system",                 // siempre 'system' en este form (puedes parametrizar luego)
+      Content: content.trim(),        // el texto del prompt
     };
 
-    onSubmit(fakeResponse); // Enviar datos simulados al componente padre
+    try {
+      // Usas el servicio con axios
+      const response = await createBotTemplatePrompt(newPrompt);
 
-    // Limpiar el contenido del input después de guardar
-    setContent("");
+      // response.data contiene el prompt guardado
+      onSubmit(response.data);
+
+      // Limpiar input para nuevo prompt
+      setContent("");
+    } catch (error) {
+      console.error("Error guardando prompt:", error);
+      alert("Error al guardar prompt: " + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -40,10 +57,11 @@ function TemplatePromptForm({ botTemplateId, onSubmit }) {
         rows={10}
         mb={2}
         required
+        disabled={loading}
       />
 
-      <SoftButton type="submit" color="info" fullWidth>
-        Guardar prompt
+      <SoftButton type="submit" color="info" fullWidth disabled={loading}>
+        {loading ? "Guardando..." : "Guardar prompt"}
       </SoftButton>
     </SoftBox>
   );

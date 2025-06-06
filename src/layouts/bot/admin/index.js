@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -10,70 +10,99 @@ import SoftTypography from "components/SoftTypography";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 
-import BotCreate from "./create";
 import BotList from "./components/BotList";
+import BotCreate from "./create"; // o ./create/index.js
 import BotView from "./view";
 import BotEdit from "./edit";
 
-function BotAdminDashboard() {
-  const [activeTab, setActiveTab] = useState(0); // 0 = Lista, 1 = Crear
-  const [viewMode, setViewMode] = useState("list"); // "list", "view", "edit"
+import { getBotTemplates, deleteBotTemplate } from "services/botTemplateService";
+
+function BotTemplatesContainer() {
+  const [activeTab, setActiveTab] = useState(0);
+  const [viewMode, setViewMode] = useState("list"); // list, view, edit, create
   const [selectedBot, setSelectedBot] = useState(null);
+  const [bots, setBots] = useState([]);
 
-  // 🔧 ESTADO NUEVO para almacenar los bots
-  const [bots, setBots] = useState([
-    { id: 1, name: "Bot Prueba 1", description: "Descripción 1" },
-    { id: 2, name: "Bot Prueba 2", description: "Descripción 2" },
-  ]);
+  useEffect(() => {
+    loadBots();
+  }, []);
 
-  // Seleccionar para ver detalle
-  function onViewBot(bot) {
+  const loadBots = async () => {
+    try {
+      const data = await getBotTemplates();
+      console.log("Bots cargados de API:", data);
+      setBots(data);
+    } catch (error) {
+      console.error("Error cargando bots:", error);
+    }
+  };
+
+  // Ver detalle
+  const onViewBot = (bot) => {
     setSelectedBot(bot);
     setViewMode("view");
-  }
+    setActiveTab(0);
+  };
 
-  // Seleccionar para editar
-  function onEditBot(bot) {
+  // Editar bot
+  const onEditBot = (bot) => {
     setSelectedBot(bot);
     setViewMode("edit");
+    setActiveTab(0);
+  };
+
+  // Eliminar bot (local)
+
+const onDeleteBot = async (botToDelete) => {
+  try {
+    await deleteBotTemplate(botToDelete.id);
+    setBots((prev) => prev.filter((b) => b.id !== botToDelete.id));
+  } catch (error) {
+    console.error("Error al eliminar bot:", error);
+    alert("No se pudo eliminar la plantilla. Intenta de nuevo.");
   }
+};
+
 
   // Volver a la lista
-  function onBackToList() {
+  const onBackToList = () => {
     setSelectedBot(null);
     setViewMode("list");
-  }
+    setActiveTab(0);
+    loadBots(); // recarga para mantener sincronía
+  };
 
   // Crear nuevo bot
-  function onCreateBot() {
+  const onCreateBot = () => {
     setSelectedBot(null);
     setViewMode("create");
-    setActiveTab(1); // cambia a pestaña Crear
-  }
+    setActiveTab(1);
+  };
 
-  // Cuando cambias tabs (Lista <-> Crear)
-  function onTabChange(_, newVal) {
+  // Cambio pestañas
+  const onTabChange = (_, newVal) => {
     setActiveTab(newVal);
     if (newVal === 0) {
       setViewMode("list");
       setSelectedBot(null);
+      loadBots();
     } else if (newVal === 1) {
       setViewMode("create");
       setSelectedBot(null);
     }
-  }
+  };
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3} px={2}>
         <SoftTypography variant="h4" fontWeight="bold" mb={3}>
-          Panel de Administración de Bots
+          Panel de Administración de plantillas
         </SoftTypography>
 
         <Tabs value={activeTab} onChange={onTabChange}>
-          <Tab label="Plantillas de Bots" />
-          <Tab label="Crear plantila del Bot" />
+          <Tab label="Plantillas de modelos" />
+          <Tab label="Crear plantilla" />
         </Tabs>
 
         <SoftBox mt={3}>
@@ -81,21 +110,25 @@ function BotAdminDashboard() {
             <>
               {viewMode === "list" && (
                 <BotList
-                  bots={bots} // ✅ SE PASA AQUÍ EL PROP NECESARIO
+                  bots={bots}
                   onViewBot={onViewBot}
                   onEditBot={onEditBot}
+                  onDeleteBot={onDeleteBot}
                   onCreateBot={onCreateBot}
                 />
               )}
-              {viewMode === "view" && (
+
+              {viewMode === "view" && selectedBot && (
                 <BotView bot={selectedBot} onBack={onBackToList} onEdit={onEditBot} />
               )}
-              {viewMode === "edit" && (
+
+              {viewMode === "edit" && selectedBot && (
                 <BotEdit bot={selectedBot} onBack={onBackToList} />
               )}
             </>
           )}
-          {activeTab === 1 && <BotCreate />}
+
+          {activeTab === 1 && viewMode === "create" && <BotCreate onBack={onBackToList} />}
         </SoftBox>
       </SoftBox>
       <Footer />
@@ -103,4 +136,4 @@ function BotAdminDashboard() {
   );
 }
 
-export default BotAdminDashboard;
+export default BotTemplatesContainer;

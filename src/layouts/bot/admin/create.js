@@ -1,6 +1,5 @@
 import { useState } from "react";
 import IaProviderForm from "./forms/IaProviderForm";
-import TemplateForm from "./forms/TemplateForm";
 import TemplatePromptForm from "./forms/TemplatePromptForm";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -12,14 +11,10 @@ function BotCreate() {
 
   const [expanded, setExpanded] = useState(1); // 1: IA, 2: Template, 3: Prompt
 
-  const handleIaProviderSubmit = (data) => {
+  const handleIaProviderSubmit = (data, plantillaCreada) => {
     setProvider(data);
-    setExpanded(2);
-  };
-
-  const handleTemplateSubmit = (data) => {
-    setTemplate(data);
-    setExpanded(3);
+    setTemplate(plantillaCreada);
+    setExpanded(3); // o 2 si quieres seguir el número, pero 3 para prompt
   };
 
   const handlePromptSubmit = (data) => {
@@ -34,7 +29,7 @@ function BotCreate() {
   return (
     <SoftBox p={3}>
       <SoftTypography variant="h4" fontWeight="bold" mb={4}>
-        Crear nueva plantilla de bot
+        Crear plantilla del modelo
       </SoftTypography>
 
       {/* Paso 1: Proveedor IA */}
@@ -78,7 +73,7 @@ function BotCreate() {
           onClick={() => template && toggleSection(3)}
           sx={{ cursor: template ? "pointer" : "not-allowed", userSelect: "none" }}
         >
-          3. Crear prompt para la plantilla {prompt && "✅"}
+          Crear prompt para la plantilla {prompt && "✅"}
         </SoftTypography>
         {template && expanded === 3 && (
           <TemplatePromptForm botTemplateId={template.id || 1} onSubmit={handlePromptSubmit} />
@@ -89,7 +84,7 @@ function BotCreate() {
       {prompt && expanded === 4 && (
         <SoftBox mt={3}>
           <SoftTypography variant="h6" fontWeight="bold" color="success">
-            ✅ Bot creado exitosamente.
+            ✅ Plantilla creada exitosamente.
           </SoftTypography>
         </SoftBox>
       )}

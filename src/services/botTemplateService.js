@@ -49,3 +49,13 @@ export const getBotTemplates = async () => {
   const response = await axios.get(`${API_BASE_URL}/api/bottemplates`);
   return response.data;
 };
+// Borrar plantilla de bot
+export const deleteBotTemplate = async (templateId) => {
+  try {
+    const response = await axios.delete(`${API_BASE_URL}/api/bottemplates/${templateId}`);
+    return response.data; // o solo devolver true
+  } catch (error) {
+    console.error("Error al eliminar la plantilla:", error.response?.data || error.message);
+    throw error;
+  }
+};
