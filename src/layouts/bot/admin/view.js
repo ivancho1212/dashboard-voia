@@ -10,9 +10,23 @@ function ViewBot({ bot, onBack, onEdit }) {
       <SoftBox p={3}>
         <SoftTypography variant="h4" gutterBottom>{bot.name}</SoftTypography>
         <SoftTypography variant="body1" gutterBottom>{bot.description}</SoftTypography>
-        <SoftTypography variant="body2" color="text">
-          Estado: {bot.active ? "Activo" : "Inactivo"}
-        </SoftTypography>
+
+        {bot.prompts && bot.prompts.length > 0 && (
+          <SoftBox mt={3}>
+            <SoftTypography variant="h6" gutterBottom>Prompts de la plantilla:</SoftTypography>
+            {bot.prompts.map((prompt, index) => (
+              <SoftBox key={prompt.id || index} mb={2} p={2} borderRadius="lg" bgcolor="#f5f5f5">
+                <SoftTypography variant="subtitle2" color="text">
+                  Rol: <strong>{prompt.role}</strong>
+                </SoftTypography>
+                <SoftTypography variant="body2" color="textSecondary">
+                  {prompt.content}
+                </SoftTypography>
+              </SoftBox>
+            ))}
+          </SoftBox>
+        )}
+
         <SoftBox mt={2} display="flex" gap={1}>
           <SoftButton onClick={onBack} color="secondary">Volver</SoftButton>
           <SoftButton onClick={() => onEdit(bot)} color="info">Editar</SoftButton>
@@ -26,7 +40,13 @@ ViewBot.propTypes = {
   bot: PropTypes.shape({
     name: PropTypes.string.isRequired,
     description: PropTypes.string,
-    active: PropTypes.bool,
+    prompts: PropTypes.arrayOf(
+      PropTypes.shape({
+        id: PropTypes.number,
+        role: PropTypes.string,
+        content: PropTypes.string,
+      })
+    )
   }).isRequired,
   onBack: PropTypes.func.isRequired,
   onEdit: PropTypes.func.isRequired,

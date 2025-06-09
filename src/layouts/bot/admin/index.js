@@ -15,7 +15,11 @@ import BotCreate from "./create"; // o ./create/index.js
 import BotView from "./view";
 import BotEdit from "./edit";
 
-import { getBotTemplates, deleteBotTemplate } from "services/botTemplateService";
+import {
+  getBotTemplates,
+  getBotTemplateById,
+  deleteBotTemplate,
+} from "services/botTemplateService";
 
 function BotTemplatesContainer() {
   const [activeTab, setActiveTab] = useState(0);
@@ -38,31 +42,42 @@ function BotTemplatesContainer() {
   };
 
   // Ver detalle
-  const onViewBot = (bot) => {
-    setSelectedBot(bot);
-    setViewMode("view");
-    setActiveTab(0);
+  const onViewBot = async (bot) => {
+    try {
+      const fullBot = await getBotTemplateById(bot.id); // Llama al endpoint con prompts
+      setSelectedBot(fullBot);
+      setViewMode("view");
+      setActiveTab(0);
+    } catch (error) {
+      console.error("Error cargando plantilla completa:", error);
+      alert("No se pudo cargar la plantilla. Intenta nuevamente.");
+    }
   };
 
   // Editar bot
-  const onEditBot = (bot) => {
-    setSelectedBot(bot);
-    setViewMode("edit");
-    setActiveTab(0);
+  const onEditBot = async (bot) => {
+    try {
+      const fullBot = await getBotTemplateById(bot.id); // Debe incluir prompts
+      setSelectedBot(fullBot);
+      setViewMode("edit");
+      setActiveTab(0);
+    } catch (error) {
+      console.error("Error cargando plantilla completa:", error);
+      alert("No se pudo cargar la plantilla. Intenta nuevamente.");
+    }
   };
 
   // Eliminar bot (local)
 
-const onDeleteBot = async (botToDelete) => {
-  try {
-    await deleteBotTemplate(botToDelete.id);
-    setBots((prev) => prev.filter((b) => b.id !== botToDelete.id));
-  } catch (error) {
-    console.error("Error al eliminar bot:", error);
-    alert("No se pudo eliminar la plantilla. Intenta de nuevo.");
-  }
-};
-
+  const onDeleteBot = async (botToDelete) => {
+    try {
+      await deleteBotTemplate(botToDelete.id);
+      setBots((prev) => prev.filter((b) => b.id !== botToDelete.id));
+    } catch (error) {
+      console.error("Error al eliminar bot:", error);
+      alert("No se pudo eliminar la plantilla. Intenta de nuevo.");
+    }
+  };
 
   // Volver a la lista
   const onBackToList = () => {
