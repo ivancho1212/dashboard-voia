@@ -14,6 +14,11 @@ export const getIaModelsByProvider = async (providerId) => {
   return response.data;
 };
 
+export async function getAvailableBotTemplates() {
+  const res = await axios.get(`${API_BASE_URL}/api/bottemplates/available`);
+  return res.data;
+}
+
 // --- FUNCIONES PARA BOT TEMPLATES ---
 
 // Crear plantilla de bot

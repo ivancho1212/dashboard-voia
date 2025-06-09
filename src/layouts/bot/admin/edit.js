@@ -4,6 +4,7 @@ import SoftInput from "components/SoftInput";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
 import PropTypes from "prop-types";
+import { updateBotTemplate } from "services/botTemplateService";
 
 function BotEdit({ bot, onBack }) {
   const [form, setForm] = useState({
@@ -34,24 +35,26 @@ function BotEdit({ bot, onBack }) {
     setPrompts(updated);
   };
 
-  const handleSave = () => {
-    const updatedBot = {
-      id: bot.id,
-      name: form.name,
-      description: form.description,
-      prompts: prompts.map((p) => ({
-        id: p.id,
-        role: p.role,
-        content: p.content,
-      })),
-    };
-
-    console.log("Datos a guardar:", updatedBot);
-
-    // Aquí deberías llamar al servicio de actualización
-    // await updateBotTemplate(updatedBot);
-    onBack(); // volver a la lista
+  const handleSave = async () => {
+  const payload = {
+    name: form.name,
+    description: form.description,
+    prompts: prompts.map((p) => ({
+      role: p.role,
+      content: p.content,
+    })),
   };
+
+  console.log("Payload enviado:", payload);
+
+  try {
+    await updateBotTemplate(bot.id, payload);
+    onBack();
+  } catch (error) {
+    console.error("Error al guardar cambios:", error);
+  }
+};
+
 
   return (
     <SoftBox>
