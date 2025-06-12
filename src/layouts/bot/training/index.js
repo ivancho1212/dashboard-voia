@@ -26,6 +26,7 @@ function BotTraining() {
   const [linkError, setLinkError] = useState("");
   const [promptSaved, setPromptSaved] = useState(false);
   const [attachmentsSaved, setAttachmentsSaved] = useState(false);
+  const [text, setText] = useState("");
 
   const allowedTypes = [
     "application/pdf",
@@ -79,37 +80,49 @@ function BotTraining() {
   };
 
   const handleSavePrompt = async () => {
-    if (interactions.length === 0) {
-      alert("Agrega al menos una interacción.");
-      return;
-    }
+  if (interactions.length === 0 && !text.trim()) {
+    alert("Agrega al menos una interacción o texto plano.");
+    return;
+  }
 
-    const promptText = interactions.map((i) => `${i.role}: ${i.content}`).join("\n");
+  const allPrompts = [];
 
-    if (promptText.length > 3000) {
-      alert("El prompt es demasiado largo (máximo 3000 caracteres). Reduce contenido.");
-      return;
-    }
+  // Si hay texto plano, lo añadimos primero
+  if (text.trim()) {
+    allPrompts.push({
+      role: "system",
+      content: text.trim(),
+    });
+  }
 
-    const sessionData = {
-      botTemplateId: parseInt(id),
-      sessionName: "Entrenamiento manual",
-      description: "Entrenamiento creado desde el panel",
-      prompts: interactions.map(({ role, content }) => ({
-        role,
-        content,
-      })),
-    };
+  // Agregamos las interacciones
+  allPrompts.push(...interactions.map(({ role, content }) => ({ role, content })));
 
-    try {
-      await createTemplateTrainingSessionWithPrompts(sessionData);
-      setPromptSaved(true);
-      alert("Sesión de entrenamiento guardada correctamente.");
-    } catch (error) {
-      console.error("Error al guardar el entrenamiento:", error);
-      alert("Error al guardar el entrenamiento. Revisa consola.");
-    }
+  // Validación de longitud
+  const promptText = allPrompts.map((i) => `${i.role}: ${i.content}`).join("\n");
+
+  if (promptText.length > 3000) {
+    alert("El prompt es demasiado largo (máximo 3000 caracteres). Reduce contenido.");
+    return;
+  }
+
+  const sessionData = {
+    botTemplateId: parseInt(id),
+    sessionName: "Entrenamiento manual",
+    description: "Entrenamiento creado desde el panel",
+    prompts: allPrompts,
   };
+
+  try {
+    await createTemplateTrainingSessionWithPrompts(sessionData);
+    setPromptSaved(true);
+    alert("Sesión de entrenamiento guardada correctamente.");
+  } catch (error) {
+    console.error("Error al guardar el entrenamiento:", error);
+    alert("Error al guardar el entrenamiento. Revisa consola.");
+  }
+};
+
 
   const handleSaveAttachments = () => {
     if (!file && !link) {
@@ -320,6 +333,24 @@ function BotTraining() {
                 </SoftTypography>
               )}
             </Grid>
+          </Grid>
+          <Grid item xs={12}>
+            <SoftTypography variant="subtitle2" mb={1}>
+              Texto plano para entrenamiento
+            </SoftTypography>
+            <textarea
+              rows={8}
+              style={{
+                width: "100%",
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+                fontSize: "16px",
+              }}
+              placeholder="Escribe aquí el contenido relevante para el entrenamiento del bot..."
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+            />
           </Grid>
 
           <SoftBox mt={2}>
