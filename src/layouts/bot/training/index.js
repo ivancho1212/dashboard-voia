@@ -1,5 +1,7 @@
 import { useLocation, useParams } from "react-router-dom";
 import { useState } from "react";
+import { createTemplateTrainingSessionWithPrompts } from "services/templateTrainingService"; // 👈
+
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -11,7 +13,7 @@ import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 
 function BotTraining() {
-  const { id } = useParams();
+  const { id } = useParams(); // ID de la plantilla
   const location = useLocation();
   const template = location.state?.template;
 
@@ -22,13 +24,15 @@ function BotTraining() {
   const [fileError, setFileError] = useState("");
   const [link, setLink] = useState("");
   const [linkError, setLinkError] = useState("");
+  const [promptSaved, setPromptSaved] = useState(false);
+  const [attachmentsSaved, setAttachmentsSaved] = useState(false);
 
   const allowedTypes = [
     "application/pdf",
     "text/plain",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
-  const maxFileSize = 5 * 1024 * 1024; // 5MB
+  const maxFileSize = 5 * 1024 * 1024;
 
   const validateFile = (file) => {
     if (!file) return false;
@@ -55,45 +59,70 @@ function BotTraining() {
     }
   };
 
-  // Preguntas sugeridas
   const suggestedInteractions = [
     { question: "¿Qué es una tasación vehicular?" },
     { question: "¿Qué incluye el servicio de tasación?" },
     { question: "¿Ofrecen tasaciones virtuales o solo presenciales?" },
-    { question: "¿Cuánto tiempo se demora el proceso de tasación?" },
-    { question: "¿La tasación tiene validez legal?" },
-    { question: "¿Cuánto cuesta una tasación de vehículo?" },
-    { question: "¿Qué métodos de pago aceptan?" },
-    { question: "¿Debo pagar antes o después de recibir el informe?" },
-    { question: "¿Puedo tasar cualquier tipo de vehículo?" },
-    { question: "¿Qué datos del vehículo debo proporcionar?" },
-    { question: "¿Tasación aplica también para motos o camiones?" },
-    { question: "¿Qué documentos necesito para tasar mi vehículo?" },
-    { question: "¿Puedo tasar un vehículo si no está a mi nombre?" },
-    { question: "¿Es obligatorio tener la tarjeta de propiedad?" },
-    { question: "¿Cómo puedo agendar una tasación?" },
-    { question: "¿Cuál es el horario de atención?" },
-    { question: "¿Dónde están ubicados?" },
-    { question: "¿Atienden los fines de semana?" },
-    { question: "¿Recibo un certificado de la tasación?" },
-    { question: "¿El informe de tasación se envía por correo?" },
   ];
 
   const handleAddInteraction = () => {
     if (question.trim() && answer.trim()) {
-      setInteractions([
-        ...interactions,
+      setInteractions((prev) => [
+        ...prev,
         { role: "user", content: question },
         { role: "assistant", content: answer },
       ]);
       setQuestion("");
       setAnswer("");
+      setPromptSaved(false);
     }
   };
 
-  const handleUseSuggestion = (q, a) => {
-    setQuestion(q);
-    setAnswer(a);
+  const handleSavePrompt = async () => {
+    if (interactions.length === 0) {
+      alert("Agrega al menos una interacción.");
+      return;
+    }
+
+    const promptText = interactions.map((i) => `${i.role}: ${i.content}`).join("\n");
+
+    if (promptText.length > 3000) {
+      alert("El prompt es demasiado largo (máximo 3000 caracteres). Reduce contenido.");
+      return;
+    }
+
+    const sessionData = {
+      botTemplateId: parseInt(id),
+      sessionName: "Entrenamiento manual",
+      description: "Entrenamiento creado desde el panel",
+      prompts: interactions.map(({ role, content }) => ({
+        role,
+        content,
+      })),
+    };
+
+    try {
+      await createTemplateTrainingSessionWithPrompts(sessionData);
+      setPromptSaved(true);
+      alert("Sesión de entrenamiento guardada correctamente.");
+    } catch (error) {
+      console.error("Error al guardar el entrenamiento:", error);
+      alert("Error al guardar el entrenamiento. Revisa consola.");
+    }
+  };
+
+  const handleSaveAttachments = () => {
+    if (!file && !link) {
+      alert("Debes seleccionar un archivo o añadir un enlace.");
+      return;
+    }
+
+    if (file && fileError) return;
+    if (link && linkError) return;
+
+    console.log("Archivo:", file);
+    console.log("Enlace:", link);
+    setAttachmentsSaved(true);
   };
 
   return (
@@ -103,7 +132,8 @@ function BotTraining() {
         <SoftTypography variant="h4" fontWeight="bold" mb={2}>
           Entrenamiento del Bot: {template?.name || `ID ${id}`}
         </SoftTypography>
-        {/* Preguntas estándar con respuesta personalizada */}
+
+        {/* Sección: Preguntas estándar */}
         <Card sx={{ p: 3, mb: 4 }}>
           <SoftTypography variant="h6" mb={2}>
             Preguntas Estándar
@@ -152,7 +182,8 @@ function BotTraining() {
             </Grid>
           </Grid>
         </Card>
-        {/* Entradas manuales */}
+
+        {/* Sección: Entradas manuales */}
         <Card sx={{ p: 3, mb: 4 }}>
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
@@ -185,7 +216,7 @@ function BotTraining() {
           </Grid>
         </Card>
 
-        {/* Prompt actual */}
+        {/* Prompt Actual */}
         <Card sx={{ p: 3 }}>
           <SoftTypography variant="h6" mb={2}>
             Prompt Actual
@@ -205,75 +236,42 @@ function BotTraining() {
             ))
           )}
 
-          {/* Botón Guardar Prompt */}
-          <SoftBox mt={2} display="flex" justifyContent="flex-start">
-            <SoftButton
-              variant="gradient"
-              color="info"
-              onClick={() => {
-                const promptText = interactions.map((i) => `${i.role}: ${i.content}`).join("\n");
-                if (promptText.length > 3000) {
-                  alert("El prompt es demasiado largo (máximo 3000 caracteres). Reduce contenido.");
-                } else {
-                  // Aquí guardas el prompt: enviar a tu API o guardar en estado
-                  handleSavePrompt(promptText);
-                }
-              }}
-            >
+          <SoftBox mt={2}>
+            <SoftButton variant="gradient" color="info" onClick={handleSavePrompt}>
               Guardar Prompt
             </SoftButton>
+            {promptSaved && (
+              <SoftTypography variant="caption" color="success" ml={2}>
+                Prompt guardado localmente ✔
+              </SoftTypography>
+            )}
           </SoftBox>
         </Card>
 
+        {/* Documentos externos */}
         <Card sx={{ p: 3, mt: 4 }}>
           <SoftTypography variant="h6">Añadir Archivo o Enlace</SoftTypography>
           <SoftTypography variant="caption" gutterBottom>
-            Adjunta un archivo (PDF, DOCX, XLSX) con la descripción de tu empresa. El sistema
-            extraerá el contenido automáticamente para que el bot pueda entenderlo y responder con
-            base en eso.
+            Adjunta un archivo o link para que el bot lo tome como contexto adicional.
           </SoftTypography>
 
           <Grid container spacing={2} alignItems="flex-start">
-            {/* Input archivo */}
-            <Grid
-              item
-              xs={12}
-              md={6}
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
+            <Grid item xs={12} md={6}>
               <SoftBox
                 sx={{
                   border: "2px dashed #9ca3af",
                   borderRadius: "8px",
                   padding: "12px 16px",
-                  height: "45px", // igual altura que SoftInput
+                  height: "45px",
                   display: "flex",
                   alignItems: "center",
                   cursor: "pointer",
                   backgroundColor: "#f9fafb",
-                  "&:hover": {
-                    backgroundColor: "#f3f4f6",
-                  },
                 }}
                 onClick={() => document.getElementById("file-upload").click()}
               >
-                <SoftTypography
-                  variant="body2"
-                  sx={{
-                    color: "#6b7280",
-                    fontSize: "0.875rem",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    width: "100%",
-                  }}
-                >
-                  {file
-                    ? `Archivo seleccionado: ${file.name}`
-                    : "Haz clic o arrastra un archivo aquí"}
+                <SoftTypography variant="body2" sx={{ color: "#6b7280" }}>
+                  {file ? `Archivo: ${file.name}` : "Haz clic para subir archivo"}
                 </SoftTypography>
               </SoftBox>
 
@@ -294,7 +292,6 @@ function BotTraining() {
                 }}
               />
 
-              {/* Mensaje error archivo, con margen superior pequeño para no romper la altura del input */}
               {fileError && (
                 <SoftTypography variant="caption" color="error" sx={{ mt: 1 }}>
                   {fileError}
@@ -302,31 +299,19 @@ function BotTraining() {
               )}
             </Grid>
 
-            {/* Input enlace */}
-            <Grid
-              item
-              xs={12}
-              md={6}
-              sx={{
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
+            <Grid item xs={12} md={6}>
               <SoftInput
-                placeholder="Enlace a documento o página"
+                placeholder="Enlace a documento PDF"
                 value={link}
                 onChange={(e) => {
-                  const value = e.target.value;
-                  setLink(value);
-                  validateLink(value);
+                  const val = e.target.value;
+                  setLink(val);
+                  validateLink(val);
                 }}
-                sx={{
-                  height: "45px", // igual altura que SoftBox archivo
-                  mb: 1, // margen inferior para separar del caption
-                }}
+                sx={{ height: "45px", mb: 1 }}
               />
               <SoftTypography variant="caption" sx={{ mb: 1 }}>
-                Ej: https://tusitio.com/archivo.pdf
+                Ej: https://tuweb.com/archivo.pdf
               </SoftTypography>
 
               {linkError && (
@@ -337,22 +322,15 @@ function BotTraining() {
             </Grid>
           </Grid>
 
-          <SoftBox mt={2} display="flex" justifyContent="flex-start">
-            <SoftButton
-              variant="gradient"
-              color="info"
-              onClick={() => {
-                if (!file && !link) {
-                  alert("Debes seleccionar un archivo o añadir un enlace.");
-                } else if (file && !fileError) {
-                  handleSaveFile(file);
-                } else if (link && !linkError) {
-                  handleSaveLink(link);
-                }
-              }}
-            >
+          <SoftBox mt={2}>
+            <SoftButton variant="gradient" color="info" onClick={handleSaveAttachments}>
               Guardar Adjuntos
             </SoftButton>
+            {attachmentsSaved && (
+              <SoftTypography variant="caption" color="success" ml={2}>
+                Adjuntos listos ✔
+              </SoftTypography>
+            )}
           </SoftBox>
         </Card>
       </SoftBox>

@@ -17,6 +17,9 @@ function BotsDashboard() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const navigate = useNavigate(); // <--- esta línea es necesaria
+
+
   const handleShowCreate = () => setShowCreate(true);
   const handleCancelCreate = () => setShowCreate(false);
 
@@ -47,13 +50,11 @@ function BotsDashboard() {
         ) : (
           <Grid item xs={12}>
             <BotPreview
-              templates={templates}
-              onSelectTemplate={(template) => {
-                setShowCreate(true);
-                console.log("Plantilla seleccionada para entrenamiento:", template);
-                // Puedes pasar template a BotCreate si es necesario
-              }}
-            />
+  templates={templates}
+  onSelectTemplate={(template) => {
+    navigate(`/bots/training/${template.id}`);
+  }}
+/>
           </Grid>
         )}
       </SoftBox>

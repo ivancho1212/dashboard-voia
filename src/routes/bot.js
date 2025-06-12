@@ -8,8 +8,17 @@ import BotWidget from "layouts/bot/widget";
 import BotUsageLogs from "layouts/bot/usage-logs";
 import BotsAdmin from "layouts/bot/admin";
 
-import { FaRobot, FaClipboardList, FaCogs, FaBrain, FaPalette, FaPlug, FaEye, FaTools, FaHistory } from "react-icons/fa";
- 
+import {
+  FaRobot,
+  FaClipboardList,
+  FaCogs,
+  FaBrain,
+  FaPalette,
+  FaPlug,
+  FaEye,
+  FaTools,
+  FaHistory,
+} from "react-icons/fa";
 
 const botRoutes = [
   {
@@ -25,32 +34,33 @@ const botRoutes = [
     icon: <FaRobot size={14} />,
     component: <BotsList />,
     noCollapse: true,
-  }, 
-  {
-    type: "collapse",
-    key: "bot-training",
-    route: "/bots/training",
-    name: "Entrenamiento",
-    icon: <FaBrain size={14} />,
-    component: <BotTraining />,
   },
   {
     type: "collapse",
-    name: "Datos Captados",        // Nombre visible en el menú lateral
-    key: "bot-captured-data",      // Identificador único
-    route: "/bots/captured-data",  // Ruta en la URL
+    key: "bot-training-id",
+    route: "/bots/training/:id",
+    name: "Entrenamiento",
+    icon: <FaBrain size={14} />,
+    component: <BotTraining />,
+    noCollapse: true,
+  },
+  {
+    type: "collapse",
+    name: "Datos Captados", // Nombre visible en el menú lateral
+    key: "bot-captured-data", // Identificador único
+    route: "/bots/captured-data", // Ruta en la URL
     icon: <FaClipboardList size={14} />, // Icono que representa datos
-    component: <CapturedData />,   // Componente importado
+    component: <CapturedData />, // Componente importado
   },
   {
     type: "collapse",
     name: "Estilos", // Cambia esto si quieres mostrar solo "Estilos"
-    key: "bot-style",        // clave única más descriptiva
-    route: "/bots/style",    // nueva ruta en la URL
+    key: "bot-style", // clave única más descriptiva
+    route: "/bots/style", // nueva ruta en la URL
     icon: <FaPalette size={14} />,
-    component: <BotStyle />,     // renómbralo si vas a cambiar el nombre del componente también
+    component: <BotStyle />, // renómbralo si vas a cambiar el nombre del componente también
     noCollapse: true,
-  }, 
+  },
   {
     type: "collapse",
     key: "bot-integration",
@@ -76,7 +86,6 @@ const botRoutes = [
     component: <BotPreview />,
   },
   {
-    
     key: "bot-widget",
     route: "/bots/widget",
     name: "Widget del Bot",
@@ -91,6 +100,5 @@ const botRoutes = [
     component: <BotUsageLogs />,
   },
 ];
-
 
 export default botRoutes;

@@ -3,21 +3,28 @@ import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
 import PropTypes from "prop-types";
+import { useNavigate } from "react-router-dom"; // Importa el hook para navegación
 
-function MyBotCard({ template, onSelect, onBackToList }) {
+function MyBotCard({ template }) {
+  const navigate = useNavigate();
   const isLight = template.styleMode === "light";
   const circleBgColor = isLight ? "#000" : "#fff";
   const circleTextColor = isLight ? "#fff" : "#000";
 
+  const handleSelect = () => {
+    // Redirige a la vista de entrenamiento pasando el ID de la plantilla
+    navigate(`/bots/training/${template.id}`);
+  };
+
   return (
     <Card
       sx={{
-        backgroundColor: "#fff", // fondo blanco
+        backgroundColor: "#fff",
         borderRadius: "16px",
         boxShadow: "0 6px 20px rgba(0, 0, 0, 0.08)",
         p: 4,
         maxWidth: 500,
-        margin: "0 auto", // centra la card horizontalmente
+        margin: "0 auto",
       }}
     >
       <SoftBox mb={2} textAlign="center">
@@ -47,7 +54,6 @@ function MyBotCard({ template, onSelect, onBackToList }) {
             <SoftTypography variant="caption" fontWeight="medium">
               Estilo: <strong>{template.styleName}</strong>
             </SoftTypography>
-           
           </SoftBox>
         )}
 
@@ -62,7 +68,7 @@ function MyBotCard({ template, onSelect, onBackToList }) {
           <SoftButton
             variant="gradient"
             color="info"
-            onClick={() => onSelect(template)}
+            onClick={handleSelect}
             sx={{
               px: 4,
               py: 1.5,
@@ -75,7 +81,6 @@ function MyBotCard({ template, onSelect, onBackToList }) {
             Usar plantilla
           </SoftButton>
         </SoftBox>
-
       </SoftBox>
     </Card>
   );
@@ -83,8 +88,6 @@ function MyBotCard({ template, onSelect, onBackToList }) {
 
 MyBotCard.propTypes = {
   template: PropTypes.object.isRequired,
-  onSelect: PropTypes.func.isRequired,
-  onBackToList: PropTypes.func.isRequired,
 };
 
 export default MyBotCard;
