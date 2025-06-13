@@ -19,3 +19,26 @@ export const createTemplateTrainingSessionWithPrompts = async (data) => {
   const response = await axios.post(`${API_URL}/with-prompts`, data);
   return response.data;
 };
+
+// 1. Texto plano
+export const createTrainingCustomText = async (data) => {
+    console.log("👤 Enviando Text", data); // <-- Esto
+  return (await axios.post("http://localhost:5006/api/TrainingCustomTexts", data)).data;
+};
+
+// 2. Enlace remoto (URL PDF)
+export const createTrainingUrl = async (data) => {
+    console.log("👤 Enviando Training URL con:", data); // <-- Esto
+  return (await axios.post("http://localhost:5006/api/TrainingUrls", data)).data;
+};
+
+// 4. Procesar embeddings (opcional)
+export const generateEmbeddings = async (botTemplateId) => {
+  console.log("👤 Enviando Embeddings URL con:", { botTemplateId }); // ✅ Mostramos el parámetro real
+  return (
+    await axios.post("http://localhost:5006/api/VectorEmbeddings/generate-for-template", {
+      botTemplateId,
+    })
+  ).data;
+};
+

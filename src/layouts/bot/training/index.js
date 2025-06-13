@@ -1,6 +1,12 @@
 import { useLocation, useParams } from "react-router-dom";
 import { useState } from "react";
-import { createTemplateTrainingSessionWithPrompts } from "services/templateTrainingService"; // 👈
+import {
+  createTemplateTrainingSessionWithPrompts,
+  createTrainingUrl,
+  createTrainingCustomText,
+  generateEmbeddings,
+} from "services/templateTrainingService";
+import { uploadFile } from "services/uploadedDocumentsService";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -80,62 +86,84 @@ function BotTraining() {
   };
 
   const handleSavePrompt = async () => {
-  if (interactions.length === 0 && !text.trim()) {
-    alert("Agrega al menos una interacción o texto plano.");
-    return;
-  }
-
-  const allPrompts = [];
-
-  // Si hay texto plano, lo añadimos primero
-  if (text.trim()) {
-    allPrompts.push({
-      role: "system",
-      content: text.trim(),
-    });
-  }
-
-  // Agregamos las interacciones
-  allPrompts.push(...interactions.map(({ role, content }) => ({ role, content })));
-
-  // Validación de longitud
-  const promptText = allPrompts.map((i) => `${i.role}: ${i.content}`).join("\n");
-
-  if (promptText.length > 3000) {
-    alert("El prompt es demasiado largo (máximo 3000 caracteres). Reduce contenido.");
-    return;
-  }
-
-  const sessionData = {
-    botTemplateId: parseInt(id),
-    sessionName: "Entrenamiento manual",
-    description: "Entrenamiento creado desde el panel",
-    prompts: allPrompts,
-  };
-
-  try {
-    await createTemplateTrainingSessionWithPrompts(sessionData);
-    setPromptSaved(true);
-    alert("Sesión de entrenamiento guardada correctamente.");
-  } catch (error) {
-    console.error("Error al guardar el entrenamiento:", error);
-    alert("Error al guardar el entrenamiento. Revisa consola.");
-  }
-};
-
-
-  const handleSaveAttachments = () => {
-    if (!file && !link) {
-      alert("Debes seleccionar un archivo o añadir un enlace.");
+    if (interactions.length === 0 && !text.trim()) {
+      alert("Agrega al menos una interacción o texto plano.");
       return;
     }
 
-    if (file && fileError) return;
-    if (link && linkError) return;
+    const allPrompts = [];
 
-    console.log("Archivo:", file);
-    console.log("Enlace:", link);
-    setAttachmentsSaved(true);
+    // Si hay texto plano, lo añadimos primero
+    if (text.trim()) {
+      allPrompts.push({
+        role: "system",
+        content: text.trim(),
+      });
+    }
+
+    // Agregamos las interacciones
+    allPrompts.push(...interactions.map(({ role, content }) => ({ role, content })));
+
+    // Validación de longitud
+    const promptText = allPrompts.map((i) => `${i.role}: ${i.content}`).join("\n");
+
+    if (promptText.length > 3000) {
+      alert("El prompt es demasiado largo (máximo 3000 caracteres). Reduce contenido.");
+      return;
+    }
+
+    const sessionData = {
+      botTemplateId: parseInt(id),
+      sessionName: "Entrenamiento manual",
+      description: "Entrenamiento creado desde el panel",
+      prompts: allPrompts,
+    };
+
+    try {
+      await createTemplateTrainingSessionWithPrompts(sessionData);
+      setPromptSaved(true);
+      alert("Sesión de entrenamiento guardada correctamente.");
+    } catch (error) {
+      console.error("Error al guardar el entrenamiento:", error);
+      alert("Error al guardar el entrenamiento. Revisa consola.");
+    }
+  };
+
+  const handleSaveAttachments = async () => {
+    if (!file && !link && !text.trim()) {
+      alert("Debes añadir al menos un archivo, enlace o texto.");
+      return;
+    }
+
+    try {
+      // 📄 Subida de archivo
+      if (file && !fileError) {
+        await uploadFile(file, parseInt(id), 45); // 45 es un ID válido de la tabla users
+      }
+
+      // 🔗 Enlace externo
+      if (link && !linkError) {
+        await createTrainingUrl({
+          botTemplateId: parseInt(id),
+          url: link,
+          userId: 45, // 👈 Incluye aquí el ID del usuario
+        });
+      }
+
+      // 📝 Texto plano personalizado
+      if (text.trim()) {
+        await createTrainingCustomText({ botTemplateId: parseInt(id), content: text.trim() });
+      }
+
+      // 🧠 (Opcional) Generar embeddings automáticamente
+      await generateEmbeddings(parseInt(id));
+
+      setAttachmentsSaved(true);
+      alert("Adjuntos guardados correctamente y enviados para entrenamiento.");
+    } catch (error) {
+      console.error("Error al guardar adjuntos:", error);
+      alert("Ocurrió un error al guardar los adjuntos.");
+    }
   };
 
   return (
