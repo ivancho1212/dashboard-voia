@@ -1,4 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import {
+  getCapturedFields,
+  createCapturedField,
+  updateCapturedField,
+} from "services/botCapturedFieldsService";
+
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -21,20 +28,47 @@ import Icon from "@mui/material/Icon";
 import Tooltip from "@mui/material/Tooltip";
 
 function CapturedData() {
-  const [fields, setFields] = useState(["Nombre", "Correo", "Teléfono"]);
+  const [fields, setFields] = useState([]);
   const [newField, setNewField] = useState("");
-  const [useApi, setUseApi] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [useApi, setUseApi] = useState(false); // ← ✅ aquí agrégalo
+  const { id } = useParams();
+
+  useEffect(() => {
+  const fetchFields = async () => {
+    try {
+      const response = await getCapturedFields(id);
+      setFields(response.data); // o ajusta al nombre del array devuelto
+    } catch (error) {
+      console.error("Error al cargar campos:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchFields();
+}, [id]);
 
   const capturedData = [
     { id: "u001", Nombre: "Juan", Correo: "juan@mail.com", Teléfono: "3001234567" },
     { id: "u002", Nombre: "Ana", Correo: "ana@mail.com", Teléfono: "3119876543" },
   ];
 
-  const handleAddField = () => {
-    const field = newField.trim();
-    if (field && !fields.includes(field)) {
-      setFields([...fields, field]);
+  const handleAddField = async () => {
+    const fieldName = newField.trim();
+    if (!fieldName || fields.some((f) => f.name === fieldName)) return;
+
+    try {
+      const newFieldObj = {
+        botTemplateId: id,
+        fieldName,
+        triggerByIntent: false,
+      };
+      const response = await createCapturedField(newFieldObj);
+      setFields([...fields, response.data]);
       setNewField("");
+    } catch (error) {
+      console.error("Error creando campo:", error);
     }
   };
 
@@ -88,7 +122,26 @@ function CapturedData() {
             <TableBody>
               {fields.map((field, i) => (
                 <TableRow key={i}>
-                  <TableCell>{field}</TableCell>
+                  <TableCell>{field.name}</TableCell>
+                  <TableCell>
+                    <Switch
+                      checked={field.triggerByIntent}
+                      onChange={async () => {
+                        const updated = { ...field, triggerByIntent: !field.triggerByIntent };
+                        try {
+                          await updateCapturedField(updated);
+                          const updatedFields = [...fields];
+                          updatedFields[i] = updated;
+                          setFields(updatedFields);
+                        } catch (error) {
+                          console.error("Error actualizando campo:", error);
+                        }
+                      }}
+                    />
+                    <SoftTypography variant="caption" ml={1}>
+                      Capturar solo si se detecta intención
+                    </SoftTypography>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

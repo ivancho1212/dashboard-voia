@@ -1,4 +1,4 @@
-import { useLocation, useParams } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useState } from "react";
 import {
   createTemplateTrainingSessionWithPrompts,
@@ -7,6 +7,9 @@ import {
   generateEmbeddings,
 } from "services/templateTrainingService";
 import { uploadFile } from "services/uploadedDocumentsService";
+import { v4 as uuidv4 } from "uuid";
+import { createBot } from "services/botService"; // asegúrate de tener este servicio
+import Modal from "components/Modal"; // asume que tienes un componente de modal
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -33,6 +36,12 @@ function BotTraining() {
   const [promptSaved, setPromptSaved] = useState(false);
   const [attachmentsSaved, setAttachmentsSaved] = useState(false);
   const [text, setText] = useState("");
+  const navigate = useNavigate();
+
+  const [showModal, setShowModal] = useState(false);
+  const [botName, setBotName] = useState("");
+  const [creatingBot, setCreatingBot] = useState(false);
+  const [botDescription, setBotDescription] = useState("");
 
   const allowedTypes = [
     "application/pdf",
@@ -136,33 +145,56 @@ function BotTraining() {
     }
 
     try {
-      // 📄 Subida de archivo
       if (file && !fileError) {
-        await uploadFile(file, parseInt(id), 45); // 45 es un ID válido de la tabla users
+        await uploadFile(file, parseInt(id), 45);
       }
 
-      // 🔗 Enlace externo
       if (link && !linkError) {
         await createTrainingUrl({
           botTemplateId: parseInt(id),
           url: link,
-          userId: 45, // 👈 Incluye aquí el ID del usuario
+          userId: 45,
         });
       }
 
-      // 📝 Texto plano personalizado
       if (text.trim()) {
-        await createTrainingCustomText({ botTemplateId: parseInt(id), content: text.trim() });
+        await createTrainingCustomText({
+          botTemplateId: parseInt(id),
+          content: text.trim(),
+          userId: 45,
+        });
       }
 
-      // 🧠 (Opcional) Generar embeddings automáticamente
       await generateEmbeddings(parseInt(id));
 
       setAttachmentsSaved(true);
-      alert("Adjuntos guardados correctamente y enviados para entrenamiento.");
+      setShowModal(true); // ← aquí se abre el modal en vez de navegar directamente
     } catch (error) {
       console.error("Error al guardar adjuntos:", error);
       alert("Ocurrió un error al guardar los adjuntos.");
+    }
+  };
+
+  const handleCreateBot = async (name, description) => {
+    const botData = {
+      name,
+      description,
+      botTemplateId: parseInt(id),
+      apiKey: "test-api-key", // <-- agrega un valor temporal o generado
+    };
+
+    console.log("🟢 Datos finales enviados al backend:", botData);
+
+    try {
+      setCreatingBot(true);
+      await createBot(botData);
+      alert("Bot creado exitosamente");
+      navigate("/bots/captured-data");
+    } catch (error) {
+      console.error(error);
+      alert("Error al crear el bot");
+    } finally {
+      setCreatingBot(false);
     }
   };
 
@@ -383,7 +415,7 @@ function BotTraining() {
 
           <SoftBox mt={2}>
             <SoftButton variant="gradient" color="info" onClick={handleSaveAttachments}>
-              Guardar Adjuntos
+              Guardar y Continuar
             </SoftButton>
             {attachmentsSaved && (
               <SoftTypography variant="caption" color="success" ml={2}>
@@ -393,6 +425,47 @@ function BotTraining() {
           </SoftBox>
         </Card>
       </SoftBox>
+
+      {showModal && (
+        <Modal onClose={() => setShowModal(false)}>
+          <SoftBox p={3}>
+            <SoftTypography variant="h6" mb={1}>
+              Nombre del Bot
+            </SoftTypography>
+            <SoftInput
+              value={botName}
+              onChange={(e) => setBotName(e.target.value)}
+              placeholder="Ej: Bot Asistente Médico"
+              fullWidth
+              sx={{ mb: 2 }}
+            />
+
+            <SoftTypography variant="subtitle2" mb={1}>
+              Descripción (opcional)
+            </SoftTypography>
+            <SoftInput
+              value={botDescription}
+              onChange={(e) => setBotDescription(e.target.value)}
+              placeholder="Ej: Este bot se encarga de responder consultas médicas básicas"
+              fullWidth
+              multiline
+              rows={2}
+              sx={{ mb: 2 }}
+            />
+
+            <SoftButton
+              variant="gradient"
+              color="info"
+              onClick={() => handleCreateBot(botName, botDescription)}
+              disabled={!botName.trim() || creatingBot}
+              fullWidth
+            >
+              {creatingBot ? "Creando..." : "Crear y continuar"}
+            </SoftButton>
+          </SoftBox>
+        </Modal>
+      )}
+
       <Footer />
     </DashboardLayout>
   );
