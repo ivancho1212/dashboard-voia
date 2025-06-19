@@ -13,7 +13,7 @@ function Modal({ open = true, onClose, children }) {
         backdrop: {
           timeout: 300,
           sx: {
-            backgroundColor: "rgba(255, 255, 255, 0.88)",
+            backgroundColor: "rgba(255, 255, 255, 0.97)",
           },
         },
       }}
