@@ -180,7 +180,7 @@ function BotTraining() {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-api-key", // <-- agrega un valor temporal o generado
+      apiKey: "test-api-key12hh45jjhdfv67", // <-- agrega un valor temporal o generado
     };
 
     console.log("🟢 Datos finales enviados al backend:", botData);

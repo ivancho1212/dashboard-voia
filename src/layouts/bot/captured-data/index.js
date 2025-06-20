@@ -5,6 +5,7 @@ import {
   createCapturedField,
   updateCapturedField,
 } from "services/botCapturedFieldsService";
+import { getCapturedSubmissionsByBot } from "services/botDataSubmissionsService";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -30,39 +31,51 @@ import Tooltip from "@mui/material/Tooltip";
 function CapturedData() {
   const [fields, setFields] = useState([]);
   const [newField, setNewField] = useState("");
+  const [capturedData, setCapturedData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [useApi, setUseApi] = useState(false); // ← ✅ aquí agrégalo
-  const { id } = useParams();
+  const [useApi, setUseApi] = useState(false);
+  const { id } = useParams(); // botId
 
+  // Obtener campos configurados
   useEffect(() => {
-  const fetchFields = async () => {
-    try {
-      const response = await getCapturedFields(id);
-      setFields(response.data); // o ajusta al nombre del array devuelto
-    } catch (error) {
-      console.error("Error al cargar campos:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const fetchFields = async () => {
+      try {
+        const response = await getCapturedFields(id);
+        setFields(response.data);
+      } catch (error) {
+        console.error("Error al cargar campos:", error);
+      }
+    };
 
-  fetchFields();
-}, [id]);
+    fetchFields();
+  }, [id]);
 
-  const capturedData = [
-    { id: "u001", Nombre: "Juan", Correo: "juan@mail.com", Teléfono: "3001234567" },
-    { id: "u002", Nombre: "Ana", Correo: "ana@mail.com", Teléfono: "3119876543" },
-  ];
+  // Obtener datos captados
+  useEffect(() => {
+    const fetchCapturedData = async () => {
+      try {
+        const response = await getCapturedSubmissionsByBot(id);
+        setCapturedData(response.data); // [{ userId/sessionId, fieldName1: value1, ... }]
+      } catch (error) {
+        console.error("Error al obtener datos captados:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCapturedData();
+  }, [id]);
 
   const handleAddField = async () => {
     const fieldName = newField.trim();
-    if (!fieldName || fields.some((f) => f.name === fieldName)) return;
+    if (!fieldName || fields.some((f) => f.fieldName === fieldName)) return;
 
     try {
       const newFieldObj = {
-        botTemplateId: id,
+        botId: parseInt(id),
         fieldName,
-        triggerByIntent: false,
+        fieldType: "text",
+        isRequired: false,
       };
       const response = await createCapturedField(newFieldObj);
       setFields([...fields, response.data]);
@@ -77,7 +90,7 @@ function CapturedData() {
   };
 
   const handleCopyToClipboard = () => {
-    navigator.clipboard.writeText("https://tusitio.com/api/bot/data");
+    navigator.clipboard.writeText(`https://tusitio.com/api/botdatasubmissions/by-bot/${id}`);
     alert("URL copiada al portapapeles");
   };
 
@@ -117,17 +130,21 @@ function CapturedData() {
             <TableHead>
               <TableRow>
                 <TableCell>Campo</TableCell>
+                <TableCell>Capturar con intención</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {fields.map((field, i) => (
                 <TableRow key={i}>
-                  <TableCell>{field.name}</TableCell>
+                  <TableCell>{field.fieldName}</TableCell>
                   <TableCell>
                     <Switch
-                      checked={field.triggerByIntent}
+                      checked={field.isRequired || false}
                       onChange={async () => {
-                        const updated = { ...field, triggerByIntent: !field.triggerByIntent };
+                        const updated = {
+                          ...field,
+                          isRequired: !field.isRequired,
+                        };
                         try {
                           await updateCapturedField(updated);
                           const updatedFields = [...fields];
@@ -178,7 +195,7 @@ function CapturedData() {
               borderRadius="lg"
             >
               <SoftTypography variant="caption" color="text">
-                https://tusitio.com/api/bot/data
+                https://tusitio.com/api/botdatasubmissions/by-bot/{id}
               </SoftTypography>
               <Tooltip title="Copiar URL">
                 <SoftButton color="info" onClick={handleCopyToClipboard}>
@@ -190,60 +207,22 @@ function CapturedData() {
             <>
               <Table size="small" sx={{ borderCollapse: "collapse" }}>
                 <TableHead>
-                  <TableRow sx={{ height: "40px" }}>
-                    <TableCell
-                      align="left"
-                      sx={{
-                        whiteSpace: "nowrap",
-                        padding: "8px",
-                        fontWeight: "bold",
-                        borderBottom: "1px solid #ccc",
-                      }}
-                    >
-                      ID Usuario
-                    </TableCell>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: "bold" }}>Usuario/Sesión</TableCell>
                     {fields.map((field, i) => (
-                      <TableCell
-                        key={i}
-                        align="left"
-                        sx={{
-                          whiteSpace: "nowrap",
-                          padding: "8px",
-                          fontWeight: "bold",
-                          borderBottom: "1px solid #ccc",
-                        }}
-                      >
-                        {field}
+                      <TableCell key={i} sx={{ fontWeight: "bold" }}>
+                        {field.fieldName}
                       </TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {capturedData.map((data, i) => (
-                    <TableRow key={i} sx={{ height: "40px" }}>
-                      <TableCell
-                        align="left"
-                        sx={{
-                          whiteSpace: "nowrap",
-                          padding: "8px",
-                          verticalAlign: "middle",
-                          borderBottom: "1px solid #eee",
-                        }}
-                      >
-                        {data.id}
-                      </TableCell>
+                    <TableRow key={i}>
+                      <TableCell>{data.sessionId || data.userId || "-"}</TableCell>
                       {fields.map((field, j) => (
-                        <TableCell
-                          key={j}
-                          align="left"
-                          sx={{
-                            whiteSpace: "nowrap",
-                            padding: "8px",
-                            verticalAlign: "middle",
-                            borderBottom: "1px solid #eee",
-                          }}
-                        >
-                          {data[field] ?? "-"}
+                        <TableCell key={j}>
+                          {data[field.fieldName] ?? "-"}
                         </TableCell>
                       ))}
                     </TableRow>

@@ -1,10 +1,25 @@
 import axios from "axios";
 
-export const getCapturedFields = (templateId) =>
-  axios.get(`/api/BotCapturedFields/by-template/${templateId}`);
+const API_URL = "http://localhost:5006/api/BotDataCaptureFields";
 
-export const createCapturedField = (data) =>
-  axios.post("/api/BotCapturedFields", data);
+export const getCapturedFields = (botId) => {
+  return axios.get(`${API_URL}/by-bot/${botId}`);
+};
 
-export const updateCapturedField = (data) =>
-  axios.put(`/api/BotCapturedFields/${data.id}`, data);
+export const createCapturedField = (fieldData) => {
+  return axios.post(API_URL, {
+    botId: parseInt(fieldData.botTemplateId), // ← ojo, `botTemplateId` usado como `botId`
+    fieldName: fieldData.fieldName,
+    fieldType: "text",
+    isRequired: fieldData.triggerByIntent || false
+  });
+};
+
+export const updateCapturedField = (fieldData) => {
+  return axios.put(`${API_URL}/${fieldData.id}`, {
+    botId: fieldData.botId,
+    fieldName: fieldData.fieldName,
+    fieldType: fieldData.fieldType,
+    isRequired: fieldData.isRequired
+  });
+};
