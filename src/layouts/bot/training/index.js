@@ -180,23 +180,26 @@ function BotTraining() {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-api-key12hh45jjhdfv67", // <-- agrega un valor temporal o generado
+      apiKey: "test-api-keysss", // asegúrate que es string válido
+      isActive: true,
     };
-
-    console.log("🟢 Datos finales enviados al backend:", botData);
-
+  
+    console.log("🟢 Datos enviados al backend:", botData);
+  
     try {
       setCreatingBot(true);
-      await createBot(botData);
+      const bot = await createBot(botData); // retorna el objeto Bot
       alert("Bot creado exitosamente");
-      navigate("/bots/captured-data");
+      navigate(`/bots/captured-data/${bot.id}`);
     } catch (error) {
-      console.error(error);
+      console.error("❌ Error creando bot:", error.response?.data || error.message);
       alert("Error al crear el bot");
     } finally {
       setCreatingBot(false);
     }
   };
+  
+  
 
   return (
     <DashboardLayout>

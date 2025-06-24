@@ -7,13 +7,18 @@ export const getCapturedFields = (botId) => {
 };
 
 export const createCapturedField = (fieldData) => {
-  return axios.post(API_URL, {
-    botId: parseInt(fieldData.botTemplateId), // ← ojo, `botTemplateId` usado como `botId`
+  const payload = {
+    botId: parseInt(fieldData.botId),
     fieldName: fieldData.fieldName,
     fieldType: "text",
-    isRequired: fieldData.triggerByIntent || false
-  });
+    isRequired: fieldData.triggerByIntent || false,
+  };
+
+  console.log("📤 Payload capturado:", payload);
+
+  return axios.post(API_URL, payload);
 };
+
 
 export const updateCapturedField = (fieldData) => {
   return axios.put(`${API_URL}/${fieldData.id}`, {

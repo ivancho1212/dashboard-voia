@@ -7,10 +7,10 @@ export default function StylePreview({ style }) {
     <div>
       <ChatWidget
         theme={style?.theme}
-        primary_color={style?.primary_color}
-        secondary_color={style?.secondary_color}
-        font_family={style?.font_family}
-        avatar_url={style?.avatar_url}
+        primaryColor={style?.primary_color}
+        secondaryColor={style?.secondary_color}
+        fontFamily={style?.font_family}
+        avatarUrl={style?.avatar_url}
         position={style?.position}
       />
     </div>

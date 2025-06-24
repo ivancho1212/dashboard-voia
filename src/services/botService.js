@@ -1,6 +1,7 @@
+// src/services/botService.js
 import axios from "axios";
 
-const API_URL = "http://localhost:5006/api/Bots"; // AJUSTA según tu backend
+const API_URL = "http://localhost:5006/api/Bots";
 
 export async function getMyBot() {
   try {
@@ -8,25 +9,31 @@ export async function getMyBot() {
     const response = await axios.get(`${API_URL}/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data; // axios pone la data aquí
+    return response.data;
   } catch (error) {
     throw new Error(error.response?.data?.message || "No se pudo obtener el bot");
   }
 }
 
 export async function createBot(botData) {
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(botData),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text(); // por si no es JSON
-    throw new Error(errorText || "Error al crear el bot");
+  try {
+    const response = await axios.post(API_URL, botData);
+    return response.data;
+  } catch (error) {
+    console.error("Error en createBot:", error);
+    throw error;
   }
+}
 
-  return response.json();
+// ✅ Nuevo método para actualizar solo el estilo del bot
+export async function updateBotStyle(botId, styleId) {
+  try {
+    const res = await axios.get(`${API_URL}/${botId}`);
+    const bot = res.data;
+    const updatedBot = { ...bot, styleId };
+    return await axios.put(`${API_URL}/${botId}`, updatedBot);
+  } catch (error) {
+    console.error("Error al actualizar el estilo del bot:", error);
+    throw error;
+  }
 }

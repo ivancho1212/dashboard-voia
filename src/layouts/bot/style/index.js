@@ -1,5 +1,8 @@
-// src/layouts/bot/style/index.js
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useParams } from "react-router-dom";
+import axios from "axios";
+
+import { getBotStylesByUser, getBotStyleById, createBotStyle } from "services/botStylesService";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -7,54 +10,67 @@ import Footer from "examples/Footer";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
+import SoftButton from "components/SoftButton";
 
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 
 import StyleEditor from "./components/StyleEditor";
 import StylePreview from "./components/StylePreview";
-
-// Aquí asumo que crearás estos componentes
-import StyleList from "./components/StyleList"; // lista de estilos
-// Opcionalmente, StyleView si quieres modo solo vista
-// import StyleView from "./components/StyleView";
+import StyleList from "./components/StyleList";
 
 function BotStylePage() {
-  const [activeTab, setActiveTab] = useState(0); // 0 = lista, 1 = crear
-  const [viewMode, setViewMode] = useState("list"); // "list", "view", "edit", "create"
+  const { id: botId } = useParams();
+  const userId = 45; // 🔵 ID fijo del usuario actual
+
+  const [activeTab, setActiveTab] = useState(0);
+  const [viewMode, setViewMode] = useState("list");
   const [selectedStyle, setSelectedStyle] = useState(null);
 
-  // Estado de estilos guardados
-  const [styles, setStyles] = useState([
-    {
-      id: 1,
-      name: "Estilo Oscuro",
-      theme: "dark",
-      primary_color: "#000000",
-      secondary_color: "#ffffff",
-      font_family: "Arial",
-      avatar_url: "",
-      position: "bottom-right",
-      custom_css: "",
-    },
-    {
-      id: 2,
-      name: "Estilo Claro",
-      theme: "light",
-      primary_color: "#ffffff",
-      secondary_color: "#000000",
-      font_family: "Roboto",
-      avatar_url: "",
-      position: "top-left",
-      custom_css: "",
-    },
-  ]);
-
-  // El estilo que se está editando o creando (local temporal)
+  const [styles, setStyles] = useState([]);
+  const [botStyleId, setBotStyleId] = useState(null);
   const [styleEditing, setStyleEditing] = useState(null);
 
-  // Cambiar tab (Lista <-> Crear)
-  function onTabChange(_, newVal) {
+  const defaultNewStyle = {
+    user_id: userId,
+    theme: "light",
+    primary_color: "#000000",
+    secondary_color: "#ffffff",
+    font_family: "Arial",
+    avatar_url: "",
+    position: "bottom-right",
+    custom_css: "",
+  };
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const botRes = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
+        const botStyleId = botRes.data.styleId;
+        setBotStyleId(botStyleId);
+
+        const userStylesRes = await getBotStylesByUser(userId);
+        const userStyles = userStylesRes.data;
+
+        let currentBotStyle = null;
+        if (botStyleId && !userStyles.find((s) => s.id === botStyleId)) {
+          const currentStyleRes = await getBotStyleById(botStyleId);
+          currentBotStyle = currentStyleRes.data;
+        }
+
+        const combined = [...(currentBotStyle ? [currentBotStyle] : []), ...userStyles];
+        const uniqueStyles = Array.from(new Map(combined.map((s) => [s.id, s])).values());
+
+        setStyles(uniqueStyles);
+      } catch (error) {
+        console.error("Error al cargar estilos o datos del bot:", error);
+      }
+    }
+
+    fetchData();
+  }, [botId]);
+
+  const onTabChange = (_, newVal) => {
     setActiveTab(newVal);
     if (newVal === 0) {
       setViewMode("list");
@@ -63,80 +79,70 @@ function BotStylePage() {
     } else if (newVal === 1) {
       setViewMode("create");
       setSelectedStyle(null);
-      setStyleEditing({
-        name: "",
-        theme: "light",
-        primary_color: "#000000",
-        secondary_color: "#ffffff",
-        font_family: "Arial",
-        avatar_url: "",
-        position: "bottom-right",
-        custom_css: "",
-      });
+      setStyleEditing({ ...defaultNewStyle });
     }
-  }
+  };
 
-  // Ver estilo (modo solo lectura, opcional)
-  function onViewStyle(style) {
+  const onViewStyle = (style) => {
     setSelectedStyle(style);
     setViewMode("view");
     setActiveTab(0);
-  }
+  };
 
-  // Editar estilo
-  function onEditStyle(style) {
-    setSelectedStyle(style);
-    setStyleEditing(style);
-    setViewMode("edit");
-    setActiveTab(0);
-  }
-
-  // Volver a lista
-  function onBackToList() {
+  const onBackToList = () => {
     setSelectedStyle(null);
     setStyleEditing(null);
     setViewMode("list");
     setActiveTab(0);
-  }
+  };
 
-  // Guardar nuevo estilo (crear)
-  function onSaveNewStyle(newStyle) {
-    const id = Math.max(0, ...styles.map((s) => s.id)) + 1;
-    const styleToAdd = { ...newStyle, id };
-    setStyles([...styles, styleToAdd]);
-    setActiveTab(0);
-    setViewMode("list");
-    setSelectedStyle(null);
-    setStyleEditing(null);
-  }
+  const onSaveNewStyle = async (newStyle) => {
+    try {
+      const response = await createBotStyle(newStyle);
+      const created = response.data;
 
-  // Guardar edición
-  function onSaveEditStyle(updatedStyle) {
-    setStyles(styles.map((s) => (s.id === updatedStyle.id ? updatedStyle : s)));
-    setViewMode("list");
-    setSelectedStyle(null);
-    setStyleEditing(null);
-  }
+      await axios.put(`http://localhost:5006/api/Bots/${botId}`, {
+        styleId: created.id,
+      });
 
-  // Eliminar estilo
-  function onDeleteStyle(id) {
-    setStyles(styles.filter((s) => s.id !== id));
-    if (selectedStyle?.id === id) {
+      setStyles([...styles, created]);
+      setBotStyleId(created.id);
       onBackToList();
+    } catch (error) {
+      console.error("Error al crear y asociar estilo:", error);
     }
-  }
+  };
 
-  // Aplicar estilo (ejemplo: mostrar preview y botón aplicar)
+  const onApplyStyle = async (styleId) => {
+    try {
+      const botRes = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
+      const updatedBot = { ...botRes.data, styleId };
+
+      await axios.put(`http://localhost:5006/api/Bots/${botId}`, updatedBot);
+      setBotStyleId(styleId);
+      alert("Estilo aplicado al bot.");
+    } catch (err) {
+      console.error("Error al aplicar estilo al bot:", err);
+    }
+  };
+
+  const currentBotStyle = styles.find((style) => style.id === botStyleId);
   const styleToPreview =
-    viewMode === "edit" || viewMode === "create" ? styleEditing : selectedStyle || styles[0];
+    viewMode === "edit" || viewMode === "create" ? styleEditing : selectedStyle || null;
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3} px={2}>
-        <SoftTypography variant="h4" fontWeight="bold" mb={3}>
-          Estilos del Widget de Chat
-        </SoftTypography>
+        {/* Estilo actual aplicado */}
+        {currentBotStyle && (
+          <SoftBox mb={3}>
+            <SoftTypography variant="h4" gutterBottom>
+              Estilo actual aplicado al bot
+            </SoftTypography>
+            <StylePreview style={currentBotStyle} />
+          </SoftBox>
+        )}
 
         <Tabs value={activeTab} onChange={onTabChange}>
           <Tab label="Lista de Estilos" />
@@ -149,9 +155,9 @@ function BotStylePage() {
               {viewMode === "list" && (
                 <StyleList
                   styles={styles}
+                  botStyleId={botStyleId}
                   onViewStyle={onViewStyle}
-                  onEditStyle={onEditStyle}
-                  onDeleteStyle={onDeleteStyle}
+                  onApplyStyle={onApplyStyle}
                 />
               )}
               {viewMode === "view" && selectedStyle && (
@@ -159,58 +165,39 @@ function BotStylePage() {
                   <SoftTypography variant="h6" gutterBottom>
                     Detalle del Estilo: {selectedStyle.name}
                   </SoftTypography>
-                  {/* Aquí podrías reutilizar StyleEditor en modo solo lectura o crear StyleView */}
-                  <StyleEditor
-                    style={selectedStyle}
-                    setStyle={() => {}}
-                    setShowPreviewWidget={() => {}}
-                  />
+                  <StylePreview style={selectedStyle} />
                   <SoftBox mt={2}>
-                    <button onClick={onBackToList}>Volver a la lista</button>
-                    <button onClick={() => onEditStyle(selectedStyle)}>Editar</button>
-                  </SoftBox>
-                </>
-              )}
-              {(viewMode === "edit" || viewMode === "create") && styleEditing && (
-                <>
-                  <StyleEditor
-                    style={styleEditing}
-                    setStyle={setStyleEditing}
-                    setShowPreviewWidget={() => {}}
-                  />
-                  <SoftBox mt={2} display="flex" gap={2}>
-                    <button
-                      onClick={() => {
-                        if (viewMode === "edit") onSaveEditStyle(styleEditing);
-                        else if (viewMode === "create") onSaveNewStyle(styleEditing);
-                      }}
+                    <SoftButton
+                      onClick={onBackToList}
+                      color="info"
+                      variant="outlined"
+                      size="small"
                     >
-                      Guardar
-                    </button>
-                    <button onClick={onBackToList}>Cancelar</button>
+                      Volver a la lista
+                    </SoftButton>
                   </SoftBox>
                 </>
               )}
             </>
           )}
+
           {activeTab === 1 && viewMode === "create" && styleEditing && (
-            <SoftBox
-              mt={3}
-              display="flex"
-              justifyContent="center"
-              alignItems="flex-start"
-              width="100%"
-            >
+            <>
+              <SoftTypography variant="h6" gutterBottom>
+                Crear nuevo estilo personalizado
+              </SoftTypography>
               <StyleEditor
                 style={styleEditing}
                 setStyle={setStyleEditing}
                 setShowPreviewWidget={() => {}}
+                botId={botId}
+                userId={userId}
               />
-            </SoftBox>
+            </>
           )}
         </SoftBox>
 
-        {/* Preview y aplicar estilo - Siempre visible para el estilo activo */}
+        {/* Preview adicional si estás editando o creando */}
         {styleToPreview && viewMode !== "list" && (
           <SoftBox mt={4} display="flex" gap={4} flexWrap="wrap" alignItems="flex-start">
             <SoftBox flex="1 1 40%" minWidth="300px">

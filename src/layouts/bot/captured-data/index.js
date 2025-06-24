@@ -5,7 +5,15 @@ import {
   createCapturedField,
   updateCapturedField,
 } from "services/botCapturedFieldsService";
-import { getCapturedSubmissionsByBot } from "services/botDataSubmissionsService";
+import {
+  getCapturedSubmissionsByBot,
+  getPublicCapturedSubmissionsByBot, // ✅ asegúrate de incluir esto
+} from "services/botDataSubmissionsService";
+import { styled } from "@mui/material/styles"; // 👈 ya está bien
+import { useNavigate } from "react-router-dom";
+
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -28,15 +36,44 @@ import TableRow from "@mui/material/TableRow";
 import Icon from "@mui/material/Icon";
 import Tooltip from "@mui/material/Tooltip";
 
+// ✅ Usa props dinámicas para el ancho
+const FixedCell = styled(TableCell)(({ theme, width }) => ({
+  width: width || "auto",
+  textAlign: "center",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  padding: theme.spacing(1),
+  backgroundColor: "#f0f0f0",
+  fontWeight: "bold",
+}));
+
+const BodyCell = styled(TableCell)(({ theme, width }) => ({
+  width: width || "auto",
+  textAlign: "center",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  padding: theme.spacing(1),
+}));
+
 function CapturedData() {
   const [fields, setFields] = useState([]);
   const [newField, setNewField] = useState("");
   const [capturedData, setCapturedData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [useApi, setUseApi] = useState(false);
+  const [searchTerm, setSearchTerm] = useState(""); // 🔍 búsqueda
   const { id } = useParams(); // botId
+  const totalColumns = fields.length + 1;
+  const columnWidth = `${100 / totalColumns}%`;
+  const navigate = useNavigate();
 
-  // Obtener campos configurados
+  const handleContinue = () => {
+    navigate(`/bots/style/${id}`);
+  };
+
+  // 👉 Obtener campos configurados para el bot
   useEffect(() => {
     const fetchFields = async () => {
       try {
@@ -50,12 +87,15 @@ function CapturedData() {
     fetchFields();
   }, [id]);
 
-  // Obtener datos captados
+  // 👉 Obtener datos captados por el bot
   useEffect(() => {
     const fetchCapturedData = async () => {
       try {
-        const response = await getCapturedSubmissionsByBot(id);
-        setCapturedData(response.data); // [{ userId/sessionId, fieldName1: value1, ... }]
+        const response = useApi
+          ? await getPublicCapturedSubmissionsByBot(id)
+          : await getCapturedSubmissionsByBot(id);
+
+        setCapturedData(response.data);
       } catch (error) {
         console.error("Error al obtener datos captados:", error);
       } finally {
@@ -64,8 +104,16 @@ function CapturedData() {
     };
 
     fetchCapturedData();
-  }, [id]);
+  }, [id, useApi]); // asegúrate de incluir useApi en las dependencias
 
+  // 🔍 Filtrar datos por texto
+  const filteredData = capturedData.filter((item) =>
+    Object.values(item.values || {}).some((val) =>
+      val?.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+  );
+
+  // ➕ Agregar nuevo campo
   const handleAddField = async () => {
     const fieldName = newField.trim();
     if (!fieldName || fields.some((f) => f.fieldName === fieldName)) return;
@@ -85,30 +133,55 @@ function CapturedData() {
     }
   };
 
+  // 📤 Simular exportación
   const handleExportExcel = () => {
-    alert("Exportando datos a Excel...");
+    const exportData = capturedData.map((item) => {
+      const values = item.values || {};
+      return {
+        Usuario: item.userId || item.sessionId || "N/A",
+        Fecha: item.createdAt ? new Date(item.createdAt).toLocaleString() : "N/A", // ✅ fecha formateada
+        ...fields.reduce((acc, field) => {
+          acc[field.fieldName] = values[field.fieldName] || "-";
+          return acc;
+        }, {}),
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Datos Capturados");
+
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+    });
+
+    const blob = new Blob([excelBuffer], {
+      type: "application/octet-stream",
+    });
+
+    saveAs(blob, `captura_bot_${id}.xlsx`);
   };
 
+  // 📋 Copiar URL API (modo público)
   const handleCopyToClipboard = () => {
-    navigator.clipboard.writeText(`https://tusitio.com/api/botdatasubmissions/by-bot/${id}`);
+    const publicEndpoint = `http://localhost:5006/api/BotDataSubmissions/public/by-bot/${id}`;
+    navigator.clipboard.writeText(publicEndpoint);
     alert("URL copiada al portapapeles");
   };
 
   return (
     <DashboardLayout>
       <DashboardNavbar />
-
       <SoftBox py={3} px={2}>
         {/* CARD - Configurar campos */}
         <Card sx={{ p: 3, mb: 4 }}>
           <SoftTypography variant="h5" gutterBottom>
             Configura los campos a capturar
           </SoftTypography>
-
           <SoftTypography variant="body2" color="text" sx={{ mb: 3 }}>
             Agrega los campos que deseas capturar desde el bot.
           </SoftTypography>
-
           <Divider sx={{ mb: 3 }} />
 
           <Grid container spacing={2} alignItems="center">
@@ -129,15 +202,15 @@ function CapturedData() {
           <Table sx={{ mt: 3 }}>
             <TableHead>
               <TableRow>
-                <TableCell>Campo</TableCell>
-                <TableCell>Capturar con intención</TableCell>
+                <FixedCell>Campo</FixedCell>
+                <FixedCell>Capturar con intención</FixedCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {fields.map((field, i) => (
                 <TableRow key={i}>
-                  <TableCell>{field.fieldName}</TableCell>
-                  <TableCell>
+                  <BodyCell>{field.fieldName}</BodyCell>
+                  <BodyCell>
                     <Switch
                       checked={field.isRequired || false}
                       onChange={async () => {
@@ -158,7 +231,7 @@ function CapturedData() {
                     <SoftTypography variant="caption" ml={1}>
                       Capturar solo si se detecta intención
                     </SoftTypography>
-                  </TableCell>
+                  </BodyCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -195,42 +268,70 @@ function CapturedData() {
               borderRadius="lg"
             >
               <SoftTypography variant="caption" color="text">
-                https://tusitio.com/api/botdatasubmissions/by-bot/{id}
+                {`http://localhost:5006/api/BotDataSubmissions/public/by-bot/${id}`}
               </SoftTypography>
               <Tooltip title="Copiar URL">
-                <SoftButton color="info" onClick={handleCopyToClipboard}>
+                <SoftButton
+                  color="info"
+                  onClick={() =>
+                    navigator.clipboard.writeText(
+                      `http://localhost:5006/api/BotDataSubmissions/public/by-bot/${id}`
+                    )
+                  }
+                >
                   <Icon>content_copy</Icon>
                 </SoftButton>
               </Tooltip>
             </SoftBox>
           ) : (
             <>
-              <Table size="small" sx={{ borderCollapse: "collapse" }}>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: "bold" }}>Usuario/Sesión</TableCell>
-                    {fields.map((field, i) => (
-                      <TableCell key={i} sx={{ fontWeight: "bold" }}>
-                        {field.fieldName}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {capturedData.map((data, i) => (
-                    <TableRow key={i}>
-                      <TableCell>{data.sessionId || data.userId || "-"}</TableCell>
-                      {fields.map((field, j) => (
-                        <TableCell key={j}>
-                          {data[field.fieldName] ?? "-"}
-                        </TableCell>
+              <SoftInput
+                placeholder="Buscar en los datos captados..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+
+              {/* Tabla con estilos aplicados */}
+              <SoftBox sx={{ overflowX: "auto" }}>
+                <Table
+                  size="small"
+                  sx={{
+                    borderCollapse: "collapse",
+                    minWidth: "100%",
+                    tableLayout: "fixed",
+                  }}
+                >
+                  <TableHead>
+                    <TableRow>
+                      <FixedCell width={columnWidth}>Usuario/Sesión</FixedCell>
+                      {fields.map((field, i) => (
+                        <FixedCell key={i} width={columnWidth}>
+                          {field.fieldName}
+                        </FixedCell>
                       ))}
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHead>
 
-              <SoftBox display="flex" justifyContent="flex-end" mt={3}>
+                  <TableBody>
+                    {filteredData.map((data, i) => (
+                      <TableRow key={i}>
+                        <BodyCell width={columnWidth}>
+                          {data.sessionId || data.userId || "-"}
+                        </BodyCell>
+                        {fields.map((field, j) => (
+                          <BodyCell key={j} width={columnWidth}>
+                            {data.values?.[field.fieldName] ?? "-"}
+                          </BodyCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </SoftBox>
+
+              {/* 📤 Botón exportar solo visible si !useApi */}
+              <SoftBox mt={3} display="flex" justifyContent="flex-start">
                 <SoftButton color="primary" onClick={handleExportExcel}>
                   <Icon sx={{ mr: 1 }}>download</Icon>
                   Exportar Excel
@@ -238,6 +339,13 @@ function CapturedData() {
               </SoftBox>
             </>
           )}
+
+          {/* ✅ Este botón SIEMPRE visible */}
+          <SoftBox mt={4} display="flex" justifyContent="flex-end">
+            <SoftButton variant="gradient" color="info" onClick={handleContinue}>
+              Continuar
+            </SoftButton>
+          </SoftBox>
         </Card>
       </SoftBox>
 

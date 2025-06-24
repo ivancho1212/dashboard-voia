@@ -6,48 +6,75 @@ import SoftInput from "components/SoftInput";
 import SoftTypography from "components/SoftTypography";
 import Modal from "@mui/material/Modal";
 import Box from "@mui/material/Box";
+import axios from "axios";
 
-export default function SaveApplyButtons({ style }) {
+export default function SaveApplyButtons({ style, botId, userId, onStyleSaved }) {
   const [openModal, setOpenModal] = useState(false);
   const [styleName, setStyleName] = useState("");
 
   const handleSave = () => {
-    setOpenModal(true); // Abrir el modal para ingresar el nombre
+    setOpenModal(true);
   };
 
-  const handleConfirmSave = () => {
+  const updateBotStyle = async (botId, styleId) => {
+    try {
+      const res = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
+      const bot = res.data;
+
+      // Actualizamos solo el styleId, el backend necesita el objeto completo
+      const updatedBot = { ...bot, styleId };
+
+      await axios.put(`http://localhost:5006/api/Bots/${botId}`, updatedBot);
+    } catch (err) {
+      console.error("Error al actualizar estilo del bot:", err);
+      throw err;
+    }
+  };
+
+  const handleConfirmSave = async () => {
     if (!styleName.trim()) {
       alert("Por favor, ingresa un nombre para el estilo.");
       return;
     }
 
     const styleToSave = {
-      ...style,
+      userId, // ✅ ahora sí se enviará
       name: styleName,
+      theme: style.theme,
+      primaryColor: style.primary_color,
+      secondaryColor: style.secondary_color,
+      fontFamily: style.font_family,
+      avatarUrl: style.avatar_url,
+      position: style.position,
+      customCss: style.custom_css,
     };
+    
 
-    console.log("Guardar estilo:", styleToSave);
+    try {
+      const response = await axios.post("http://localhost:5006/api/BotStyles", styleToSave);
+      const createdStyle = response.data;
 
-    // Aquí puedes hacer un POST al backend (API REST)
-    // Por ejemplo usando fetch o axios:
-    /*
-    fetch('/api/style-templates', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(styleToSave),
-    })
-    .then(response => response.json())
-    .then(data => console.log('Guardado:', data));
-    */
+      await updateBotStyle(botId, createdStyle.id);
 
-    alert(`Estilo "${styleName}" guardado!`);
-    setOpenModal(false);
-    setStyleName("");
+      alert(`Estilo "${styleName}" guardado y aplicado al bot.`);
+      setOpenModal(false);
+      setStyleName("");
+
+      if (onStyleSaved) onStyleSaved(createdStyle);
+    } catch (error) {
+      console.error("Error al guardar el estilo:", error);
+      alert("Error al guardar el estilo. Revisa la consola.");
+    }
   };
 
-  const handleApply = () => {
-    console.log("Aplicar estilo:", style);
-    alert("Estilo aplicado!");
+  const handleApply = async () => {
+    try {
+      await updateBotStyle(botId, style.id);
+      alert("Estilo aplicado al bot.");
+    } catch (error) {
+      console.error("Error al aplicar el estilo:", error);
+      alert("Error al aplicar el estilo.");
+    }
   };
 
   return (
@@ -61,7 +88,6 @@ export default function SaveApplyButtons({ style }) {
         </SoftButton>
       </SoftBox>
 
-      {/* Modal para ingresar nombre */}
       <Modal open={openModal} onClose={() => setOpenModal(false)}>
         <Box
           sx={{
@@ -101,4 +127,7 @@ export default function SaveApplyButtons({ style }) {
 
 SaveApplyButtons.propTypes = {
   style: PropTypes.object.isRequired,
+  botId: PropTypes.number.isRequired,
+  userId: PropTypes.number.isRequired, // ✅ aquí
+  onStyleSaved: PropTypes.func,
 };

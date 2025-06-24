@@ -46,17 +46,18 @@ const botRoutes = [
   },
   {
     type: "collapse",
-    name: "Datos Captados", // Nombre visible en el menú lateral
-    key: "bot-captured-data", // Identificador único
-    route: "/bots/captured-data", // Ruta en la URL
-    icon: <FaClipboardList size={14} />, // Icono que representa datos
-    component: <CapturedData />, // Componente importado
-  },
+    name: "Datos Captados",
+    key: "bot-captured-data",
+    route: "/bots/captured-data/:id", // ✅ IMPORTANTE: con :id
+    icon: <FaClipboardList size={14} />,
+    component: <CapturedData />,
+    noCollapse: true // ← opcional, pero recomendable
+  },  
   {
     type: "collapse",
     name: "Estilos", // Cambia esto si quieres mostrar solo "Estilos"
     key: "bot-style", // clave única más descriptiva
-    route: "/bots/style", // nueva ruta en la URL
+    route: "/bots/style/:id", // ← acepta un ID
     icon: <FaPalette size={14} />,
     component: <BotStyle />, // renómbralo si vas a cambiar el nombre del componente también
     noCollapse: true,

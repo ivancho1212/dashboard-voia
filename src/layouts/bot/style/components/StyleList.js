@@ -2,33 +2,95 @@ import React from "react";
 import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
-import Button from "@mui/material/Button";
+import SoftButton from "components/SoftButton";
+import { Visibility, CheckCircle, PlayArrow } from "@mui/icons-material";
 
-function StyleList({ styles, onEdit, onDelete, onApply }) {
+function StyleList({ styles, botStyleId, onViewStyle, onApplyStyle }) {
   if (!styles.length) return <SoftTypography>No hay estilos guardados</SoftTypography>;
 
   return (
-    <SoftBox>
-      {styles.map((style, idx) => (
-        <SoftBox key={idx} mb={2} p={2} border="1px solid #ccc" borderRadius="8px">
-          <SoftTypography variant="h6">{style.name || `Estilo #${idx + 1}`}</SoftTypography>
-          <SoftTypography variant="body2">Tema: {style.theme}</SoftTypography>
-          <SoftBox mt={1} display="flex" gap={1}>
-            <Button variant="outlined" onClick={() => onEdit(style)}>Editar</Button>
-            <Button variant="outlined" color="error" onClick={() => onDelete(style)}>Eliminar</Button>
-            <Button variant="contained" onClick={() => onApply(style)}>Aplicar</Button>
+    <SoftBox display="flex" flexDirection="column" gap={2}>
+      {styles.map((style, idx) => {
+        const isApplied = parseInt(style.id) === parseInt(botStyleId);
+
+        return (
+          <SoftBox
+            key={style.id || idx}
+            p={2}
+            border="1px solid #ccc"
+            borderRadius="12px"
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+            bgcolor={isApplied ? "rgba(0, 200, 83, 0.05)" : "transparent"}
+          >
+            {/* Info del estilo */}
+            <SoftBox>
+              <SoftTypography variant="h6" fontWeight="bold">
+                {style.name || `Estilo #${idx + 1}`}
+                {isApplied && (
+                  <SoftTypography component="span" variant="caption" color="success" ml={1}>
+                    <CheckCircle fontSize="small" sx={{ verticalAlign: "middle" }} /> Aplicado
+                  </SoftTypography>
+                )}
+              </SoftTypography>
+              <SoftTypography variant="body2" color="text">
+                Tema: {style.theme}
+              </SoftTypography>
+            </SoftBox>
+
+            {/* Botones de acción */}
+            <SoftBox display="flex" gap={1}>
+              <SoftButton
+                color="info"
+                variant="gradient"
+                size="small"
+                onClick={() => onViewStyle(style)}
+                sx={{
+                  textTransform: "none",
+                  px: 2,
+                  py: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1,
+                }}
+              >
+                <Visibility fontSize="small" />
+                Ver
+              </SoftButton>
+
+              {!isApplied && (
+                <SoftButton
+                  color="success"
+                  variant="outlined"
+                  size="small"
+                  onClick={() => onApplyStyle(style.id)}
+                  sx={{
+                    textTransform: "none",
+                    px: 2,
+                    py: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                  }}
+                >
+                  <PlayArrow fontSize="small" />
+                  Aplicar
+                </SoftButton>
+              )}
+            </SoftBox>
           </SoftBox>
-        </SoftBox>
-      ))}
+        );
+      })}
     </SoftBox>
   );
 }
 
 StyleList.propTypes = {
   styles: PropTypes.arrayOf(PropTypes.object).isRequired,
-  onEdit: PropTypes.func.isRequired,
-  onDelete: PropTypes.func.isRequired,
-  onApply: PropTypes.func.isRequired,
+  botStyleId: PropTypes.number,
+  onViewStyle: PropTypes.func.isRequired,
+  onApplyStyle: PropTypes.func.isRequired,
 };
 
 export default StyleList;

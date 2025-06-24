@@ -1,25 +1,19 @@
-import React, { useState, useEffect } from "react"; // <-- import useEffect
-import socket from "../../../../services/socket"; // ajusta según tu estructura
+import React, { useState, useEffect } from "react";
+import socket from "../../../../services/socket";
 import { FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import voaiGif from "../../../../assets/images/voai.gif";
 
 function ChatWidget({
   theme: initialTheme,
-  primary_color,
-  secondary_color,
-  font_family,
-  avatar_url,
-  position,
+  primaryColor = "#000000",
+  secondaryColor = "#ffffff",
+  fontFamily = "Arial",
+  avatarUrl,
+  position = "bottom-right",
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [theme, setTheme] = useState(() => initialTheme || "light");
-  useEffect(() => {
-    if (initialTheme && initialTheme !== theme) {
-      setTheme(initialTheme);
-    }
-  }, [initialTheme]);
-
+  const themeKey = initialTheme || "light";
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
 
@@ -27,11 +21,9 @@ function ChatWidget({
     socket.connect();
 
     socket.on("bot_response", (msg) => {
-      // Verifica si el mensaje indica éxito y extrae la respuesta de texto
       if (msg.success) {
         setMessages((prev) => [...prev, { from: "bot", text: msg.response }]);
       } else {
-        // Maneja error
         setMessages((prev) => [
           ...prev,
           { from: "bot", text: "Error: " + (msg.error || "unknown") },
@@ -45,32 +37,18 @@ function ChatWidget({
   }, []);
 
   const sendMessage = () => {
-    if (message.trim() === "") return;
+    if (!message.trim()) return;
 
-    // Aquí defines los datos necesarios para enviar al backend
     const payload = {
       botId: "1",
-      userId: 1, // <- Asegúrate que aquí sea el usuario que existe en BD
+      userId: 1,
       message: message.trim(),
     };
 
     socket.emit("user_message", payload);
-
     setMessages((prev) => [...prev, { from: "user", text: message.trim() }]);
     setMessage("");
   };
-
-  const [primaryColor, setPrimaryColor] = useState(primary_color || "#000000");
-  const [secondaryColor, setSecondaryColor] = useState(secondary_color || "#ffffff");
-
-  useEffect(() => {
-    if (primary_color && primary_color !== primaryColor) {
-      setPrimaryColor(primary_color);
-    }
-    if (secondary_color && secondary_color !== secondaryColor) {
-      setSecondaryColor(secondary_color);
-    }
-  }, [primary_color, secondary_color]);
 
   const themeConfig = {
     light: {
@@ -101,17 +79,17 @@ function ChatWidget({
       inputText: primaryColor,
       inputBorder: secondaryColor,
       buttonBg: primaryColor,
-      buttonColor: "#ffffff",
+      buttonColor: secondaryColor === "#ffffff" ? "#000000" : "#ffffff", // mejora contraste
     },
   };
 
   const { backgroundColor, textColor, inputBg, inputText, inputBorder, buttonBg, buttonColor } =
-    themeConfig[theme] || themeConfig.light;
+    themeConfig[themeKey] || themeConfig.light;
 
   const widgetStyle = {
     backgroundColor,
     color: textColor,
-    fontFamily: font_family,
+    fontFamily,
     borderRadius: "16px",
     width: "300px",
     height: "400px",
@@ -149,7 +127,7 @@ function ChatWidget({
     padding: "10px 40px 10px 35px",
     borderRadius: "12px",
     border: `1.5px solid ${inputBorder}`,
-    fontFamily: font_family,
+    fontFamily,
     fontSize: "14px",
     outline: "none",
     color: inputText,
@@ -219,22 +197,22 @@ function ChatWidget({
               width: "72px",
               height: "72px",
               borderRadius: "50%",
-              backgroundColor: "#eee",
+              backgroundColor: secondaryColor,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               overflow: "hidden",
             }}
           >
-            <img src={avatar_url || voaiGif} alt="Avatar" style={avatarFloatingStyle} />
+            <img src={avatarUrl || voaiGif} alt="Avatar" style={avatarFloatingStyle} />
           </div>
         </button>
       ) : (
         <div style={widgetStyle}>
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <img src={avatar_url || voaiGif} alt="Avatar" style={avatarHeaderStyle} />
-            <strong style={{ fontSize: "14px", color: textColor }}>Soy el bot</strong>
+            <img src={avatarUrl || voaiGif} alt="Avatar" style={avatarHeaderStyle} />
+            <strong style={{ fontSize: "16px", color: primaryColor, fontFamily }}>Voia</strong>
             <button
               onClick={() => setIsOpen(false)}
               aria-label="Cerrar chat"
@@ -265,22 +243,31 @@ function ChatWidget({
           >
             <div style={{ fontSize: "14px", color: textColor }}>Hola, ¿en qué puedo ayudarte?</div>
 
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                style={{
-                  alignSelf: msg.from === "user" ? "flex-end" : "flex-start",
-                  backgroundColor: msg.from === "user" ? primaryColor : "#eee",
-                  color: msg.from === "user" ? "#fff" : "#000",
-                  padding: "8px 12px",
-                  borderRadius: "12px",
-                  maxWidth: "80%",
-                  wordBreak: "break-word",
-                }}
-              >
-                {msg.text}
-              </div>
-            ))}
+            {messages.map((msg, index) => {
+              const isUser = msg.from === "user";
+
+              const messageStyle = {
+                alignSelf: isUser ? "flex-end" : "flex-start",
+                backgroundColor: secondaryColor,
+                color: primaryColor,
+                padding: "8px 12px",
+                borderRadius: "12px",
+                maxWidth: "80%",
+                wordBreak: "break-word",
+                fontSize: "14px",
+                fontFamily,
+                border:
+                  primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+                    ? "1px solid #ccc"
+                    : "none",
+              };
+
+              return (
+                <div key={index} style={messageStyle}>
+                  {msg.text}
+                </div>
+              );
+            })}
           </div>
 
           {/* Input */}
@@ -301,14 +288,14 @@ function ChatWidget({
     </div>
   );
 }
-export default ChatWidget;
 
+// ✅ Esto va después de la función
 ChatWidget.propTypes = {
   theme: PropTypes.oneOf(["light", "dark", "custom"]).isRequired,
-  primary_color: PropTypes.string,
-  secondary_color: PropTypes.string,
-  font_family: PropTypes.string,
-  avatar_url: PropTypes.string,
+  primaryColor: PropTypes.string,
+  secondaryColor: PropTypes.string,
+  fontFamily: PropTypes.string,
+  avatarUrl: PropTypes.string,
   position: PropTypes.oneOf([
     "bottom-right",
     "bottom-left",
@@ -318,3 +305,5 @@ ChatWidget.propTypes = {
     "center-right",
   ]),
 };
+
+export default ChatWidget;

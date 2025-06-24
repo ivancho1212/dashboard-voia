@@ -1,49 +1,53 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
+import { SketchPicker } from "react-color";
+
 import SoftBox from "components/SoftBox";
-import SoftInput from "components/SoftInput";
 import SoftSelect from "components/SoftSelect";
 import SoftTypography from "components/SoftTypography";
 import MenuItem from "@mui/material/MenuItem";
+import SoftButton from "components/SoftButton";
+
 import AvatarUploader from "./AvatarUploader";
 import SaveApplyButtons from "./SaveApplyButtons";
 
-export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setStyle((prev) => ({ ...prev, [name]: value }));
+export default function StyleEditor({ style, setStyle, setShowPreviewWidget, botId, userId }) {
+  const [showPrimaryPicker, setShowPrimaryPicker] = useState(false);
+  const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
+
+  const closePickers = () => {
+    setShowPrimaryPicker(false);
+    setShowSecondaryPicker(false);
   };
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest(".color-picker")) {
+        closePickers();
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const handleSelectChange = (name) => (e) => {
     const value = e.target.value;
 
     if (name === "theme") {
-      if (value === "light") {
-        setStyle((prev) => ({
-          ...prev,
-          theme: "light",
-          primary_color: "#ffffff",
-          secondary_color: "#000000",
-        }));
-      } else if (value === "dark") {
-        setStyle((prev) => ({
-          ...prev,
-          theme: "dark",
-          primary_color: "#000000",
-          secondary_color: "#ffffff",
-        }));
-      } else if (value === "custom") {
-        setStyle((prev) => ({
-          ...prev,
-          theme: "custom",
-          primary_color: prev.primary_color,
-          secondary_color: prev.secondary_color,
-        }));
-      }
+      setStyle((prev) => {
+        let updated = { ...prev, theme: value };
+        if (value === "light") {
+          updated.primary_color = "#ffffff";
+          updated.secondary_color = "#000000";
+        } else if (value === "dark") {
+          updated.primary_color = "#000000";
+          updated.secondary_color = "#ffffff";
+        }
+        return updated;
+      });
     } else {
       setStyle((prev) => ({ ...prev, [name]: value }));
 
-      // Mostrar vista previa solo si se cambia la posición
       if (name === "position") {
         setShowPreviewWidget(true);
       }
@@ -52,32 +56,35 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
 
   useEffect(() => {
     setStyle((prev) => {
-      if (prev.theme === "light") {
+      const baseStyle = {
+        ...prev,
+        user_id: userId,
+      };
+
+      if (baseStyle.theme === "light") {
         return {
-          ...prev,
+          ...baseStyle,
           primary_color: "#ffffff",
           secondary_color: "#000000",
         };
-      } else if (prev.theme === "dark") {
+      } else if (baseStyle.theme === "dark") {
         return {
-          ...prev,
+          ...baseStyle,
           primary_color: "#000000",
           secondary_color: "#ffffff",
         };
       }
-      return prev; // Si es "custom" no tocamos nada
+
+      return baseStyle;
     });
-  }, []); // Ejecutar solo una vez al montar
+  }, []);
 
   return (
     <SoftBox width="100%" maxWidth="900px" px={2}>
-      <SoftTypography variant="h6" gutterBottom>
-        Editor de Estilo
-      </SoftTypography>
       <SoftBox mb={2}>
-        <SoftTypography variant="caption">Avatar</SoftTypography>
         <AvatarUploader style={style} setStyle={setStyle} />
       </SoftBox>
+
       <SoftBox mb={2}>
         <SoftTypography variant="caption">Tema</SoftTypography>
         <SoftSelect
@@ -86,85 +93,182 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget }) {
           onChange={handleSelectChange("theme")}
           fullWidth
         >
-          <MenuItem value="light">Claro</MenuItem>
-          <MenuItem value="dark">Oscuro</MenuItem>
-          <MenuItem value="custom">Personalizado</MenuItem>
+          {["light", "dark", "custom"].map((value) => (
+            <MenuItem key={value} value={value} style={{ width: "100%" }}>
+              {value === "light" ? "Claro" : value === "dark" ? "Oscuro" : "Personalizado"}
+            </MenuItem>
+          ))}
         </SoftSelect>
       </SoftBox>
 
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption">Color Primario</SoftTypography>
-        <SoftInput
-          type="color"
-          name="primary_color"
-          value={style.primary_color}
-          onChange={handleChange}
-          fullWidth
-          disabled={style.theme !== "custom"}
-        />
+      <SoftBox mb={2} display="flex" gap={3}>
+        <SoftBox flex={1}>
+          <SoftTypography variant="caption">Color del texto y botones</SoftTypography>
+          <SoftBox display="flex" alignItems="center" gap={2} mt={1}>
+            <SoftBox
+              width="40px"
+              height="40px"
+              bgcolor={style.primary_color}
+              border="1px solid #ccc"
+              borderRadius="8px"
+            />
+            {style.theme === "custom" && (
+              <SoftButton
+                onClick={() => {
+                  setShowPrimaryPicker((prev) => !prev);
+                  setShowSecondaryPicker(false);
+                }}
+                size="small"
+                color="info"
+                variant="outlined"
+              >
+                Elegir color
+              </SoftButton>
+            )}
+          </SoftBox>
+          {showPrimaryPicker && (
+            <div
+              className="color-picker"
+              style={{ position: "relative", marginTop: "8px", display: "inline-block" }}
+            >
+              <SketchPicker
+                color={style.primary_color}
+                onChangeComplete={(color) =>
+                  setStyle((prev) => ({ ...prev, primary_color: color.hex }))
+                }
+                disableAlpha
+              />
+              <SoftButton
+                onClick={() => setShowPrimaryPicker(false)}
+                size="small"
+                color="error"
+                style={{
+                  position: "absolute",
+                  top: "-22px",
+                  right: "-22px",
+                  minWidth: "32px",
+                  height: "32px",
+                  padding: 0,
+                  fontSize: "14px",
+                  zIndex: 10,
+                  borderRadius: "50%",
+                }}
+              >
+                ✕
+              </SoftButton>
+            </div>
+          )}
+        </SoftBox>
+
+        <SoftBox flex={1}>
+          <SoftTypography variant="caption">Color de fondo del widget</SoftTypography>
+          <SoftBox display="flex" alignItems="center" gap={2} mt={1}>
+            <SoftBox
+              width="40px"
+              height="40px"
+              bgcolor={style.secondary_color}
+              border="1px solid #ccc"
+              borderRadius="8px"
+            />
+            {style.theme === "custom" && (
+              <SoftButton
+                onClick={() => {
+                  setShowSecondaryPicker((prev) => !prev);
+                  setShowPrimaryPicker(false);
+                }}
+                size="small"
+                color="info"
+                variant="outlined"
+              >
+                Elegir color
+              </SoftButton>
+            )}
+          </SoftBox>
+          {showSecondaryPicker && (
+            <div
+              className="color-picker"
+              style={{ position: "relative", marginTop: "8px", display: "inline-block" }}
+            >
+              <SketchPicker
+                color={style.secondary_color}
+                onChangeComplete={(color) =>
+                  setStyle((prev) => ({ ...prev, secondary_color: color.hex }))
+                }
+                disableAlpha
+              />
+              <SoftButton
+                onClick={() => setShowSecondaryPicker(false)}
+                size="small"
+                color="error"
+                style={{
+                  position: "absolute",
+                  top: "-22px",
+                  right: "-22px",
+                  minWidth: "32px",
+                  height: "32px",
+                  padding: 0,
+                  fontSize: "14px",
+                  zIndex: 10,
+                  borderRadius: "50%",
+                }}
+              >
+                ✕
+              </SoftButton>
+            </div>
+          )}
+        </SoftBox>
       </SoftBox>
 
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption">Color Secundario</SoftTypography>
-        <SoftInput
-          type="color"
-          name="secondary_color"
-          value={style.secondary_color}
-          onChange={handleChange}
-          fullWidth
-          disabled={style.theme !== "custom"}
-        />
+      <SoftBox mb={2} display="flex" gap={3}>
+        <SoftBox flex={1}>
+          <SoftTypography variant="caption">Fuente</SoftTypography>
+          <SoftSelect
+            label="Fuente"
+            value={style.font_family}
+            onChange={handleSelectChange("font_family")}
+            fullWidth
+          >
+            {[
+              "Arial",
+              "Roboto",
+              "Georgia",
+              "Comic Sans MS",
+              "Courier New",
+              "Times New Roman",
+              "Verdana",
+            ].map((font) => (
+              <MenuItem key={font} value={font} style={{ fontFamily: font, width: "100%" }}>
+                {font}
+              </MenuItem>
+            ))}
+          </SoftSelect>
+        </SoftBox>
+
+        <SoftBox flex={1}>
+          <SoftTypography variant="caption">Posición</SoftTypography>
+          <SoftSelect
+            label="Posición"
+            value={style.position}
+            onChange={handleSelectChange("position")}
+            fullWidth
+          >
+            {[
+              ["top-left", "Arriba a la izquierda"],
+              ["top-right", "Arriba a la derecha"],
+              ["center-left", "Centro izquierda"],
+              ["center-right", "Centro derecha"],
+              ["bottom-left", "Abajo a la izquierda"],
+              ["bottom-right", "Abajo a la derecha"],
+            ].map(([value, label]) => (
+              <MenuItem key={value} value={value} style={{ width: "100%" }}>
+                {label}
+              </MenuItem>
+            ))}
+          </SoftSelect>
+        </SoftBox>
       </SoftBox>
 
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption">Fuente</SoftTypography>
-        <SoftSelect
-          label="Fuente"
-          value={style.font_family}
-          onChange={handleSelectChange("font_family")}
-          fullWidth
-        >
-          <MenuItem value="Arial" style={{ fontFamily: "Arial" }}>
-            Arial
-          </MenuItem>
-          <MenuItem value="Roboto" style={{ fontFamily: "Roboto" }}>
-            Roboto
-          </MenuItem>
-          <MenuItem value="Georgia" style={{ fontFamily: "Georgia" }}>
-            Georgia
-          </MenuItem>
-          <MenuItem value="Comic Sans MS" style={{ fontFamily: "Comic Sans MS" }}>
-            Comic Sans
-          </MenuItem>
-          <MenuItem value="Courier New" style={{ fontFamily: "Courier New" }}>
-            Courier New
-          </MenuItem>
-          <MenuItem value="Times New Roman" style={{ fontFamily: "Times New Roman" }}>
-            Times New Roman
-          </MenuItem>
-          <MenuItem value="Verdana" style={{ fontFamily: "Verdana" }}>
-            Verdana
-          </MenuItem>
-        </SoftSelect>
-      </SoftBox>
-
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption">Posición</SoftTypography>
-        <SoftSelect
-          label="Posición"
-          value={style.position}
-          onChange={handleSelectChange("position")}
-          fullWidth
-        >
-          <MenuItem value="top-left">Arriba a la izquierda</MenuItem>
-          <MenuItem value="top-right">Arriba a la derecha</MenuItem>
-          <MenuItem value="center-left">Centro izquierda</MenuItem>
-          <MenuItem value="center-right">Centro derecha</MenuItem>
-          <MenuItem value="bottom-left">Abajo a la izquierda</MenuItem>
-          <MenuItem value="bottom-right">Abajo a la derecha</MenuItem>
-        </SoftSelect>
-      </SoftBox>
-      <SaveApplyButtons style={style} />
+      <SaveApplyButtons style={style} botId={parseInt(botId)} userId={userId} />
     </SoftBox>
   );
 }
@@ -173,4 +277,6 @@ StyleEditor.propTypes = {
   style: PropTypes.object.isRequired,
   setStyle: PropTypes.func.isRequired,
   setShowPreviewWidget: PropTypes.func.isRequired,
+  botId: PropTypes.string.isRequired,
+  userId: PropTypes.number.isRequired,
 };
