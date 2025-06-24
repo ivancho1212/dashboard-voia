@@ -19,7 +19,6 @@ function BotsDashboard() {
 
   const navigate = useNavigate(); // <--- esta línea es necesaria
 
-
   const handleShowCreate = () => setShowCreate(true);
   const handleCancelCreate = () => setShowCreate(false);
 
@@ -50,11 +49,11 @@ function BotsDashboard() {
         ) : (
           <Grid item xs={12}>
             <BotPreview
-  templates={templates}
-  onSelectTemplate={(template) => {
-    navigate(`/bots/training/${template.id}`);
-  }}
-/>
+              templates={templates}
+              onSelectTemplate={(template) => {
+                navigate(`/bots/training/${template.id}`);
+              }}
+            />
           </Grid>
         )}
       </SoftBox>

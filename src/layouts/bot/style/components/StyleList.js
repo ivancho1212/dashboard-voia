@@ -3,10 +3,18 @@ import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
-import { Visibility, CheckCircle, PlayArrow } from "@mui/icons-material";
+import { Visibility, CheckCircle, PlayArrow, Edit, Delete } from "@mui/icons-material";
 
-function StyleList({ styles, botStyleId, onViewStyle, onApplyStyle }) {
-  if (!styles.length) return <SoftTypography>No hay estilos guardados</SoftTypography>;
+function StyleList({
+  styles,
+  botStyleId,
+  onViewStyle,
+  onApplyStyle,
+  onEditStyle,
+  onDeleteStyle,
+}) {
+  if (!styles.length)
+    return <SoftTypography>No hay estilos guardados.</SoftTypography>;
 
   return (
     <SoftBox display="flex" flexDirection="column" gap={2}>
@@ -29,7 +37,12 @@ function StyleList({ styles, botStyleId, onViewStyle, onApplyStyle }) {
               <SoftTypography variant="h6" fontWeight="bold">
                 {style.name || `Estilo #${idx + 1}`}
                 {isApplied && (
-                  <SoftTypography component="span" variant="caption" color="success" ml={1}>
+                  <SoftTypography
+                    component="span"
+                    variant="caption"
+                    color="info"
+                    ml={1}
+                  >
                     <CheckCircle fontSize="small" sx={{ verticalAlign: "middle" }} /> Aplicado
                   </SoftTypography>
                 )}
@@ -44,38 +57,38 @@ function StyleList({ styles, botStyleId, onViewStyle, onApplyStyle }) {
               <SoftButton
                 color="info"
                 variant="gradient"
-                size="small"
+                size="medium"
                 onClick={() => onViewStyle(style)}
-                sx={{
-                  textTransform: "none",
-                  px: 2,
-                  py: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                }}
               >
-                <Visibility fontSize="small" />
-                Ver
+                <Visibility fontSize="medium" />
+              </SoftButton>
+
+              <SoftButton
+                color="success"
+                variant="outlined"
+                size="medium"
+                onClick={() => onEditStyle(style)}
+              >
+                <Edit fontSize="medium" />
+              </SoftButton>
+
+              <SoftButton
+                color="error"
+                variant="outlined"
+                size="medium"
+                onClick={() => onDeleteStyle(style)}
+              >
+                <Delete fontSize="medium" />
               </SoftButton>
 
               {!isApplied && (
                 <SoftButton
-                  color="success"
+                  color="info"
                   variant="outlined"
-                  size="small"
+                  size="medium"
                   onClick={() => onApplyStyle(style.id)}
-                  sx={{
-                    textTransform: "none",
-                    px: 2,
-                    py: 1,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 1,
-                  }}
                 >
-                  <PlayArrow fontSize="small" />
-                  Aplicar
+                  <PlayArrow fontSize="medium" />
                 </SoftButton>
               )}
             </SoftBox>
@@ -91,6 +104,8 @@ StyleList.propTypes = {
   botStyleId: PropTypes.number,
   onViewStyle: PropTypes.func.isRequired,
   onApplyStyle: PropTypes.func.isRequired,
+  onEditStyle: PropTypes.func.isRequired,
+  onDeleteStyle: PropTypes.func.isRequired,
 };
 
 export default StyleList;

@@ -12,15 +12,27 @@ function ChatWidget({
   avatarUrl,
   position = "bottom-right",
 }) {
+  console.log("🧩 Props recibidos en <ChatWidget />:", {
+    theme: initialTheme,
+    primaryColor,
+    secondaryColor,
+    fontFamily,
+    avatarUrl,
+    position,
+  });
   const [isOpen, setIsOpen] = useState(false);
   const themeKey = initialTheme || "light";
+
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [isTyping, setIsTyping] = useState(false); // 👈 nuevo estado para "escribiendo"
 
   useEffect(() => {
     socket.connect();
 
     socket.on("bot_response", (msg) => {
+      setIsTyping(false); // 👈 desactiva el estado de escritura cuando llega la respuesta
+
       if (msg.success) {
         setMessages((prev) => [...prev, { from: "bot", text: msg.response }]);
       } else {
@@ -46,9 +58,13 @@ function ChatWidget({
     };
 
     socket.emit("user_message", payload);
+    setIsTyping(true); // 👈 activa el estado de escritura
     setMessages((prev) => [...prev, { from: "user", text: message.trim() }]);
     setMessage("");
   };
+
+  const fallbackTextColor = "#1a1a1a"; // Color legible neutro
+  const fallbackBgColor = "#f5f5f5"; // Fondo claro neutral
 
   const themeConfig = {
     light: {
@@ -72,14 +88,29 @@ function ChatWidget({
       buttonColor: "#000000",
     },
     custom: {
-      backgroundColor: secondaryColor,
-      textColor: primaryColor,
+      backgroundColor:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackBgColor
+          : secondaryColor,
+      textColor:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackTextColor
+          : primaryColor,
       borderColor: secondaryColor,
-      inputBg: secondaryColor,
-      inputText: primaryColor,
+      inputBg:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackBgColor
+          : secondaryColor,
+      inputText:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackTextColor
+          : primaryColor,
       inputBorder: secondaryColor,
       buttonBg: primaryColor,
-      buttonColor: secondaryColor === "#ffffff" ? "#000000" : "#ffffff", // mejora contraste
+      buttonColor:
+        secondaryColor.toLowerCase() === "#ffffff" || secondaryColor.toLowerCase() === "#fff"
+          ? "#000000"
+          : "#ffffff",
     },
   };
 
@@ -132,6 +163,7 @@ function ChatWidget({
     outline: "none",
     color: inputText,
     backgroundColor: inputBg,
+    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
   };
 
   const iconStyleLeft = {
@@ -212,7 +244,17 @@ function ChatWidget({
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <img src={avatarUrl || voaiGif} alt="Avatar" style={avatarHeaderStyle} />
-            <strong style={{ fontSize: "16px", color: primaryColor, fontFamily }}>Voia</strong>
+            <strong
+              style={{
+                fontSize: "16px",
+                color: primaryColor,
+                fontFamily,
+                textShadow: "1px 1px 2px rgba(0, 0, 0, 0.3)", // 👈 sombra ligera
+              }}
+            >
+              Voia
+            </strong>
+
             <button
               onClick={() => setIsOpen(false)}
               aria-label="Cerrar chat"
@@ -248,18 +290,15 @@ function ChatWidget({
 
               const messageStyle = {
                 alignSelf: isUser ? "flex-end" : "flex-start",
-                backgroundColor: secondaryColor,
-                color: primaryColor,
+                backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0", // 💬 burbujas neutras
+                color: "#1a1a1a", // 🔤 texto legible
                 padding: "8px 12px",
                 borderRadius: "12px",
                 maxWidth: "80%",
                 wordBreak: "break-word",
                 fontSize: "14px",
                 fontFamily,
-                border:
-                  primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-                    ? "1px solid #ccc"
-                    : "none",
+                border: "1px solid #ccc",
               };
 
               return (
@@ -268,6 +307,31 @@ function ChatWidget({
                 </div>
               );
             })}
+
+            {isTyping && (
+              <div
+                style={{
+                  alignSelf: "flex-start",
+                  backgroundColor:
+                    primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+                      ? fallbackBgColor
+                      : secondaryColor,
+                  color:
+                    primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+                      ? fallbackTextColor
+                      : primaryColor,
+                  padding: "8px 12px",
+                  borderRadius: "12px",
+                  maxWidth: "60%",
+                  fontFamily,
+                  fontSize: "14px",
+                  fontStyle: "italic",
+                  opacity: 0.7,
+                }}
+              >
+                Voia está escribiendo...
+              </div>
+            )}
           </div>
 
           {/* Input */}

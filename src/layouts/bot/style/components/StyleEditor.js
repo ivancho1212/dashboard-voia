@@ -11,7 +11,16 @@ import SoftButton from "components/SoftButton";
 import AvatarUploader from "./AvatarUploader";
 import SaveApplyButtons from "./SaveApplyButtons";
 
-export default function StyleEditor({ style, setStyle, setShowPreviewWidget, botId, userId }) {
+export default function StyleEditor({
+  style,
+  setStyle,
+  setShowPreviewWidget,
+  botId,
+  userId,
+  onCancel,
+  setLoading, // ✅ Agrega esto
+  setLoadingMessage, // ✅ Y esto también
+}) {
   const [showPrimaryPicker, setShowPrimaryPicker] = useState(false);
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
 
@@ -29,13 +38,18 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+  // 👉 Añade este inmediatamente después:
+  useEffect(() => {}, [style]);
 
   const handleSelectChange = (name) => (e) => {
     const value = e.target.value;
 
     if (name === "theme") {
       setStyle((prev) => {
+        if (prev.theme === value) return prev; // evita sobreescribir si no cambia
+
         let updated = { ...prev, theme: value };
+
         if (value === "light") {
           updated.primary_color = "#ffffff";
           updated.secondary_color = "#000000";
@@ -43,6 +57,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
           updated.primary_color = "#000000";
           updated.secondary_color = "#ffffff";
         }
+
         return updated;
       });
     } else {
@@ -54,31 +69,6 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
     }
   };
 
-  useEffect(() => {
-    setStyle((prev) => {
-      const baseStyle = {
-        ...prev,
-        user_id: userId,
-      };
-
-      if (baseStyle.theme === "light") {
-        return {
-          ...baseStyle,
-          primary_color: "#ffffff",
-          secondary_color: "#000000",
-        };
-      } else if (baseStyle.theme === "dark") {
-        return {
-          ...baseStyle,
-          primary_color: "#000000",
-          secondary_color: "#ffffff",
-        };
-      }
-
-      return baseStyle;
-    });
-  }, []);
-
   return (
     <SoftBox width="100%" maxWidth="900px" px={2}>
       <SoftBox mb={2}>
@@ -89,7 +79,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
         <SoftTypography variant="caption">Tema</SoftTypography>
         <SoftSelect
           label="Tema"
-          value={style.theme}
+          value={style.theme || "light"}
           onChange={handleSelectChange("theme")}
           fullWidth
         >
@@ -108,7 +98,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
             <SoftBox
               width="40px"
               height="40px"
-              bgcolor={style.primary_color}
+              bgcolor={style.primary_color || "#000000"}
               border="1px solid #ccc"
               borderRadius="8px"
             />
@@ -166,7 +156,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
             <SoftBox
               width="40px"
               height="40px"
-              bgcolor={style.secondary_color}
+              bgcolor={style.secondary_color || "#ffffff"}
               border="1px solid #ccc"
               borderRadius="8px"
             />
@@ -224,7 +214,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
           <SoftTypography variant="caption">Fuente</SoftTypography>
           <SoftSelect
             label="Fuente"
-            value={style.font_family}
+            value={style.font_family || "Arial"}
             onChange={handleSelectChange("font_family")}
             fullWidth
           >
@@ -248,7 +238,7 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
           <SoftTypography variant="caption">Posición</SoftTypography>
           <SoftSelect
             label="Posición"
-            value={style.position}
+            value={style.position || "bottom-right"}
             onChange={handleSelectChange("position")}
             fullWidth
           >
@@ -268,7 +258,18 @@ export default function StyleEditor({ style, setStyle, setShowPreviewWidget, bot
         </SoftBox>
       </SoftBox>
 
-      <SaveApplyButtons style={style} botId={parseInt(botId)} userId={userId} />
+      <SaveApplyButtons
+        style={style}
+        botId={parseInt(botId)}
+        userId={userId}
+        onStyleSaved={(savedStyle) => {
+          setStyle((prev) => ({ ...prev, ...savedStyle }));
+          onCancel(); // <- esto hace que vuelva a la lista y se recargue
+        }}
+        onCancel={onCancel}
+        setLoading={setLoading}
+        setLoadingMessage={setLoadingMessage}
+      />
     </SoftBox>
   );
 }
@@ -277,6 +278,9 @@ StyleEditor.propTypes = {
   style: PropTypes.object.isRequired,
   setStyle: PropTypes.func.isRequired,
   setShowPreviewWidget: PropTypes.func.isRequired,
-  botId: PropTypes.string.isRequired,
+  botId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
   userId: PropTypes.number.isRequired,
+  onCancel: PropTypes.func.isRequired,
+  setLoading: PropTypes.func.isRequired, // ✅ Agrega esto
+  setLoadingMessage: PropTypes.func.isRequired, // ✅ Agrega esto
 };

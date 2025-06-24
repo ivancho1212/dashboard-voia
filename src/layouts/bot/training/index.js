@@ -180,7 +180,7 @@ function BotTraining() {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-api-keysss", // asegúrate que es string válido
+      apiKey: "test-api-keysssy", // asegúrate que es string válido
       isActive: true,
     };
   

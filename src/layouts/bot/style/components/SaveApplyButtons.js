@@ -8,26 +8,74 @@ import Modal from "@mui/material/Modal";
 import Box from "@mui/material/Box";
 import axios from "axios";
 
-export default function SaveApplyButtons({ style, botId, userId, onStyleSaved }) {
+export default function SaveApplyButtons({
+  style,
+  botId,
+  userId,
+  onStyleSaved,
+  onCancel,
+  setLoading,
+  setLoadingMessage,
+}) {
   const [openModal, setOpenModal] = useState(false);
   const [styleName, setStyleName] = useState("");
 
-  const handleSave = () => {
-    setOpenModal(true);
-  };
+  const isEditMode = !!style.id;
 
   const updateBotStyle = async (botId, styleId) => {
     try {
       const res = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
       const bot = res.data;
-
-      // Actualizamos solo el styleId, el backend necesita el objeto completo
       const updatedBot = { ...bot, styleId };
-
       await axios.put(`http://localhost:5006/api/Bots/${botId}`, updatedBot);
     } catch (err) {
       console.error("Error al actualizar estilo del bot:", err);
-      throw err;
+      alert("Error al aplicar el estilo al bot.");
+    }
+  };
+
+  const saveStyle = async (styleData, isUpdate = false) => {
+    const apiUrl = "http://localhost:5006/api/BotStyles";
+
+    try {
+      setLoading(true);
+      setLoadingMessage(isUpdate ? "Actualizando estilo..." : "Guardando nuevo estilo...");
+
+      if (isUpdate) {
+        await axios.put(`${apiUrl}/${style.id}`, styleData);
+        alert("Estilo actualizado correctamente.");
+        if (onStyleSaved) onStyleSaved({ ...style, ...styleData });
+      } else {
+        const response = await axios.post(apiUrl, styleData);
+        const createdStyle = response.data;
+        alert(`Estilo "${createdStyle.name}" guardado correctamente.`);
+        if (onStyleSaved) onStyleSaved(createdStyle);
+      }
+    } catch (error) {
+      console.error("Error al guardar el estilo:", error);
+      alert("Error al guardar el estilo. Revisa la consola.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = () => {
+    if (isEditMode) {
+      const updatedStyle = {
+        userId,
+        name: style.name,
+        theme: style.theme,
+        primaryColor: style.primary_color,
+        secondaryColor: style.secondary_color,
+        fontFamily: style.font_family,
+        avatarUrl: style.avatar_url,
+        position: style.position,
+        customCss: style.custom_css,
+      };
+
+      saveStyle(updatedStyle, true);
+    } else {
+      setOpenModal(true);
     }
   };
 
@@ -37,8 +85,8 @@ export default function SaveApplyButtons({ style, botId, userId, onStyleSaved })
       return;
     }
 
-    const styleToSave = {
-      userId, // ✅ ahora sí se enviará
+    const newStyle = {
+      userId,
       name: styleName,
       theme: style.theme,
       primaryColor: style.primary_color,
@@ -48,32 +96,29 @@ export default function SaveApplyButtons({ style, botId, userId, onStyleSaved })
       position: style.position,
       customCss: style.custom_css,
     };
-    
 
-    try {
-      const response = await axios.post("http://localhost:5006/api/BotStyles", styleToSave);
-      const createdStyle = response.data;
-
-      await updateBotStyle(botId, createdStyle.id);
-
-      alert(`Estilo "${styleName}" guardado y aplicado al bot.`);
-      setOpenModal(false);
-      setStyleName("");
-
-      if (onStyleSaved) onStyleSaved(createdStyle);
-    } catch (error) {
-      console.error("Error al guardar el estilo:", error);
-      alert("Error al guardar el estilo. Revisa la consola.");
-    }
+    await saveStyle(newStyle, false);
+    setOpenModal(false);
+    setStyleName("");
   };
 
   const handleApply = async () => {
+    if (!style.id) {
+      alert("Guarda primero el estilo antes de aplicarlo.");
+      return;
+    }
+
     try {
+      setLoading(true);
+      setLoadingMessage("Aplicando estilo al bot...");
       await updateBotStyle(botId, style.id);
       alert("Estilo aplicado al bot.");
-    } catch (error) {
-      console.error("Error al aplicar el estilo:", error);
-      alert("Error al aplicar el estilo.");
+      if (onStyleSaved) await onStyleSaved();
+    } catch (err) {
+      console.error("Error al aplicar el estilo:", err);
+      alert("Ocurrió un error al aplicar el estilo.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -81,13 +126,17 @@ export default function SaveApplyButtons({ style, botId, userId, onStyleSaved })
     <>
       <SoftBox mt={4} display="flex" gap={2}>
         <SoftButton variant="contained" color="info" onClick={handleSave}>
-          Guardar
+          {isEditMode ? "Actualizar" : "Guardar"}
         </SoftButton>
-        <SoftButton variant="outlined" color="info" onClick={handleApply}>
+        <SoftButton variant="outlined" color="info" onClick={handleApply} disabled={!style.id}>
           Aplicar
+        </SoftButton>
+        <SoftButton variant="outlined" color="error" onClick={onCancel}>
+          Cancelar
         </SoftButton>
       </SoftBox>
 
+      {/* Modal de nombre solo al crear */}
       <Modal open={openModal} onClose={() => setOpenModal(false)}>
         <Box
           sx={{
@@ -127,7 +176,10 @@ export default function SaveApplyButtons({ style, botId, userId, onStyleSaved })
 
 SaveApplyButtons.propTypes = {
   style: PropTypes.object.isRequired,
-  botId: PropTypes.number.isRequired,
-  userId: PropTypes.number.isRequired, // ✅ aquí
+  botId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
+  userId: PropTypes.number.isRequired,
   onStyleSaved: PropTypes.func,
+  onCancel: PropTypes.func.isRequired,
+  setLoading: PropTypes.func.isRequired, // ✅ asegúrate que sean requeridos
+  setLoadingMessage: PropTypes.func.isRequired, // ✅ asegúrate que sean requeridos
 };

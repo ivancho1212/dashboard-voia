@@ -3,14 +3,15 @@ import PropTypes from "prop-types";
 import ChatWidget from "./ChatWidget";
 
 export default function StylePreview({ style }) {
+
   return (
     <div>
       <ChatWidget
         theme={style?.theme}
-        primaryColor={style?.primary_color}
-        secondaryColor={style?.secondary_color}
-        fontFamily={style?.font_family}
-        avatarUrl={style?.avatar_url}
+        primaryColor={style?.primaryColor}
+        secondaryColor={style?.secondaryColor}
+        fontFamily={style?.fontFamily}
+        avatarUrl={style?.avatarUrl}
         position={style?.position}
       />
     </div>
@@ -20,10 +21,10 @@ export default function StylePreview({ style }) {
 StylePreview.propTypes = {
   style: PropTypes.shape({
     theme: PropTypes.oneOf(["light", "dark", "custom"]),
-    primary_color: PropTypes.string,
-    secondary_color: PropTypes.string,
-    font_family: PropTypes.string,
-    avatar_url: PropTypes.string,
+    primaryColor: PropTypes.string,
+    secondaryColor: PropTypes.string,
+    fontFamily: PropTypes.string,
+    avatarUrl: PropTypes.string,
     position: PropTypes.oneOf([
       "bottom-right",
       "bottom-left",

@@ -1,12 +1,18 @@
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
-import voaiGif from '../../../../assets/images/voai.gif';
-
+import voaiGif from "../../../../assets/images/voai.gif";
 
 export default function AvatarUploader({ style, setStyle }) {
   const inputRef = useRef();
+
+  // Establecer el avatar por defecto si no hay uno definido
+  useEffect(() => {
+    if (!style.avatar_url) {
+      setStyle((prev) => ({ ...prev, avatar_url: voaiGif }));
+    }
+  }, []);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];

@@ -14,6 +14,14 @@ export async function getMyBot() {
     throw new Error(error.response?.data?.message || "No se pudo obtener el bot");
   }
 }
+export async function getBotsByUserId(userId) {
+  try {
+    const response = await axios.get(`${API_URL}/byUser/${userId}`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "No se pudieron obtener los bots del usuario");
+  }
+}
 
 export async function createBot(botData) {
   try {
