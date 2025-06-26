@@ -25,6 +25,7 @@ export async function getBotsByUserId(userId) {
 
 export async function createBot(botData) {
   try {
+    console.log("Datos que se enviarán:", botData);
     const response = await axios.post(API_URL, botData);
     return response.data;
   } catch (error) {
@@ -32,6 +33,7 @@ export async function createBot(botData) {
     throw error;
   }
 }
+
 
 // ✅ Nuevo método para actualizar solo el estilo del bot
 export async function updateBotStyle(botId, styleId) {

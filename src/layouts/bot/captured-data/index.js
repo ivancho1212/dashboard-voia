@@ -173,10 +173,10 @@ function CapturedData() {
   return (
     <DashboardLayout>
       <DashboardNavbar />
-      <SoftBox py={3} px={2}>
+      <SoftBox pt={1} pb={3} px={2}>
         {/* CARD - Configurar campos */}
-        <Card sx={{ p: 3, mb: 4 }}>
-          <SoftTypography variant="h5" gutterBottom>
+        <Card sx={{ p: 3, mb: 4, borderRadius: "xl", boxShadow: "lg" }}>
+          <SoftTypography variant="h5" fontWeight="bold" gutterBottom>
             Configura los campos a capturar
           </SoftTypography>
           <SoftTypography variant="body2" color="text" sx={{ mb: 3 }}>
@@ -184,12 +184,13 @@ function CapturedData() {
           </SoftTypography>
           <Divider sx={{ mb: 3 }} />
 
-          <Grid container spacing={2} alignItems="center">
+          <Grid container spacing={2}>
             <Grid item xs={8}>
               <SoftInput
                 placeholder="Ej: Dirección"
                 value={newField}
                 onChange={(e) => setNewField(e.target.value)}
+                fullWidth
               />
             </Grid>
             <Grid item xs={4}>
@@ -199,47 +200,57 @@ function CapturedData() {
             </Grid>
           </Grid>
 
-          <Table sx={{ mt: 3 }}>
-            <TableHead>
-              <TableRow>
-                <FixedCell>Campo</FixedCell>
-                <FixedCell>Capturar con intención</FixedCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {fields.map((field, i) => (
-                <TableRow key={i}>
-                  <BodyCell>{field.fieldName}</BodyCell>
-                  <BodyCell>
-                    <Switch
-                      checked={field.isRequired || false}
-                      onChange={async () => {
-                        const updated = {
-                          ...field,
-                          isRequired: !field.isRequired,
-                        };
-                        try {
-                          await updateCapturedField(updated);
-                          const updatedFields = [...fields];
-                          updatedFields[i] = updated;
-                          setFields(updatedFields);
-                        } catch (error) {
-                          console.error("Error actualizando campo:", error);
-                        }
-                      }}
-                    />
-                    <SoftTypography variant="caption" ml={1}>
-                      Capturar solo si se detecta intención
-                    </SoftTypography>
-                  </BodyCell>
+          <SoftBox sx={{ overflowX: "auto", mt: 3 }}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <FixedCell>Campo</FixedCell>
+                  <FixedCell>Capturar con intención</FixedCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHead>
+              <TableBody>
+                {fields.map((field, i) => (
+                  <TableRow key={i}>
+                    <BodyCell>{field.fieldName}</BodyCell>
+                    <BodyCell>
+                      <Switch
+                        checked={field.isRequired || false}
+                        onChange={async () => {
+                          const updated = {
+                            ...field,
+                            isRequired: !field.isRequired,
+                          };
+                          try {
+                            await updateCapturedField(updated);
+                            const updatedFields = [...fields];
+                            updatedFields[i] = updated;
+                            setFields(updatedFields);
+                          } catch (error) {
+                            console.error("Error actualizando campo:", error);
+                          }
+                        }}
+                      />
+                      <SoftTypography variant="caption" ml={1}>
+                        Capturar solo si se detecta intención
+                      </SoftTypography>
+                    </BodyCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </SoftBox>
         </Card>
 
         {/* SWITCH para modo de visualización */}
-        <SoftBox display="flex" alignItems="center" mb={3}>
+        <SoftBox
+          display="flex"
+          alignItems="center"
+          mb={3}
+          bgcolor="#f9f9f9"
+          p={2}
+          borderRadius="lg"
+          boxShadow="xs"
+        >
           <Switch checked={useApi} onChange={() => setUseApi(!useApi)} />
           <SoftTypography variant="button" ml={1}>
             {useApi ? "Visualización vía API pública" : "Visualización manual de datos"}
@@ -247,8 +258,8 @@ function CapturedData() {
         </SoftBox>
 
         {/* CARD - Visualización */}
-        <Card sx={{ p: 3 }}>
-          <SoftTypography variant="h5" gutterBottom>
+        <Card sx={{ p: 3, borderRadius: "xl", boxShadow: "lg" }}>
+          <SoftTypography variant="h5" fontWeight="bold" gutterBottom>
             {useApi ? "Endpoint público para obtener datos" : "Datos captados por el bot"}
           </SoftTypography>
 
@@ -292,7 +303,6 @@ function CapturedData() {
                 sx={{ mb: 2 }}
               />
 
-              {/* Tabla con estilos aplicados */}
               <SoftBox sx={{ overflowX: "auto" }}>
                 <Table
                   size="small"
@@ -329,9 +339,11 @@ function CapturedData() {
                   </TableBody>
                 </Table>
               </SoftBox>
+              <SoftBox mt={4} display="flex" justifyContent="space-between" alignItems="center">
+                <SoftButton variant="gradient" color="info" onClick={handleContinue}>
+                  Continuar
+                </SoftButton>
 
-              {/* 📤 Botón exportar solo visible si !useApi */}
-              <SoftBox mt={3} display="flex" justifyContent="flex-start">
                 <SoftButton color="primary" onClick={handleExportExcel}>
                   <Icon sx={{ mr: 1 }}>download</Icon>
                   Exportar Excel
@@ -339,16 +351,8 @@ function CapturedData() {
               </SoftBox>
             </>
           )}
-
-          {/* ✅ Este botón SIEMPRE visible */}
-          <SoftBox mt={4} display="flex" justifyContent="flex-end">
-            <SoftButton variant="gradient" color="info" onClick={handleContinue}>
-              Continuar
-            </SoftButton>
-          </SoftBox>
         </Card>
       </SoftBox>
-
       <Footer />
     </DashboardLayout>
   );

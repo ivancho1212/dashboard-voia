@@ -56,8 +56,8 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
 
     try {
       setLoading(true);
-      await createModelConfig(payload); // POST directo
-      onSubmit?.(payload); // Opcional: notificar al padre
+      await createModelConfig(payload);
+      onSubmit?.(payload);
     } catch (error) {
       console.error("Error al crear el modelo IA:", error);
       alert("Ocurrió un error al guardar el modelo.");
@@ -71,7 +71,12 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
       <SoftTypography variant="h5" mb={2}>
         Crear Modelo IA
       </SoftTypography>
+
+      {/* Proveedor IA */}
       <SoftBox mb={3}>
+        <SoftTypography variant="caption" color="text">
+          Proveedor de IA
+        </SoftTypography>
         <select
           name="iaProviderId"
           value={form.iaProviderId}
@@ -81,6 +86,7 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
             padding: "10px",
             borderRadius: "8px",
             border: "1px solid #ccc",
+            marginTop: "6px",
           }}
         >
           <option value="">Selecciona un proveedor IA</option>
@@ -91,21 +97,29 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
           ))}
         </select>
       </SoftBox>
-      
+
+      {/* Nombre del Modelo */}
       <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Nombre del Modelo
+        </SoftTypography>
         <SoftInput
           name="modelName"
-          placeholder="Nombre del Modelo"
+          placeholder="Ej: GPT-4 Turbo"
           value={form.modelName}
           onChange={handleChange}
           fullWidth
         />
       </SoftBox>
 
+      {/* Temperatura */}
       <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Temperatura (0.0 - 1.0)
+        </SoftTypography>
         <SoftInput
           name="temperature"
-          placeholder="Temperature (0.0 - 1.0)"
+          placeholder="Ej: 0.70"
           value={form.temperature}
           onChange={handleChange}
           type="number"
@@ -114,10 +128,14 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
+      {/* Penalización por Frecuencia */}
       <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Penalización por Frecuencia (Frequency Penalty)
+        </SoftTypography>
         <SoftInput
           name="frequencyPenalty"
-          placeholder="Frequency Penalty"
+          placeholder="Ej: 0.00"
           value={form.frequencyPenalty}
           onChange={handleChange}
           type="number"
@@ -126,10 +144,14 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
+      {/* Penalización por Presencia */}
       <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Penalización por Presencia (Presence Penalty)
+        </SoftTypography>
         <SoftInput
           name="presencePenalty"
-          placeholder="Presence Penalty"
+          placeholder="Ej: 0.00"
           value={form.presencePenalty}
           onChange={handleChange}
           type="number"
@@ -138,12 +160,25 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
-      <SoftBox display="flex" justifyContent="space-between">
-        <SoftButton type="button" color="secondary" onClick={onCancel} disabled={loading}>
-          Cancelar
-        </SoftButton>
-        <SoftButton type="submit" color="info" disabled={loading}>
+      {/* Botones */}
+      <SoftBox display="flex" justifyContent="flex-start" gap={2} mt={2}>
+        <SoftButton
+          variant="contained"
+          color="info"
+          type="submit"
+          disabled={loading}
+        >
           {loading ? "Guardando..." : "Guardar Modelo"}
+        </SoftButton>
+
+        <SoftButton
+          variant="outlined"
+          color="error"
+          type="button"
+          onClick={onCancel}
+          disabled={loading}
+        >
+          Cancelar
         </SoftButton>
       </SoftBox>
     </SoftBox>

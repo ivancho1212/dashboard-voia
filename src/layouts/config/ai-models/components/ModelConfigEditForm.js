@@ -32,64 +32,103 @@ function ModelConfigEditForm({ initialData, onSave, onCancel }) {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    onSave({
+    const payload = {
       id: initialData.id,
-      modelName: form.modelName,
-      temperature: parseFloat(form.temperature),
-      frequencyPenalty: parseFloat(form.frequencyPenalty),
-      presencePenalty: parseFloat(form.presencePenalty),
-    });
+      modelName: form.modelName.trim(),
+      temperature: parseFloat(form.temperature) || 0.7,
+      frequencyPenalty: parseFloat(form.frequencyPenalty) || 0.0,
+      presencePenalty: parseFloat(form.presencePenalty) || 0.0,
+    };
+
+    if (!payload.modelName) {
+      alert("El nombre del modelo es obligatorio.");
+      return;
+    }
+
+    onSave(payload);
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <SoftBox component="form" onSubmit={handleSubmit}>
+
+      {/* Nombre del Modelo */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption">Nombre del Modelo</SoftTypography>
-        <SoftInput name="modelName" value={form.modelName} onChange={handleChange} required />
+        <SoftTypography variant="caption" color="text">
+          Nombre del Modelo
+        </SoftTypography>
+        <SoftInput
+          name="modelName"
+          placeholder="Ej: GPT-4 Turbo"
+          value={form.modelName}
+          onChange={handleChange}
+          fullWidth
+          required
+        />
       </SoftBox>
 
+      {/* Temperatura */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption">Temperatura</SoftTypography>
+        <SoftTypography variant="caption" color="text">
+          Temperatura (0.0 - 1.0)
+        </SoftTypography>
         <SoftInput
-          type="number"
-          step="0.01"
           name="temperature"
+          placeholder="Ej: 0.70"
           value={form.temperature}
           onChange={handleChange}
+          type="number"
+          step="0.01"
+          fullWidth
         />
       </SoftBox>
 
+      {/* Penalización por Frecuencia */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption">Frecuencia Penalty</SoftTypography>
+        <SoftTypography variant="caption" color="text">
+          Penalización por Frecuencia (Frequency Penalty)
+        </SoftTypography>
         <SoftInput
-          type="number"
-          step="0.01"
           name="frequencyPenalty"
+          placeholder="Ej: 0.00"
           value={form.frequencyPenalty}
           onChange={handleChange}
-        />
-      </SoftBox>
-
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption">Presencia Penalty</SoftTypography>
-        <SoftInput
           type="number"
           step="0.01"
-          name="presencePenalty"
-          value={form.presencePenalty}
-          onChange={handleChange}
+          fullWidth
         />
       </SoftBox>
 
-      <SoftBox display="flex" gap={2}>
-        <SoftButton type="submit" color="info">
+      {/* Penalización por Presencia */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Penalización por Presencia (Presence Penalty)
+        </SoftTypography>
+        <SoftInput
+          name="presencePenalty"
+          placeholder="Ej: 0.00"
+          value={form.presencePenalty}
+          onChange={handleChange}
+          type="number"
+          step="0.01"
+          fullWidth
+        />
+      </SoftBox>
+
+      {/* Botones */}
+      <SoftBox display="flex" justifyContent="flex-start" gap={2} mt={2}>
+        <SoftButton variant="contained" color="info" type="submit">
           Guardar Cambios
         </SoftButton>
-        <SoftButton color="secondary" onClick={onCancel}>
+        <SoftButton
+          variant="outlined"
+          color="error"
+          type="button"
+          onClick={onCancel}
+        >
           Cancelar
         </SoftButton>
       </SoftBox>
-    </form>
+    </SoftBox>
   );
 }
 

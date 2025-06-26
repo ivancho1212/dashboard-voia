@@ -5,16 +5,8 @@ import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
 import { Visibility, CheckCircle, PlayArrow, Edit, Delete } from "@mui/icons-material";
 
-function StyleList({
-  styles,
-  botStyleId,
-  onViewStyle,
-  onApplyStyle,
-  onEditStyle,
-  onDeleteStyle,
-}) {
-  if (!styles.length)
-    return <SoftTypography>No hay estilos guardados.</SoftTypography>;
+function StyleList({ styles, botStyleId, onViewStyle, onApplyStyle, onEditStyle, onDeleteStyle }) {
+  if (!styles.length) return <SoftTypography>No hay estilos guardados.</SoftTypography>;
 
   return (
     <SoftBox display="flex" flexDirection="column" gap={2}>
@@ -37,12 +29,7 @@ function StyleList({
               <SoftTypography variant="h6" fontWeight="bold">
                 {style.name || `Estilo #${idx + 1}`}
                 {isApplied && (
-                  <SoftTypography
-                    component="span"
-                    variant="caption"
-                    color="info"
-                    ml={1}
-                  >
+                  <SoftTypography component="span" variant="caption" color="info" ml={1}>
                     <CheckCircle fontSize="small" sx={{ verticalAlign: "middle" }} /> Aplicado
                   </SoftTypography>
                 )}
@@ -58,7 +45,10 @@ function StyleList({
                 color="info"
                 variant="gradient"
                 size="medium"
-                onClick={() => onViewStyle(style)}
+                onClick={() => {
+                  console.log("[DEBUG] Ver estilo:", style);
+                  onViewStyle(style);
+                }}
               >
                 <Visibility fontSize="medium" />
               </SoftButton>

@@ -4,7 +4,7 @@ import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
 import SoftTypography from "components/SoftTypography";
 import PropTypes from "prop-types";
-import { createBotTemplatePrompt } from "services/botTemplatePromptsService";  // <--- Importas el servicio correcto
+import { createBotTemplatePrompt } from "services/botTemplatePromptsService";
 
 function TemplatePromptForm({ botTemplateId, onSubmit }) {
   const [content, setContent] = useState("");
@@ -21,48 +21,55 @@ function TemplatePromptForm({ botTemplateId, onSubmit }) {
     setLoading(true);
 
     const newPrompt = {
-      BotTemplateId: botTemplateId,   // el ID de la template
-      Role: "system",                 // siempre 'system' en este form (puedes parametrizar luego)
-      Content: content.trim(),        // el texto del prompt
+      BotTemplateId: botTemplateId,
+      Role: "system",
+      Content: content.trim(),
     };
 
     try {
-      // Usas el servicio con axios
       const response = await createBotTemplatePrompt(newPrompt);
-
-      // response.data contiene el prompt guardado
       onSubmit(response.data);
-
-      // Limpiar input para nuevo prompt
       setContent("");
     } catch (error) {
       console.error("Error guardando prompt:", error);
-      alert("Error al guardar prompt: " + (error.response?.data?.message || error.message));
+      alert(
+        "Error al guardar prompt: " +
+          (error.response?.data?.message || error.message)
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <SoftBox component="form" onSubmit={handleSubmit} p={2}>
-      <SoftTypography variant="h6" mb={2}>
-        Prompt Base del Bot
-      </SoftTypography>
+    <SoftBox component="form" onSubmit={handleSubmit}>
 
-      <SoftInput
-        placeholder="Prompt de sistema (rol 'system')"
-        value={content}
-        onChange={(e) => setContent(e.target.value)}
-        multiline
-        rows={10}
-        mb={2}
-        required
-        disabled={loading}
-      />
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Contenido del Prompt
+        </SoftTypography>
+        <SoftInput
+          placeholder="Describe las instrucciones base para el bot..."
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          multiline
+          rows={8}
+          fullWidth
+          required
+          disabled={loading}
+        />
+      </SoftBox>
 
-      <SoftButton type="submit" color="info" fullWidth disabled={loading}>
-        {loading ? "Guardando..." : "Guardar prompt"}
-      </SoftButton>
+      <SoftBox display="flex" justifyContent="flex-start" gap={2}>
+        <SoftButton
+          type="submit"
+          color="info"
+          variant="contained"
+          disabled={loading}
+        >
+          {loading ? "Guardando..." : "Guardar Prompt"}
+        </SoftButton>
+      </SoftBox>
     </SoftBox>
   );
 }

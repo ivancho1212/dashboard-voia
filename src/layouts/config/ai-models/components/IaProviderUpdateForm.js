@@ -32,24 +32,30 @@ function IaProviderUpdateForm({ initialData, onSubmit, onCancel }) {
     e.preventDefault();
 
     const payload = {
-      id: initialData.id, // ⚠️ asegúrate de pasar el ID para que sepa a quién actualizar
-      name: form.name,
-      apiEndpoint: form.api_endpoint,
-      apiKey: form.api_key,
+      id: initialData.id,
+      name: form.name.trim(),
+      apiEndpoint: form.api_endpoint.trim(),
+      apiKey: form.api_key.trim(),
       status: form.status,
     };
 
-    if (onSubmit) onSubmit(payload);
+    if (!payload.name || !payload.apiEndpoint) {
+      alert("Por favor completa los campos requeridos.");
+      return;
+    }
+
+    onSubmit?.(payload);
   };
 
   return (
-    <SoftBox component="form" onSubmit={handleSubmit} p={2} shadow="sm" borderRadius="lg">
-      <SoftTypography variant="h5" fontWeight="bold" mb={2}>
+    <SoftBox component="form" onSubmit={handleSubmit}>
+      <SoftTypography variant="h5" mb={2}>
         Editar Proveedor de IA
       </SoftTypography>
 
+      {/* Nombre */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           Nombre del Proveedor
         </SoftTypography>
         <SoftInput
@@ -57,12 +63,14 @@ function IaProviderUpdateForm({ initialData, onSubmit, onCancel }) {
           placeholder="Ej. OpenAI, Anthropic"
           value={form.name}
           onChange={handleChange}
+          fullWidth
           required
         />
       </SoftBox>
 
+      {/* API Endpoint */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           Endpoint de API
         </SoftTypography>
         <SoftInput
@@ -70,12 +78,14 @@ function IaProviderUpdateForm({ initialData, onSubmit, onCancel }) {
           placeholder="https://api.example.com"
           value={form.api_endpoint}
           onChange={handleChange}
+          fullWidth
           required
         />
       </SoftBox>
 
+      {/* API Key */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           API Key
         </SoftTypography>
         <SoftInput
@@ -83,11 +93,13 @@ function IaProviderUpdateForm({ initialData, onSubmit, onCancel }) {
           placeholder="Tu API Key secreta"
           value={form.api_key}
           onChange={handleChange}
+          fullWidth
         />
       </SoftBox>
 
+      {/* Estado */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           Estado
         </SoftTypography>
         <select
@@ -99,7 +111,7 @@ function IaProviderUpdateForm({ initialData, onSubmit, onCancel }) {
             padding: "10px",
             borderRadius: "8px",
             border: "1px solid #ccc",
-            fontSize: "14px",
+            marginTop: "6px",
           }}
         >
           <option value="active">Activo</option>
@@ -107,12 +119,18 @@ function IaProviderUpdateForm({ initialData, onSubmit, onCancel }) {
         </select>
       </SoftBox>
 
-      <SoftBox display="flex" justifyContent="space-between" mt={3}>
-        <SoftButton color="info" type="submit">
+      {/* Botones */}
+      <SoftBox display="flex" justifyContent="flex-start" gap={2} mt={2}>
+        <SoftButton variant="contained" color="info" type="submit">
           Actualizar Proveedor
         </SoftButton>
         {onCancel && (
-          <SoftButton color="secondary" onClick={onCancel}>
+          <SoftButton
+            variant="outlined"
+            color="error"
+            type="button"
+            onClick={onCancel}
+          >
             Cancelar
           </SoftButton>
         )}

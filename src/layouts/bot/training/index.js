@@ -8,8 +8,8 @@ import {
 } from "services/templateTrainingService";
 import { uploadFile } from "services/uploadedDocumentsService";
 import { v4 as uuidv4 } from "uuid";
-import { createBot } from "services/botService"; // asegúrate de tener este servicio
-import Modal from "components/Modal"; // asume que tienes un componente de modal
+import { createBot } from "services/botService";
+import Modal from "components/Modal";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -22,7 +22,7 @@ import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 
 function BotTraining() {
-  const { id } = useParams(); // ID de la plantilla
+  const { id } = useParams();
   const location = useLocation();
   const template = location.state?.template;
 
@@ -42,6 +42,7 @@ function BotTraining() {
   const [botName, setBotName] = useState("");
   const [creatingBot, setCreatingBot] = useState(false);
   const [botDescription, setBotDescription] = useState("");
+  const [sessionId, setSessionId] = useState(null); // ✅ NUEVO
 
   const allowedTypes = [
     "application/pdf",
@@ -102,18 +103,12 @@ function BotTraining() {
 
     const allPrompts = [];
 
-    // Si hay texto plano, lo añadimos primero
     if (text.trim()) {
-      allPrompts.push({
-        role: "system",
-        content: text.trim(),
-      });
+      allPrompts.push({ role: "system", content: text.trim() });
     }
 
-    // Agregamos las interacciones
     allPrompts.push(...interactions.map(({ role, content }) => ({ role, content })));
 
-    // Validación de longitud
     const promptText = allPrompts.map((i) => `${i.role}: ${i.content}`).join("\n");
 
     if (promptText.length > 3000) {
@@ -129,8 +124,11 @@ function BotTraining() {
     };
 
     try {
-      await createTemplateTrainingSessionWithPrompts(sessionData);
+      const response = await createTemplateTrainingSessionWithPrompts(sessionData);
+      console.log("✅ Sesión creada con ID:", response.id);
+
       setPromptSaved(true);
+      setSessionId(response.id); // ← ESTA línea es CLAVE
       alert("Sesión de entrenamiento guardada correctamente.");
     } catch (error) {
       console.error("Error al guardar el entrenamiento:", error);
@@ -150,11 +148,7 @@ function BotTraining() {
       }
 
       if (link && !linkError) {
-        await createTrainingUrl({
-          botTemplateId: parseInt(id),
-          url: link,
-          userId: 45,
-        });
+        await createTrainingUrl({ botTemplateId: parseInt(id), url: link, userId: 45 });
       }
 
       if (text.trim()) {
@@ -166,9 +160,8 @@ function BotTraining() {
       }
 
       await generateEmbeddings(parseInt(id));
-
       setAttachmentsSaved(true);
-      setShowModal(true); // ← aquí se abre el modal en vez de navegar directamente
+      setShowModal(true);
     } catch (error) {
       console.error("Error al guardar adjuntos:", error);
       alert("Ocurrió un error al guardar los adjuntos.");
@@ -176,19 +169,25 @@ function BotTraining() {
   };
 
   const handleCreateBot = async (name, description) => {
+    if (!sessionId) {
+      alert("Primero debes guardar el entrenamiento.");
+      return;
+    }
+
     const botData = {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-api-keysssy", // asegúrate que es string válido
+      apiKey: "test-api-1kdwedrby5gx5ffss03sfgrfdrayv",
       isActive: true,
+      templateTrainingSessionId: sessionId, // ✅ CLAVE PARA EVITAR EL ERROR
     };
-  
+
     console.log("🟢 Datos enviados al backend:", botData);
-  
+
     try {
       setCreatingBot(true);
-      const bot = await createBot(botData); // retorna el objeto Bot
+      const bot = await createBot(botData);
       alert("Bot creado exitosamente");
       navigate(`/bots/captured-data/${bot.id}`);
     } catch (error) {
@@ -198,8 +197,6 @@ function BotTraining() {
       setCreatingBot(false);
     }
   };
-  
-  
 
   return (
     <DashboardLayout>
@@ -220,15 +217,18 @@ function BotTraining() {
               <SoftTypography variant="subtitle2" mb={1}>
                 Selecciona una pregunta estándar
               </SoftTypography>
-              <select
+              <SoftBox
+                component="select"
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
-                style={{
+                sx={{
                   width: "100%",
-                  padding: "10px",
+                  p: 1.5,
                   borderRadius: "8px",
                   border: "1px solid #ccc",
-                  fontSize: "16px",
+                  fontSize: "14px",
+                  backgroundColor: "#fff",
+                  outline: "none",
                 }}
               >
                 <option value="">-- Selecciona una pregunta --</option>
@@ -237,7 +237,7 @@ function BotTraining() {
                     {item.question}
                   </option>
                 ))}
-              </select>
+              </SoftBox>
             </Grid>
 
             <Grid item xs={12} md={6}>
@@ -252,7 +252,7 @@ function BotTraining() {
             </Grid>
 
             <Grid item xs={12}>
-              <SoftButton variant="gradient" color="info" onClick={handleAddInteraction}>
+              <SoftButton variant="gradient" color="info" onClick={handleAddInteraction} fullWidth>
                 Añadir al Prompt
               </SoftButton>
             </Grid>
@@ -261,6 +261,10 @@ function BotTraining() {
 
         {/* Sección: Entradas manuales */}
         <Card sx={{ p: 3, mb: 4 }}>
+          <SoftTypography variant="h6" mb={2}>
+            Entradas Manuales
+          </SoftTypography>
+
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
               <SoftTypography variant="subtitle2" mb={1}>
@@ -285,7 +289,7 @@ function BotTraining() {
             </Grid>
 
             <Grid item xs={12}>
-              <SoftButton variant="gradient" color="info" onClick={handleAddInteraction}>
+              <SoftButton variant="gradient" color="info" onClick={handleAddInteraction} fullWidth>
                 Añadir al Prompt
               </SoftButton>
             </Grid>
@@ -293,17 +297,27 @@ function BotTraining() {
         </Card>
 
         {/* Prompt Actual */}
-        <Card sx={{ p: 3 }}>
+        <Card sx={{ p: 3, mb: 4 }}>
           <SoftTypography variant="h6" mb={2}>
             Prompt Actual
           </SoftTypography>
+
           {interactions.length === 0 ? (
             <SoftTypography variant="body2" color="textSecondary">
               Aún no has añadido interacciones.
             </SoftTypography>
           ) : (
             interactions.map((entry, index) => (
-              <SoftBox key={index} mb={2}>
+              <SoftBox
+                key={index}
+                mb={2}
+                p={2}
+                sx={{
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "8px",
+                  backgroundColor: "#f9fafb",
+                }}
+              >
                 <SoftTypography variant="caption" color="text">
                   <strong>{entry.role.toUpperCase()}:</strong>
                 </SoftTypography>
@@ -313,11 +327,12 @@ function BotTraining() {
           )}
 
           <SoftBox mt={2}>
-            <SoftButton variant="gradient" color="info" onClick={handleSavePrompt}>
+            <SoftButton variant="gradient" color="info" onClick={handleSavePrompt} fullWidth>
               Guardar Prompt
             </SoftButton>
+
             {promptSaved && (
-              <SoftTypography variant="caption" color="success" ml={2}>
+              <SoftTypography variant="caption" color="success" mt={1} ml={1}>
                 Prompt guardado localmente ✔
               </SoftTypography>
             )}
@@ -397,24 +412,26 @@ function BotTraining() {
               )}
             </Grid>
           </Grid>
-          <Grid item xs={12}>
-            <SoftTypography variant="subtitle2" mb={1}>
-              Texto plano para entrenamiento
-            </SoftTypography>
-            <textarea
-              rows={8}
-              style={{
-                width: "100%",
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                fontSize: "16px",
-              }}
-              placeholder="Escribe aquí el contenido relevante para el entrenamiento del bot..."
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-            />
-          </Grid>
+          <SoftTypography variant="subtitle2" mb={1}>
+            Texto plano para entrenamiento
+          </SoftTypography>
+          <SoftBox
+            component="textarea"
+            rows={8}
+            placeholder="Escribe aquí el contenido relevante para el entrenamiento del bot..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            sx={{
+              width: "100%",
+              padding: "12px 16px",
+              borderRadius: "8px",
+              border: "1px solid #ccc",
+              fontSize: "14px",
+              backgroundColor: "#fff",
+              outline: "none",
+              resize: "vertical",
+            }}
+          />
 
           <SoftBox mt={2}>
             <SoftButton variant="gradient" color="info" onClick={handleSaveAttachments}>

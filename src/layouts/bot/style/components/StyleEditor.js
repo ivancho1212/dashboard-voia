@@ -51,11 +51,11 @@ export default function StyleEditor({
         let updated = { ...prev, theme: value };
 
         if (value === "light") {
-          updated.primary_color = "#ffffff";
-          updated.secondary_color = "#000000";
+          updated.primaryColor = "#ffffff";
+          updated.secondaryColor = "#000000";
         } else if (value === "dark") {
-          updated.primary_color = "#000000";
-          updated.secondary_color = "#ffffff";
+          updated.primaryColor = "#000000";
+          updated.secondaryColor = "#ffffff";
         }
 
         return updated;
@@ -98,7 +98,7 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              bgcolor={style.primary_color || "#000000"}
+              bgcolor={style.primaryColor || "#000000"}
               border="1px solid #ccc"
               borderRadius="8px"
             />
@@ -122,9 +122,9 @@ export default function StyleEditor({
               style={{ position: "relative", marginTop: "8px", display: "inline-block" }}
             >
               <SketchPicker
-                color={style.primary_color}
+                color={style.primaryColor}
                 onChangeComplete={(color) =>
-                  setStyle((prev) => ({ ...prev, primary_color: color.hex }))
+                  setStyle((prev) => ({ ...prev, primaryColor: color.hex }))
                 }
                 disableAlpha
               />
@@ -156,7 +156,7 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              bgcolor={style.secondary_color || "#ffffff"}
+              bgcolor={style.secondaryColor || "#ffffff"}
               border="1px solid #ccc"
               borderRadius="8px"
             />
@@ -180,9 +180,9 @@ export default function StyleEditor({
               style={{ position: "relative", marginTop: "8px", display: "inline-block" }}
             >
               <SketchPicker
-                color={style.secondary_color}
+                color={style.secondaryColor}
                 onChangeComplete={(color) =>
-                  setStyle((prev) => ({ ...prev, secondary_color: color.hex }))
+                  setStyle((prev) => ({ ...prev, secondaryColor: color.hex }))
                 }
                 disableAlpha
               />
@@ -214,8 +214,8 @@ export default function StyleEditor({
           <SoftTypography variant="caption">Fuente</SoftTypography>
           <SoftSelect
             label="Fuente"
-            value={style.font_family || "Arial"}
-            onChange={handleSelectChange("font_family")}
+            value={style.fontFamily || "Arial"}
+            onChange={handleSelectChange("fontFamily")}
             fullWidth
           >
             {[

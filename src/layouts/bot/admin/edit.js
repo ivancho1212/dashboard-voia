@@ -20,7 +20,7 @@ function BotEdit({ bot, onBack }) {
         name: bot.name || "",
         description: bot.description || "",
       });
-      setPrompts(bot.prompts || []); // se espera que vengan como arreglo
+      setPrompts(bot.prompts || []);
     }
   }, [bot]);
 
@@ -36,62 +36,94 @@ function BotEdit({ bot, onBack }) {
   };
 
   const handleSave = async () => {
-  const payload = {
-    name: form.name,
-    description: form.description,
-    prompts: prompts.map((p) => ({
-      role: p.role,
-      content: p.content,
-    })),
+    const payload = {
+      name: form.name.trim(),
+      description: form.description.trim(),
+      prompts: prompts.map((p) => ({
+        role: p.role,
+        content: p.content,
+      })),
+    };
+
+    console.log("Payload enviado:", payload);
+
+    try {
+      await updateBotTemplate(bot.id, payload);
+      onBack();
+    } catch (error) {
+      console.error("Error al guardar cambios:", error);
+      alert("Error al guardar los cambios.");
+    }
   };
 
-  console.log("Payload enviado:", payload);
-
-  try {
-    await updateBotTemplate(bot.id, payload);
-    onBack();
-  } catch (error) {
-    console.error("Error al guardar cambios:", error);
-  }
-};
-
-
   return (
-    <SoftBox>
+    <SoftBox component="form">
       <SoftTypography variant="h5" mb={2}>
         Editar Plantilla
       </SoftTypography>
 
+      {/* Nombre */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption">Nombre</SoftTypography>
-        <SoftInput name="name" value={form.name} onChange={handleChange} />
+        <SoftTypography variant="caption" color="text">
+          Nombre
+        </SoftTypography>
+        <SoftInput
+          name="name"
+          placeholder="Ej. Plantilla de Atención"
+          value={form.name}
+          onChange={handleChange}
+          fullWidth
+          required
+        />
       </SoftBox>
 
+      {/* Descripción */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption">Descripción</SoftTypography>
-        <SoftInput name="description" value={form.description} onChange={handleChange} />
+        <SoftTypography variant="caption" color="text">
+          Descripción
+        </SoftTypography>
+        <SoftInput
+          name="description"
+          placeholder="Describe brevemente la plantilla"
+          value={form.description}
+          onChange={handleChange}
+          fullWidth
+        />
       </SoftBox>
 
+      {/* Prompts */}
       <SoftTypography variant="subtitle2" mt={3} mb={1}>
         Prompts de la plantilla
       </SoftTypography>
 
       {prompts.map((prompt, index) => (
         <SoftBox key={prompt.id || index} mb={2}>
-          <SoftTypography variant="caption">Contenido</SoftTypography>
+          <SoftTypography variant="caption" color="text">
+            Contenido del Prompt
+          </SoftTypography>
           <SoftInput
             multiline
+            placeholder="Escribe el contenido del prompt"
             value={prompt.content}
-            onChange={(e) => handlePromptChange(index, "content", e.target.value)}
+            onChange={(e) =>
+              handlePromptChange(index, "content", e.target.value)
+            }
+            fullWidth
           />
         </SoftBox>
       ))}
 
-      <SoftBox mt={3} display="flex" gap={2}>
-        <SoftButton color="info" onClick={handleSave}>
-          Guardar cambios
+      {/* Botones */}
+      <SoftBox mt={3} display="flex" justifyContent="flex-start" gap={2}>
+        <SoftButton variant="contained" color="info" onClick={handleSave}>
+          Guardar Cambios
         </SoftButton>
-        <SoftButton color="secondary" onClick={onBack}>
+        <SoftButton
+          variant="outlined"
+          color="error"
+          type="button"
+          onClick={onBack}
+        >
           Cancelar
         </SoftButton>
       </SoftBox>

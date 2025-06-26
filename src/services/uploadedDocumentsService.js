@@ -9,16 +9,19 @@ const API_URL = "http://localhost:5006/api/UploadedDocuments";
  */
 export const uploadFile = async (file, botTemplateId, userId, templateTrainingSessionId = null) => {
   const formData = new FormData();
-  formData.append("file", file);
-  formData.append("botTemplateId", botTemplateId);
-  formData.append("userId", userId); // 🔐 Clave foránea
-  formData.append("fileName", file.name);
-  formData.append("fileType", file.type);
-  formData.append("filePath", `/uploads/${file.name}`);
+  formData.append("File", file); // <- Debe ser "File" (según tu controller)
+  formData.append("BotTemplateId", botTemplateId);
+  formData.append("UserId", userId);
 
+  // Solo si hay sesión de entrenamiento
   if (templateTrainingSessionId) {
-    formData.append("templateTrainingSessionId", templateTrainingSessionId);
+    formData.append("TemplateTrainingSessionId", templateTrainingSessionId); // <- Nombre exacto
   }
+
+  // ✅ Campos opcionales que no están en tu DTO no se envían
+  // formData.append("fileName", file.name);
+  // formData.append("fileType", file.type);
+  // formData.append("filePath", `/uploads/${file.name}`);
 
   const response = await axios.post(API_URL, formData, {
     headers: { "Content-Type": "multipart/form-data" },

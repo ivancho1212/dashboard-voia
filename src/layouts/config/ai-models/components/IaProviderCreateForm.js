@@ -10,34 +10,41 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
     name: "",
     api_endpoint: "",
     api_key: "",
-    status: "active", // ✅ Valor por defecto
+    status: "active",
   });
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
     const payload = {
-      name: form.name,
-      apiEndpoint: form.api_endpoint,
-      apiKey: form.api_key,
-      status: form.status, // ✅ AÑADIDO
+      name: form.name.trim(),
+      apiEndpoint: form.api_endpoint.trim(),
+      apiKey: form.api_key.trim(),
+      status: form.status,
     };
+
+    if (!payload.name || !payload.apiEndpoint) {
+      alert("Completa los campos requeridos.");
+      return;
+    }
 
     if (onSubmit) onSubmit(payload);
   };
 
   return (
-    <SoftBox component="form" onSubmit={handleSubmit} p={2} shadow="sm" borderRadius="lg">
-      <SoftTypography variant="h5" fontWeight="bold" mb={2}>
+    <SoftBox component="form" onSubmit={handleSubmit}>
+      <SoftTypography variant="h5" mb={2}>
         Crear Conexión con Proveedor de IA
       </SoftTypography>
 
+      {/* Nombre */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           Nombre del Proveedor
         </SoftTypography>
         <SoftInput
@@ -49,21 +56,23 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
+      {/* Endpoint */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           Endpoint de API
         </SoftTypography>
         <SoftInput
           name="api_endpoint"
-          placeholder="https://api.example.com"
+          placeholder="https://api.ejemplo.com"
           value={form.api_endpoint}
           onChange={handleChange}
           required
         />
       </SoftBox>
 
+      {/* API Key */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           API Key
         </SoftTypography>
         <SoftInput
@@ -74,9 +83,9 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
-      {/* ✅ Campo nuevo: Estado */}
+      {/* Estado */}
       <SoftBox mb={2}>
-        <SoftTypography variant="caption" fontWeight="bold">
+        <SoftTypography variant="caption" color="text">
           Estado
         </SoftTypography>
         <select
@@ -88,7 +97,7 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
             padding: "10px",
             borderRadius: "8px",
             border: "1px solid #ccc",
-            fontSize: "14px",
+            marginTop: "6px",
           }}
         >
           <option value="active">Activo</option>
@@ -96,12 +105,19 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
         </select>
       </SoftBox>
 
-      <SoftBox display="flex" justifyContent="space-between" mt={3}>
-        <SoftButton color="dark" type="submit">
+      {/* Botones */}
+      <SoftBox display="flex" justifyContent="flex-start" gap={2} mt={2}>
+        <SoftButton variant="contained" color="info" type="submit">
           Guardar Proveedor
         </SoftButton>
+
         {onCancel && (
-          <SoftButton color="secondary" onClick={onCancel}>
+          <SoftButton
+            variant="outlined"
+            color="error"
+            type="button"
+            onClick={onCancel}
+          >
             Cancelar
           </SoftButton>
         )}

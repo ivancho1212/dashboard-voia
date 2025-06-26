@@ -3,23 +3,25 @@ import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 import IaProviderCreateForm from "./components/IaProviderCreateForm";
+import IaProviderUpdateForm from "./components/IaProviderUpdateForm";
+import ModelConfigList from "./components/ModelConfigList";
+import ModelConfigCreateForm from "./components/ModelConfigCreateForm";
 
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
+import Loader from "components/Loader";
 
-import IaProviderUpdateForm from "./components/IaProviderUpdateForm";
-import ModelConfigList from "./components/ModelConfigList";
-import ModelConfigCreateForm from "./components/ModelConfigCreateForm";
 import {
   getIaProviders,
   createIaProvider,
   updateIaProvider,
   deleteIaProvider,
 } from "services/botIaProviderService";
-import Loader from "components/Loader";
+
+import { Visibility, Edit, Delete, ArrowBack } from "@mui/icons-material";
 
 function AIModelsConfig() {
   const [activeTab, setActiveTab] = useState(0);
@@ -31,16 +33,15 @@ function AIModelsConfig() {
   useEffect(() => {
     const fetchProviders = async () => {
       try {
-        setIsLoading(true); // 👈 comienza carga
+        setIsLoading(true);
         const data = await getIaProviders();
         setProviders(data);
       } catch (err) {
         console.error("Error cargando proveedores:", err);
       } finally {
-        setIsLoading(false); // 👈 finaliza carga
+        setIsLoading(false);
       }
     };
-
     fetchProviders();
   }, []);
 
@@ -48,22 +49,6 @@ function AIModelsConfig() {
     setActiveTab(newValue);
     setViewMode(newValue === 0 ? "list" : "create");
     setSelectedProvider(null);
-  };
-
-  const handleCreate = async (form) => {
-    try {
-      const payload = {
-        Name: form.name,
-        ApiEndpoint: form.api_endpoint,
-        ApiKey: form.api_key,
-      };
-
-      const created = await createIaProvider(payload);
-      console.log("Proveedor creado:", created);
-      // ... tu lógica
-    } catch (err) {
-      console.error("Error al crear proveedor:", err.response?.data ?? err.message);
-    }
   };
 
   const handleEdit = async (updated) => {
@@ -74,14 +59,13 @@ function AIModelsConfig() {
         ApiKey: updated.apiKey,
         Status: updated.status || "active",
       };
-
       await updateIaProvider(updated.id, payload);
       const refreshed = await getIaProviders();
       setProviders(refreshed);
       setViewMode("list");
       setSelectedProvider(null);
     } catch (err) {
-      console.error("Error al editar proveedor:", err.response?.data ?? err.message);
+      console.error("Error al editar proveedor:", err);
       alert("Error al editar proveedor.");
     }
   };
@@ -93,7 +77,7 @@ function AIModelsConfig() {
         const updated = await getIaProviders();
         setProviders(updated);
       } catch (err) {
-        console.error("Error al eliminar proveedor:", err.response?.data ?? err.message);
+        console.error("Error al eliminar proveedor:", err);
         alert("Error al eliminar proveedor.");
       }
     }
@@ -119,7 +103,7 @@ function AIModelsConfig() {
       <DashboardNavbar />
       <SoftBox py={3} px={2}>
         <SoftTypography variant="h4" fontWeight="bold" mb={3}>
-          Proveedores de IA
+          Proveedores y Modelos de IA
         </SoftTypography>
 
         <Tabs value={activeTab} onChange={handleTabChange}>
@@ -141,28 +125,48 @@ function AIModelsConfig() {
                     p={2}
                     mb={2}
                     border="1px solid #ccc"
-                    borderRadius="md"
+                    borderRadius="12px"
+                    boxShadow="sm"
                     display="flex"
                     justifyContent="space-between"
                     alignItems="center"
+                    bgcolor="white"
                   >
-                    <div>
-                      <SoftTypography variant="h6">{p.name}</SoftTypography>
+                    <SoftBox>
+                      <SoftTypography variant="h6" fontWeight="bold">
+                        {p.name}
+                      </SoftTypography>
                       <SoftTypography variant="body2" color="text">
                         {p.apiEndpoint}
                       </SoftTypography>
-                    </div>
-                    <div>
-                      <SoftButton size="small" color="info" onClick={() => handleView(p)}>
-                        Ver
-                      </SoftButton>{" "}
-                      <SoftButton size="small" color="warning" onClick={() => handleEditMode(p)}>
-                        Editar
-                      </SoftButton>{" "}
-                      <SoftButton size="small" color="error" onClick={() => handleDelete(p.id)}>
-                        Eliminar
+                    </SoftBox>
+
+                    <SoftBox display="flex" gap={1}>
+                      <SoftButton
+                        color="info"
+                        variant="gradient"
+                        size="medium"
+                        onClick={() => handleView(p)}
+                      >
+                        <Visibility fontSize="medium" />
                       </SoftButton>
-                    </div>
+                      <SoftButton
+                        color="success"
+                        variant="outlined"
+                        size="medium"
+                        onClick={() => handleEditMode(p)}
+                      >
+                        <Edit fontSize="medium" />
+                      </SoftButton>
+                      <SoftButton
+                        color="error"
+                        variant="outlined"
+                        size="medium"
+                        onClick={() => handleDelete(p.id)}
+                      >
+                        <Delete fontSize="medium" />
+                      </SoftButton>
+                    </SoftBox>
                   </SoftBox>
                 ))
               )}
@@ -191,11 +195,7 @@ function AIModelsConfig() {
 
           {activeTab === 3 && (
             <ModelConfigCreateForm
-              onSubmit={(data) => {
-                console.log("Modelo IA creado:", data);
-                // Aquí podrías guardar el modelo o actualizar lista
-                setActiveTab(2); // Vuelve al tab de lista de modelos IA
-              }}
+              onSubmit={() => setActiveTab(2)}
               onCancel={() => setActiveTab(2)}
             />
           )}
@@ -205,7 +205,7 @@ function AIModelsConfig() {
               initialData={selectedProvider}
               onSubmit={async (data) => {
                 try {
-                  await handleEdit(data); // <-- ya contiene el ID
+                  await handleEdit(data);
                   setViewMode("list");
                   setSelectedProvider(null);
                   setActiveTab(0);
@@ -219,12 +219,24 @@ function AIModelsConfig() {
           )}
 
           {viewMode === "view" && selectedProvider && activeTab === 0 && (
-            <SoftBox>
-              <SoftTypography variant="h5">{selectedProvider.name}</SoftTypography>
-              <SoftTypography>Endpoint: {selectedProvider.apiEndpoint}</SoftTypography>
-              <SoftTypography>API Key: {selectedProvider.apiKey}</SoftTypography>
+            <SoftBox
+              p={3}
+              border="1px solid #ccc"
+              borderRadius="12px"
+              boxShadow="sm"
+              bgcolor="white"
+            >
+              <SoftTypography variant="h5" fontWeight="bold" mb={2}>
+                {selectedProvider.name}
+              </SoftTypography>
+              <SoftTypography mb={1}>
+                Endpoint: {selectedProvider.apiEndpoint}
+              </SoftTypography>
+              <SoftTypography mb={1}>API Key: {selectedProvider.apiKey}</SoftTypography>
               <SoftBox mt={2}>
-                <SoftButton onClick={() => handleBack()}>Volver</SoftButton>
+                <SoftButton variant="outlined" color="dark" onClick={handleBack}>
+                  <ArrowBack sx={{ mr: 1 }} /> Volver
+                </SoftButton>
               </SoftBox>
             </SoftBox>
           )}

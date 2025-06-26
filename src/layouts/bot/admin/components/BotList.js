@@ -6,9 +6,6 @@ import SoftButton from "components/SoftButton";
 function BotList({ bots, onViewBot, onEditBot, onDeleteBot, onCreateBot }) {
   return (
     <SoftBox mt={5}>
-      <SoftTypography variant="h4" fontWeight="bold" mb={3}>
-        Lista de Plantillas
-      </SoftTypography>
 
       {bots.map((bot) => (
         <SoftBox

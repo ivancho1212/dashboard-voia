@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-import { getBotStylesByUser, getBotStyleById, createBotStyle } from "services/botStylesService";
+import {
+  getBotStylesByUser,
+  getBotStyleById,
+  createBotStyle,
+} from "services/botStylesService";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -11,7 +15,6 @@ import Footer from "examples/Footer";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
-import { useNavigate } from "react-router-dom"; // si usas react-router v6
 
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
@@ -24,6 +27,7 @@ import Loader from "components/Loader";
 
 function BotStylePage() {
   const { id: botId } = useParams();
+  const navigate = useNavigate();
   const userId = 45;
 
   const [activeTab, setActiveTab] = useState(0);
@@ -66,6 +70,11 @@ function BotStylePage() {
       const combined = [...(currentBotStyle ? [currentBotStyle] : []), ...userStyles];
       const uniqueStyles = Array.from(new Map(combined.map((s) => [s.id, s])).values());
 
+      console.log("[DEBUG] Lista de estilos cargados:", userStyles);
+      console.log("[DEBUG] Estilo actual del bot (botStyleId):", botStyleId);
+      console.log("[DEBUG] currentBotStyle:", currentBotStyle);
+      console.log("[DEBUG] styles combinados:", uniqueStyles);
+
       setStyles(uniqueStyles);
     } catch (error) {
       console.error("Error al cargar estilos o datos del bot:", error);
@@ -92,6 +101,7 @@ function BotStylePage() {
   };
 
   const onViewStyle = (style) => {
+    console.log("[DEBUG] Ver estilo seleccionado en onViewStyle:", style);
     setSelectedStyle(style);
     setViewMode("view");
     setActiveTab(0);
@@ -200,15 +210,15 @@ function BotStylePage() {
       setLoading(false);
     }
   };
-  const currentBotStyle = styles.find((style) => style.id === botStyleId);
 
   const styleToPreview =
     viewMode === "edit" || viewMode === "create" ? styleEditing : selectedStyle || null;
-  const navigate = useNavigate();
 
   const handleContinue = () => {
     navigate("/bots/integration");
   };
+
+  console.log("[DEBUG] styleToPreview:", styleToPreview);
 
   return (
     <DashboardLayout>
@@ -249,7 +259,7 @@ function BotStylePage() {
                         centro, etc.).
                       </SoftTypography>
 
-                      <StylePreview style={selectedStyle} />
+                      <StylePreview style={styleToPreview} />
 
                       <SoftBox mt={2}>
                         <SoftButton
@@ -292,30 +302,23 @@ function BotStylePage() {
               )}
             </SoftBox>
 
-            {/* Preview adicional si estás editando o creando */}
             {styleToPreview && viewMode !== "list" && (
               <SoftBox mt={4} display="flex" gap={4} flexWrap="wrap" alignItems="flex-start">
                 <SoftBox flex="1 1 40%" minWidth="300px">
-                  <StylePreview
-                    style={{
-                      ...styleToPreview,
-                      primaryColor: styleToPreview.primary_color,
-                      secondaryColor: styleToPreview.secondary_color,
-                      fontFamily: styleToPreview.font_family,
-                      avatarUrl: styleToPreview.avatar_url,
-                    }}
-                  />
+                  <StylePreview style={styleToPreview} />
                 </SoftBox>
                 <SoftBox flex="1 1 40%" minWidth="300px"></SoftBox>
               </SoftBox>
             )}
           </>
         )}
-        <SoftBox mt={4} display="flex" justifyContent="flex-start">
-          <SoftButton variant="gradient" color="info" onClick={handleContinue}>
-            Continuar
-          </SoftButton>
-        </SoftBox>
+        {activeTab === 0 && viewMode === "list" && (
+          <SoftBox mt={4} display="flex" justifyContent="flex-start">
+            <SoftButton variant="gradient" color="info" onClick={handleContinue}>
+              Continuar
+            </SoftButton>
+          </SoftBox>
+        )}
       </SoftBox>
 
       <Footer />
