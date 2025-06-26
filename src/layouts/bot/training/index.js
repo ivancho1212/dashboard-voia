@@ -33,6 +33,7 @@ function BotTraining() {
   const [fileError, setFileError] = useState("");
   const [link, setLink] = useState("");
   const [linkError, setLinkError] = useState("");
+  const [linkType, setLinkType] = useState(null);
   const [promptSaved, setPromptSaved] = useState(false);
   const [attachmentsSaved, setAttachmentsSaved] = useState(false);
   const [text, setText] = useState("");
@@ -66,14 +67,46 @@ function BotTraining() {
   };
 
   const validateLink = (link) => {
-    const pdfRegex = /^https?:\/\/.+\.pdf$/i;
-    if (!link || pdfRegex.test(link)) {
+    if (!link) {
       setLinkError("");
+      setLinkType(null);
       return true;
-    } else {
-      setLinkError("El enlace debe ser una URL válida que termine en .pdf");
+    }
+
+    const urlPattern = /^(https?:\/\/)[^\s$.?#].[^\s]*$/i;
+    const isValid = urlPattern.test(link);
+
+    if (!isValid) {
+      setLinkError("❌ La URL no es válida.");
+      setLinkType(null);
       return false;
     }
+
+    // 🚫 Filtrar enlaces no permitidos (Drive, Dropbox, PDF, etc.)
+    const forbiddenPatterns = [
+      "drive.google.com",
+      "docs.google.com",
+      "onedrive.live.com",
+      "1drv.ms",
+      "dropbox.com",
+      "box.com",
+      ".pdf",
+    ];
+
+    const lowerLink = link.toLowerCase();
+    const isForbidden = forbiddenPatterns.some((pattern) => lowerLink.includes(pattern));
+
+    if (isForbidden) {
+      setLinkError(
+        "❌ Solo se permiten enlaces a páginas web. No se permiten enlaces a documentos (Drive, Dropbox, PDF, etc.)"
+      );
+      setLinkType(null);
+      return false;
+    }
+
+    setLinkType("Web");
+    setLinkError("");
+    return true;
   };
 
   const suggestedInteractions = [
@@ -178,7 +211,7 @@ function BotTraining() {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-api-1kdwedrby5gx5ffss03sfgrfdrayv",
+      apiKey: "test-avpi-1ksddffhctvwf-e1d7rbfgcjhmby5gvx5fftrss03sfgrfdrayv",
       isActive: true,
       templateTrainingSessionId: sessionId, // ✅ CLAVE PARA EVITAR EL ERROR
     };
@@ -392,7 +425,7 @@ function BotTraining() {
 
             <Grid item xs={12} md={6}>
               <SoftInput
-                placeholder="Enlace a documento PDF"
+                placeholder="Enlace a una página web (solo HTML)"
                 value={link}
                 onChange={(e) => {
                   const val = e.target.value;
@@ -402,8 +435,14 @@ function BotTraining() {
                 sx={{ height: "45px", mb: 1 }}
               />
               <SoftTypography variant="caption" sx={{ mb: 1 }}>
-                Ej: https://tuweb.com/archivo.pdf
+                Ej: https://wikipedia.org, https://tublog.com/articulo
               </SoftTypography>
+
+              {linkType && (
+                <SoftTypography variant="caption" color="info.main">
+                  🔗 Enlace detectado como Página Web
+                </SoftTypography>
+              )}
 
               {linkError && (
                 <SoftTypography variant="caption" color="error">
@@ -412,6 +451,7 @@ function BotTraining() {
               )}
             </Grid>
           </Grid>
+
           <SoftTypography variant="subtitle2" mb={1}>
             Texto plano para entrenamiento
           </SoftTypography>
