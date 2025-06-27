@@ -15,23 +15,8 @@ export const createTemplateTrainingSessionWithPrompts = async (data) => {
   return response.data;
 };
 
-// 🔸 Guardar texto plano
-export const createTrainingCustomText = async (data) => {
-  console.log("📄 Enviando Text:", data);
-  const response = await axios.post(`${BASE_URL}/TrainingCustomTexts`, data);
-  return response.data;
-};
-
-// 🔸 Guardar enlace remoto (URL web)
-export const createTrainingUrl = async (data) => {
-  console.log("🔗 Enviando Training URL:", data);
-  const response = await axios.post(`${BASE_URL}/TrainingUrls`, data);
-  return response.data;
-};
-
-// 🔸 Procesar embeddings
+// 🔸 Procesar embeddings para la plantilla
 export const generateEmbeddings = async (botTemplateId) => {
-  console.log("⚙️ Generando Embeddings para Template ID:", botTemplateId);
   const response = await axios.post(
     `${BASE_URL}/VectorEmbeddings/generate-for-template`,
     { botTemplateId }

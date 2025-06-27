@@ -132,8 +132,8 @@ function MyBotCard({ template, onSelectTemplate }) {
             onClick={() => onSelectTemplate(template)}
             sx={{
               backgroundColor: "info.main",
-              width: 60,
-              height: 60,
+              width: 50,
+              height: 50,
               borderRadius: "50%",
               display: "flex",
               alignItems: "center",

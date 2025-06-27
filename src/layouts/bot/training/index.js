@@ -1,13 +1,15 @@
 import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useState } from "react";
+import { useEffect } from "react";
 import {
   createTemplateTrainingSessionWithPrompts,
-  createTrainingUrl,
-  createTrainingCustomText,
   generateEmbeddings,
 } from "services/templateTrainingService";
+
+import { createTrainingUrl } from "services/trainingUrlsService";
+import { createTrainingCustomText } from "services/trainingCustomTextsService";
+
 import { uploadFile } from "services/uploadedDocumentsService";
-import { v4 as uuidv4 } from "uuid";
 import { createBot } from "services/botService";
 import Modal from "components/Modal";
 
@@ -20,6 +22,18 @@ import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
+
+import {
+  getUploadedDocumentsByTemplate,
+  deleteUploadedDocument,
+} from "services/uploadedDocumentsService";
+
+import { getTrainingUrlsByTemplate, deleteTrainingUrl } from "services/trainingUrlsService";
+
+import {
+  getTrainingTextsByTemplate,
+  deleteTrainingText,
+} from "services/trainingCustomTextsService";
 
 function BotTraining() {
   const { id } = useParams();
@@ -39,11 +53,32 @@ function BotTraining() {
   const [text, setText] = useState("");
   const navigate = useNavigate();
 
+  useEffect(() => {
+    fetchExistingData();
+  }, []);
+
   const [showModal, setShowModal] = useState(false);
   const [botName, setBotName] = useState("");
   const [creatingBot, setCreatingBot] = useState(false);
   const [botDescription, setBotDescription] = useState("");
   const [sessionId, setSessionId] = useState(null); // ✅ NUEVO
+
+  const [files, setFiles] = useState([]);
+  const [urls, setUrls] = useState([]);
+  const [texts, setTexts] = useState([]);
+
+  const [savingAttachments, setSavingAttachments] = useState(false);
+
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      await fetchExistingData();
+      setLoading(false);
+    };
+    loadData();
+  }, []);
 
   const allowedTypes = [
     "application/pdf",
@@ -51,6 +86,20 @@ function BotTraining() {
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
   const maxFileSize = 5 * 1024 * 1024;
+
+  const fetchExistingData = async () => {
+    try {
+      const docs = await getUploadedDocumentsByTemplate(id);
+      const urlList = await getTrainingUrlsByTemplate(id);
+      const textList = await getTrainingTextsByTemplate(id);
+
+      setFiles(docs);
+      setUrls(urlList);
+      setTexts(textList);
+    } catch (error) {
+      console.error("❌ Error cargando datos adjuntos:", error);
+    }
+  };
 
   const validateFile = (file) => {
     if (!file) return false;
@@ -169,41 +218,109 @@ function BotTraining() {
     }
   };
 
+  const hasValidInputs = () => {
+    const isFileValid = file && !fileError;
+    const isLinkValid = link && !linkError;
+    const isTextValid = text.trim() !== "";
+    return isFileValid || isLinkValid || isTextValid;
+  };
+
   const handleSaveAttachments = async () => {
-    if (!file && !link && !text.trim()) {
-      alert("Debes añadir al menos un archivo, enlace o texto.");
+    console.log("🚀 [handleSaveAttachments] sessionId actual:", sessionId);
+
+    if (!hasValidInputs()) {
+      alert("⚠️ Debes adjuntar al menos un archivo, un enlace o un texto válido.");
       return;
     }
 
     try {
+      setSavingAttachments(true);
+      let hasChanges = false;
+
+      // 🗂️ Archivo
       if (file && !fileError) {
-        await uploadFile(file, parseInt(id), 45);
+        const exists = files.some((f) => f.fileName === file.name);
+        if (exists) {
+          alert("⚠️ Este archivo ya fue subido.");
+        } else {
+          console.log("📤 Subiendo archivo con datos:", {
+            fileName: file.name,
+            botTemplateId: parseInt(id),
+            userId: 45,
+            templateTrainingSessionId: sessionId,
+          });
+
+          await uploadFile(file, parseInt(id), 45, sessionId); // <-- incluir sessionId
+          hasChanges = true;
+        }
       }
 
+      // 🔗 Enlace
       if (link && !linkError) {
-        await createTrainingUrl({ botTemplateId: parseInt(id), url: link, userId: 45 });
+        const exists = urls.some((u) => u.url === link);
+        if (exists) {
+          alert("⚠️ Este enlace ya fue agregado.");
+        } else {
+          console.log("🔗 Agregando enlace con datos:", {
+            url: link,
+            botTemplateId: parseInt(id),
+            userId: 45,
+            templateTrainingSessionId: sessionId,
+          });
+
+          await createTrainingUrl({
+            botTemplateId: parseInt(id),
+            url: link,
+            userId: 45,
+            templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
+          });
+
+          hasChanges = true;
+        }
       }
 
+      // ✍️ Texto
       if (text.trim()) {
-        await createTrainingCustomText({
-          botTemplateId: parseInt(id),
-          content: text.trim(),
-          userId: 45,
-        });
+        const exists = texts.some((t) => t.content === text.trim());
+        if (exists) {
+          alert("⚠️ Este texto ya fue agregado.");
+        } else {
+          console.log("📝 Agregando texto con datos:", {
+            content: text.trim(),
+            botTemplateId: parseInt(id),
+            userId: 45,
+            templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
+          });
+
+          await createTrainingCustomText({
+            botTemplateId: parseInt(id),
+            content: text.trim(),
+            userId: 45,
+            templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
+          });
+
+          hasChanges = true;
+        }
       }
 
-      await generateEmbeddings(parseInt(id));
-      setAttachmentsSaved(true);
-      setShowModal(true);
+      if (hasChanges) {
+        setAttachmentsSaved(true);
+        alert("✅ Adjuntos guardados correctamente.");
+        setShowModal(true);
+      } else {
+        alert("⚠️ Estos datos ya fueron agregados anteriormente.");
+      }
     } catch (error) {
-      console.error("Error al guardar adjuntos:", error);
-      alert("Ocurrió un error al guardar los adjuntos.");
+      console.error("❌ Error al guardar adjuntos:", error);
+      alert("❌ Ocurrió un error al guardar los adjuntos. Revisa la consola.");
+    } finally {
+      setSavingAttachments(false);
     }
   };
 
   const handleCreateBot = async (name, description) => {
     if (!sessionId) {
-      alert("Primero debes guardar el entrenamiento.");
+      alert("⚠️ Primero debes guardar el entrenamiento (prompt).");
       return;
     }
 
@@ -211,9 +328,9 @@ function BotTraining() {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-avpi-1ksddffhctvwf-e1d7rbfgcjhmby5gvx5fftrss03sfgrfdrayv",
+      apiKey: "test-avpi-1ksvddffvshs40lntvwf-le0df1dasñj7rbgfsgbcjhmkby5gvx5fftirss03sfgrfdrayv", // ✅ OK temporal
       isActive: true,
-      templateTrainingSessionId: sessionId, // ✅ CLAVE PARA EVITAR EL ERROR
+      templateTrainingSessionId: sessionId,
     };
 
     console.log("🟢 Datos enviados al backend:", botData);
@@ -221,14 +338,37 @@ function BotTraining() {
     try {
       setCreatingBot(true);
       const bot = await createBot(botData);
-      alert("Bot creado exitosamente");
+      alert("🎉 Bot creado exitosamente.");
       navigate(`/bots/captured-data/${bot.id}`);
     } catch (error) {
       console.error("❌ Error creando bot:", error.response?.data || error.message);
-      alert("Error al crear el bot");
+      alert(
+        error.response?.data?.message ||
+          "❌ Ocurrió un error al crear el bot. Revisa consola para más detalles."
+      );
     } finally {
       setCreatingBot(false);
     }
+  };
+
+  const handleDeleteFile = async (id) => {
+    try {
+      await deleteUploadedDocument(id);
+      setFiles(files.filter((f) => f.id !== id));
+    } catch (error) {
+      console.error("Error eliminando archivo:", error);
+      alert("❌ No se pudo eliminar el archivo.");
+    }
+  };
+
+  const handleDeleteUrl = async (urlId) => {
+    await deleteTrainingUrl(urlId);
+    fetchExistingData();
+  };
+
+  const handleDeleteText = async (textId) => {
+    await deleteTrainingText(textId);
+    fetchExistingData();
   };
 
   return (
@@ -371,7 +511,106 @@ function BotTraining() {
             )}
           </SoftBox>
         </Card>
+        <SoftTypography variant="h6" mt={4} mb={1}>
+          Documentos, Enlaces y Textos Almacenados
+        </SoftTypography>
 
+        {loading ? (
+          <SoftTypography variant="body2" color="textSecondary">
+            ⏳ Cargando datos...
+          </SoftTypography>
+        ) : (
+          <>
+            {/* Archivos */}
+            {files.length > 0 && (
+              <Card sx={{ p: 2, mb: 2 }}>
+                <SoftTypography variant="subtitle2" mb={1}>
+                  📄 Archivos
+                </SoftTypography>
+                {files.map((file) => (
+                  <SoftBox
+                    key={file.id}
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    mb={1}
+                    p={1}
+                    sx={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}
+                  >
+                    <SoftTypography variant="body2">{file.fileName}</SoftTypography>
+                    <SoftButton
+                      size="small"
+                      color="error"
+                      onClick={() => handleDeleteFile(file.id)}
+                    >
+                      Eliminar
+                    </SoftButton>
+                  </SoftBox>
+                ))}
+              </Card>
+            )}
+
+            {/* Enlaces */}
+            {urls.length > 0 && (
+              <Card sx={{ p: 2, mb: 2 }}>
+                <SoftTypography variant="subtitle2" mb={1}>
+                  🔗 Enlaces
+                </SoftTypography>
+                {urls.map((url) => (
+                  <SoftBox
+                    key={url.id}
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    mb={1}
+                    p={1}
+                    sx={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}
+                  >
+                    <a href={url.url} target="_blank" rel="noopener noreferrer">
+                      {url.url}
+                    </a>
+                    <SoftButton size="small" color="error" onClick={() => handleDeleteUrl(url.id)}>
+                      Eliminar
+                    </SoftButton>
+                  </SoftBox>
+                ))}
+              </Card>
+            )}
+
+            {/* Textos */}
+            {texts.length > 0 && (
+              <Card sx={{ p: 2, mb: 2 }}>
+                <SoftTypography variant="subtitle2" mb={1}>
+                  📝 Textos
+                </SoftTypography>
+                {texts.map((txt) => (
+                  <SoftBox
+                    key={txt.id}
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    mb={1}
+                    p={1}
+                    sx={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}
+                  >
+                    <SoftTypography variant="body2" sx={{ maxWidth: "70%" }}>
+                      {txt.content.length > 80 ? txt.content.slice(0, 80) + "..." : txt.content}
+                    </SoftTypography>
+                    <SoftButton size="small" color="error" onClick={() => handleDeleteText(txt.id)}>
+                      Eliminar
+                    </SoftButton>
+                  </SoftBox>
+                ))}
+              </Card>
+            )}
+
+            {files.length === 0 && urls.length === 0 && texts.length === 0 && (
+              <SoftTypography variant="body2" color="textSecondary">
+                No hay documentos, enlaces o textos almacenados.
+              </SoftTypography>
+            )}
+          </>
+        )}
         {/* Documentos externos */}
         <Card sx={{ p: 3, mt: 4 }}>
           <SoftTypography variant="h6">Añadir Archivo o Enlace</SoftTypography>
@@ -389,14 +628,33 @@ function BotTraining() {
                   height: "45px",
                   display: "flex",
                   alignItems: "center",
+                  justifyContent: "space-between", // ✅ importante para alinear el texto y la X
                   cursor: "pointer",
                   backgroundColor: "#f9fafb",
                 }}
-                onClick={() => document.getElementById("file-upload").click()}
+                onClick={() => {
+                  if (!file) {
+                    document.getElementById("file-upload").click();
+                  }
+                }}
               >
                 <SoftTypography variant="body2" sx={{ color: "#6b7280" }}>
                   {file ? `Archivo: ${file.name}` : "Haz clic para subir archivo"}
                 </SoftTypography>
+
+                {file && (
+                  <SoftButton
+                    size="small"
+                    color="error"
+                    onClick={(e) => {
+                      e.stopPropagation(); // ✅ evita que se dispare el click del contenedor
+                      setFile(null);
+                      setFileError("");
+                    }}
+                  >
+                    ❌
+                  </SoftButton>
+                )}
               </SoftBox>
 
               <input
@@ -474,9 +732,15 @@ function BotTraining() {
           />
 
           <SoftBox mt={2}>
-            <SoftButton variant="gradient" color="info" onClick={handleSaveAttachments}>
-              Guardar y Continuar
+            <SoftButton
+              variant="gradient"
+              color="info"
+              onClick={handleSaveAttachments}
+              disabled={savingAttachments} // 🔐 bloquea durante subida
+            >
+              {savingAttachments ? "Guardando..." : "Guardar y Continuar"}
             </SoftButton>
+
             {attachmentsSaved && (
               <SoftTypography variant="caption" color="success" ml={2}>
                 Adjuntos listos ✔
@@ -495,24 +759,22 @@ function BotTraining() {
             <SoftInput
               value={botName}
               onChange={(e) => setBotName(e.target.value)}
-              placeholder="Ej: Bot Asistente Médico"
+              placeholder="Ej: Bot Asistente"
               fullWidth
               sx={{ mb: 2 }}
             />
-
             <SoftTypography variant="subtitle2" mb={1}>
               Descripción (opcional)
             </SoftTypography>
             <SoftInput
               value={botDescription}
               onChange={(e) => setBotDescription(e.target.value)}
-              placeholder="Ej: Este bot se encarga de responder consultas médicas básicas"
+              placeholder="Ej: Este bot atiende consultas..."
               fullWidth
               multiline
               rows={2}
               sx={{ mb: 2 }}
             />
-
             <SoftButton
               variant="gradient"
               color="info"

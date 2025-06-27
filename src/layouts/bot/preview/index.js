@@ -8,7 +8,10 @@ function BotPreview({ templates, onSelectTemplate }) {
     <Grid container spacing={2}>
       {templates.map((template) => (
         <Grid item xs={12} sm={6} md={4} key={template.id}>
-          <MyBotCard template={template} onSelect={onSelectTemplate} />
+          <MyBotCard 
+            template={template} 
+            onSelectTemplate={onSelectTemplate} 
+          />
         </Grid>
       ))}
     </Grid>
