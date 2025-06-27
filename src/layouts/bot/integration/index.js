@@ -5,49 +5,49 @@ import Footer from "examples/Footer";
 
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
-import SoftInput from "components/SoftInput";
-import SoftButton from "components/SoftButton";
 import Card from "@mui/material/Card";
 import Divider from "@mui/material/Divider";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import MemoryIcon from "@mui/icons-material/Memory";
+import CloudIcon from "@mui/icons-material/Cloud";
+import AddIcon from "@mui/icons-material/Add";
+import InputBase from "@mui/material/InputBase";
 
 import { getBotsByUserId } from "services/botService";
 import integracionWidgetImg from "assets/images/integracion-widget.png";
 import { createBotIntegration } from "services/botIntegrationService";
 
-const userId = 45; // 🔥 Usuario quemado
+const userId = 45;
+
+function capitalizar(texto) {
+  if (!texto) return "";
+  return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
+}
 
 function BotAdminDashboard() {
   const [bots, setBots] = useState([]);
   const [scripts, setScripts] = useState({});
 
   useEffect(() => {
-    // ✅ Token quemado solo para desarrollo
-    localStorage.setItem(
-      "token",
-      "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." // ⬅️ Aquí tu JWT
-    );
-
+    localStorage.setItem("token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...");
     getBotsByUserId(userId)
       .then((res) => setBots(res))
       .catch((err) => console.error("❌ Error al traer bots:", err));
   }, []);
 
   const generateScript = async (botId) => {
-    const code = `<script src="https://tudominio.com/widget.js" data-user="${userId}" data-bot="${botId}"></script>`;
+    if (scripts[botId]) return; // Ya existe
 
+    const code = `<script src="https://tudominio.com/widget.js" data-user="${userId}" data-bot="${botId}"></script>`;
     try {
-      // 1. Guardar integración en backend
       await createBotIntegration({
         botId,
         integrationType: "widget",
-        allowedDomain: "tudominio.com", // 👈 Modifica esto según el dominio que uses
-        apiToken: "", // Opcional, si tienes un token que usar
+        allowedDomain: "tudominio.com",
+        apiToken: "",
       });
-
-      // 2. Actualizar UI con el script generado
       setScripts((prev) => ({ ...prev, [botId]: code }));
     } catch (error) {
       console.error("❌ Error al guardar integración:", error);
@@ -67,12 +67,11 @@ function BotAdminDashboard() {
       <SoftBox py={3} px={2}>
         <Card sx={{ p: 3 }}>
           <SoftTypography variant="h5" gutterBottom>
-            Integración del Widget del Bot
+            Integración Del Widget Del Bot
           </SoftTypography>
 
           <SoftTypography variant="body2" color="text" sx={{ mb: 3 }}>
-            Selecciona el bot que deseas integrar y genera su script personalizado para tu sitio
-            web.
+            Selecciona el bot que deseas integrar y genera su script personalizado para tu sitio web.
           </SoftTypography>
 
           <Divider sx={{ mb: 3 }} />
@@ -81,82 +80,118 @@ function BotAdminDashboard() {
             <Grid item xs={12} md={6}>
               {bots.length === 0 ? (
                 <SoftTypography color="warning">
-                  No se encontraron bots para este usuario.
+                  No Se Encontraron Bots Para Este Usuario.
                 </SoftTypography>
               ) : (
                 bots.map((bot) => (
-                  <SoftBox
+                  <Card
                     key={bot.id}
-                    mb={2}
-                    p={2}
-                    border="1px solid #ddd"
-                    borderRadius="6px"
-                    backgroundColor="#f8f9fa"
+                    sx={{
+                      backgroundColor: "#fff",
+                      borderRadius: "20px",
+                      padding: 3,
+                      boxShadow: "0px 10px 30px rgba(0,0,0,0.05)",
+                      mb: 3,
+                    }}
                   >
-                    {/* ▶️ Nombre, modelo y proveedor en una fila */}
-                    <Grid container spacing={1}>
-                      <Grid item xs={4}>
-                        <SoftTypography variant="subtitle2" fontWeight="bold">
-                          {bot.name}
+                    <Grid container spacing={1} alignItems="center">
+                      <Grid item xs={6}>
+                        <SoftTypography variant="h6" fontWeight="bold" color="info">
+                          {capitalizar(bot.name)}
                         </SoftTypography>
                       </Grid>
-                      <Grid item xs={4}>
-                        <SoftTypography variant="caption" color="text.secondary">
-                          Modelo: {bot.aiModelConfig?.name || "N/A"}
-                        </SoftTypography>
-                      </Grid>
-                      <Grid item xs={4}>
-                        <SoftTypography variant="caption" color="text.secondary">
-                          Proveedor: {bot.iaProvider?.name || "N/A"}
-                        </SoftTypography>
+                      <Grid item xs={6}>
+                        <SoftBox textAlign="right">
+                          <SoftBox display="flex" alignItems="center" justifyContent="flex-end">
+                            <CloudIcon sx={{ fontSize: "1rem", mr: 0.5, color: "#888" }} />
+                            <SoftTypography variant="caption" color="text">
+                              {capitalizar(bot.iaProvider?.name || "N/A")}
+                            </SoftTypography>
+                          </SoftBox>
+                          <SoftBox display="flex" alignItems="center" justifyContent="flex-end">
+                            <MemoryIcon sx={{ fontSize: "1rem", mr: 0.5, color: "#888" }} />
+                            <SoftTypography variant="caption" color="text">
+                              {capitalizar(bot.aiModelConfig?.name || "N/A")}
+                            </SoftTypography>
+                          </SoftBox>
+                        </SoftBox>
                       </Grid>
                     </Grid>
 
-                    <SoftButton
-                      color="info"
-                      size="small"
-                      sx={{ mt: 2 }}
-                      onClick={() => generateScript(bot.id)}
-                    >
-                      Generar Script
-                    </SoftButton>
-
-                    {scripts[bot.id] && (
-                      <SoftBox mt={2} position="relative">
-                        <SoftInput
-                          multiline
-                          value={scripts[bot.id]}
-                          readOnly
-                          sx={{
-                            backgroundColor: "#f3f4f6",
-                            borderRadius: "6px",
-                            fontFamily: "monospace",
-                            height: "90px",
-                            pr: 4,
-                          }}
-                        />
-
+                    <SoftBox mt={2}>
+                      <SoftTypography
+                        variant="caption"
+                        color="text"
+                        sx={{ display: "block", mb: 1 }}
+                      >
+                        Script Generado:
+                      </SoftTypography>
+                      <SoftBox display="flex" alignItems="center">
                         <IconButton
-                          onClick={() => copyToClipboard(scripts[bot.id])}
+                          onClick={() => generateScript(bot.id)}
+                          disabled={!!scripts[bot.id]}
                           sx={{
-                            position: "absolute",
-                            top: 8,
-                            right: 8,
-                            backgroundColor: "#ffffffcc",
-                            borderRadius: "6px",
-                            padding: "4px",
-                            zIndex: 2,
+                            backgroundColor: "info.main",
+                            width: 40,
+                            height: 40,
+                            borderRadius: "50%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            padding: 0,
+                            mr: 1,
                             "&:hover": {
-                              backgroundColor: "#e5e7eb",
+                              backgroundColor: "info.dark",
+                              boxShadow: "0 0 10px rgba(0,0,0,0.4)",
                             },
                           }}
-                          size="small"
                         >
-                          <ContentCopyIcon fontSize="small" />
+                          <AddIcon sx={{ fontSize: "1.5rem", color: "#fff" }} />
                         </IconButton>
+                        <SoftBox
+                          sx={{
+                            flexGrow: 1,
+                            border: "1px solid #ccc",
+                            borderRadius: "10px",
+                            backgroundColor: "#f3f4f6",
+                            position: "relative",
+                          }}
+                        >
+                          <InputBase
+                            multiline
+                            value={scripts[bot.id] || ""}
+                            readOnly
+                            fullWidth
+                            sx={{
+                              fontFamily: "monospace",
+                              fontSize: "0.85rem",
+                              padding: "10px",
+                              height: "90px",
+                              color: "#000",
+                            }}
+                          />
+                          <IconButton
+                            onClick={() => copyToClipboard(scripts[bot.id])}
+                            sx={{
+                              position: "absolute",
+                              top: 8,
+                              right: 8,
+                              backgroundColor: "#ffffffcc",
+                              borderRadius: "6px",
+                              padding: "4px",
+                              zIndex: 2,
+                              "&:hover": {
+                                backgroundColor: "#e5e7eb",
+                              },
+                            }}
+                            size="small"
+                          >
+                            <ContentCopyIcon fontSize="small" />
+                          </IconButton>
+                        </SoftBox>
                       </SoftBox>
-                    )}
-                  </SoftBox>
+                    </SoftBox>
+                  </Card>
                 ))
               )}
             </Grid>
@@ -172,12 +207,10 @@ function BotAdminDashboard() {
 
           <Divider sx={{ my: 4 }} />
 
-          <SoftTypography variant="h6">2. Verifica el Funcionamiento</SoftTypography>
+          <SoftTypography variant="h6">2. Verifica El Funcionamiento</SoftTypography>
           <SoftTypography variant="body2" sx={{ mt: 1 }}>
-            Una vez pegado el script en tu página, abre tu sitio y verifica que el widget aparece
-            correctamente.
+            Una vez pegado el script en tu página, abre tu sitio y verifica que el widget aparece correctamente.
           </SoftTypography>
-
           <SoftTypography variant="body2" color="primary" sx={{ mt: 2 }}>
             Nota: El script solo funcionará si el bot está activo y tu cuenta ha sido validada.
           </SoftTypography>
