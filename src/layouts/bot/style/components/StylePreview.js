@@ -11,6 +11,7 @@ export default function StylePreview({ style }) {
         theme={style?.theme}
         primaryColor={style?.primaryColor}
         secondaryColor={style?.secondaryColor}
+        headerBackgroundColor={style?.headerBackgroundColor} // ✅ ← nuevo
         fontFamily={style?.fontFamily}
         avatarUrl={style?.avatarUrl}
         position={style?.position}
@@ -24,6 +25,7 @@ StylePreview.propTypes = {
     theme: PropTypes.oneOf(["light", "dark", "custom"]),
     primaryColor: PropTypes.string,
     secondaryColor: PropTypes.string,
+    headerBackgroundColor: PropTypes.string, // ✅ ← nuevo
     fontFamily: PropTypes.string,
     avatarUrl: PropTypes.string,
     position: PropTypes.oneOf([
@@ -36,4 +38,3 @@ StylePreview.propTypes = {
     ]),
   }).isRequired,
 };
-

@@ -1,100 +1,96 @@
 import React, { useState, useEffect, useRef } from "react";
 import * as signalR from "@microsoft/signalr";
-import { FaPaperPlane, FaImage } from "react-icons/fa";
+import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import voaiGif from "../../../../assets/images/voai.gif";
+import connection from "services/signalr";
 
 function ChatWidget({
+  title = "Voia",
   theme: initialTheme,
   primaryColor = "#000000",
   secondaryColor = "#ffffff",
+  headerBackgroundColor = "#f5f5f5",
   fontFamily = "Arial",
   avatarUrl,
   position = "bottom-right",
 }) {
-  console.log("🧩 Props recibidos en <ChatWidget />:", {
-    theme: initialTheme,
-    primaryColor,
-    secondaryColor,
-    fontFamily,
-    avatarUrl,
-    position,
-  });
   const [isOpen, setIsOpen] = useState(false);
   const themeKey = initialTheme || "light";
-
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
-  const [isTyping, setIsTyping] = useState(false); // 👈 nuevo estado para "escribiendo"
+  const [isTyping, setIsTyping] = useState(false);
 
-  const connectionRef = useRef(null);
   const botId = 1;
   const userId = 1;
   const conversationId = `bot-${botId}-user-${userId}`;
-  
+
+  // ✅ SignalR Setup
   useEffect(() => {
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl("http://localhost:5006/chatHub") // Asegúrate que coincida con tu backend
-      .withAutomaticReconnect()
-      .build();
-
-    connectionRef.current = connection;
-
-    connection
-      .start()
-      .then(async () => {
-        console.log("✅ Conectado a SignalR");
+    const startConnection = async () => {
+      if (connection.state === "Disconnected") {
+        try {
+          await connection.start();
+          console.log("✅ Conectado a SignalR");
+          await connection.invoke("JoinRoom", conversationId);
+        } catch (err) {
+          console.error("❌ Error conectando a SignalR:", err);
+        }
+      } else {
         await connection.invoke("JoinRoom", conversationId);
-      })
-      .catch((err) => console.error("❌ Error conectando a SignalR:", err));
+      }
+    };
 
-    // Limpiar y re-agregar los listeners para evitar duplicados
-    connection.off("ReceiveMessage");
-    connection.off("Typing");
+    startConnection();
 
-    connection.on("ReceiveMessage", (msg) => {
+    const handleReceiveMessage = (msg) => {
       setMessages((prev) => [...prev, { from: msg.from, text: msg.text }]);
       setIsTyping(false);
-    });
+    };
 
-    connection.on("Typing", () => {
+    const handleTyping = () => {
       setIsTyping(true);
-    });
+    };
+
+    const handleClose = (error) => {
+      console.warn("🔌 Conexión cerrada:", error);
+    };
+
+    connection.on("ReceiveMessage", handleReceiveMessage);
+    connection.on("Typing", handleTyping);
+    connection.onclose(handleClose);
 
     return () => {
-      connection.stop();
+      connection.off("ReceiveMessage", handleReceiveMessage);
+      connection.off("Typing", handleTyping);
+      connection.off("onclose", handleClose);
     };
-  }, []);
+  }, [conversationId]);
 
+  // ✅ Enviar mensaje
   const sendMessage = () => {
     if (!message.trim()) return;
 
     const msg = message.trim();
 
-    // Mostrar mensaje del usuario en el widget
-    setMessages((prev) => [...prev, { from: "user", text: msg }]);
     setMessage("");
-
-    // Mostrar efecto de que IA escribe
     setIsTyping(true);
 
-    const payload = {
-      botId,
-      userId,
-      question: msg,
-    };    
+    const payload = { botId, userId, question: msg };
 
-    connectionRef.current
-      ?.invoke("SendMessage", conversationId, payload)
+    connection
+      .invoke("SendMessage", conversationId, payload)
       .catch((err) => console.error("❌ Error enviando mensaje:", err));
   };
 
-  const fallbackTextColor = "#1a1a1a"; // Color legible neutro
-  const fallbackBgColor = "#f5f5f5"; // Fondo claro neutral
+  // ✅ Configuración de temas
+  const fallbackTextColor = "#1a1a1a";
+  const fallbackBgColor = "#f5f5f5";
 
   const themeConfig = {
     light: {
       backgroundColor: "#ffffff",
+      headerBackground: "#f5f5f5",
       textColor: "#000000",
       borderColor: "#dddddd",
       inputBg: "#ffffff",
@@ -105,6 +101,7 @@ function ChatWidget({
     },
     dark: {
       backgroundColor: "#1e1e1e",
+      headerBackground: "#2a2a2a",
       textColor: "#ffffff",
       borderColor: "#444444",
       inputBg: "#2a2a2a",
@@ -115,6 +112,10 @@ function ChatWidget({
     },
     custom: {
       backgroundColor:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackBgColor
+          : secondaryColor,
+      headerBackground:
         primaryColor.toLowerCase() === secondaryColor.toLowerCase()
           ? fallbackBgColor
           : secondaryColor,
@@ -140,21 +141,47 @@ function ChatWidget({
     },
   };
 
-  const { backgroundColor, textColor, inputBg, inputText, inputBorder, buttonBg, buttonColor } =
-    themeConfig[themeKey] || themeConfig.light;
+  const {
+    backgroundColor,
+    textColor,
+    headerBackground,
+    borderColor,
+    inputBg,
+    inputText,
+    inputBorder,
+    buttonBg,
+    buttonColor,
+  } = themeConfig[themeKey] || themeConfig.light;
 
+  // ✅ Calcular color de texto del header según fondo
+  const isColorDark = (hexColor) => {
+    if (!hexColor) return false;
+    const color = hexColor.replace("#", "");
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance < 0.5;
+  };
+
+  const headerBg = headerBackgroundColor || headerBackground;
+  const headerTextColor = isColorDark(headerBg) ? "#ffffff" : "#000000";
+
+  // ✅ Estilos
   const widgetStyle = {
     backgroundColor,
     color: textColor,
     fontFamily,
     borderRadius: "16px",
-    width: "300px",
-    height: "400px",
+    width: "90vw",
+    maxWidth: "400px",
+    height: "70vh",
+    maxHeight: "650px",
     boxShadow: "0 2px 15px rgba(0,0,0,0.15)",
     display: "flex",
     flexDirection: "column",
     justifyContent: "space-between",
-    padding: "16px",
+    overflow: "hidden",
   };
 
   const avatarFloatingStyle = {
@@ -162,7 +189,7 @@ function ChatWidget({
     height: "70px",
     borderRadius: "50%",
     objectFit: "contain",
-    border: "none",
+    border: `2px solid ${primaryColor}`,
   };
 
   const avatarHeaderStyle = {
@@ -170,7 +197,7 @@ function ChatWidget({
     height: "36px",
     borderRadius: "50%",
     objectFit: "contain",
-    border: "none",
+    border: `1px solid ${primaryColor}`,
   };
 
   const inputContainerStyle = {
@@ -227,21 +254,51 @@ function ChatWidget({
     ...positionStyles[position],
   };
 
+  // ✅ Manejo de archivos adjuntos
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const maxSizeInMB = 5;
+    const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
+
+    if (file.size > maxSizeInBytes) {
+      alert(`El archivo no debe superar los ${maxSizeInMB}MB.`);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const payload = {
+        botId,
+        userId,
+        fileName: file.name,
+        fileType: file.type,
+        fileContent: reader.result, // 🔥 base64
+      };
+
+      connection
+        .invoke("SendFile", conversationId, payload)
+        .catch((err) => console.error("❌ Error enviando archivo:", err));
+    };
+
+    reader.readAsDataURL(file);
+  };
+
   return (
     <div style={wrapperStyle}>
       {!isOpen ? (
+        // 🔘 Botón flotante cuando está cerrado
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Abrir chat"
-          aria-expanded={isOpen}
           style={{
-            backgroundColor: buttonBg,
+            backgroundColor: headerBackgroundColor,
             borderRadius: "50%",
             width: "80px",
             height: "80px",
             border: "none",
             cursor: "pointer",
-            color: buttonColor,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -255,58 +312,99 @@ function ChatWidget({
               width: "72px",
               height: "72px",
               borderRadius: "50%",
-              backgroundColor: secondaryColor,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               overflow: "hidden",
             }}
           >
-            <img src={avatarUrl || voaiGif} alt="Avatar" style={avatarFloatingStyle} />
+            <img
+              src={avatarUrl || voaiGif}
+              alt="Avatar"
+              style={{
+                width: "60px",
+                height: "60px",
+                borderRadius: "50%",
+                objectFit: "cover",
+              }}
+            />
           </div>
         </button>
       ) : (
+        // 💬 Widget abierto
         <div style={widgetStyle}>
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <img src={avatarUrl || voaiGif} alt="Avatar" style={avatarHeaderStyle} />
-            <strong
+          {/* 🔥 Header */}
+          <div
+            style={{
+              backgroundColor: headerBackgroundColor || "#f5f5f5",
+              width: "100%",
+              height: "100px",
+              borderTopLeftRadius: "16px",
+              borderTopRightRadius: "16px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+            }}
+          >
+            {/* 📌 Avatar + Título */}
+            <div
               style={{
-                fontSize: "16px",
-                color: primaryColor,
-                fontFamily,
-                textShadow: "1px 1px 2px rgba(0, 0, 0, 0.3)", // 👈 sombra ligera
+                display: "flex",
+                alignItems: "center",
+                gap: "12px",
+                paddingLeft: "16px",
               }}
             >
-              Voia
-            </strong>
+              <img
+                src={avatarUrl || voaiGif}
+                alt="Avatar"
+                style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                }}
+              />
+              <span
+                style={{
+                  fontSize: "18px",
+                  color: headerTextColor,
+                  fontFamily: fontFamily || "Arial",
+                  fontWeight: "600",
+                  textShadow: "1px 1px 2px rgba(0,0,0,0.2)",
+                }}
+              >
+                {title}
+              </span>
+            </div>
 
+            {/* ❌ Botón cerrar */}
             <button
               onClick={() => setIsOpen(false)}
               aria-label="Cerrar chat"
               style={{
-                marginLeft: "auto",
                 background: "transparent",
                 border: "none",
-                color: textColor,
+                color: headerTextColor,
                 fontSize: "18px",
                 cursor: "pointer",
+                paddingRight: "20px",
               }}
             >
-              ×
+              ✕
             </button>
           </div>
 
-          {/* Mensajes */}
+          {/* 📜 Mensajes */}
           <div
             style={{
               flex: 1,
               overflowY: "auto",
-              marginTop: "15px",
-              marginBottom: "10px",
               display: "flex",
               flexDirection: "column",
-              gap: "6px",
+              gap: "8px",
+              padding: "16px",
             }}
           >
             <div style={{ fontSize: "14px", color: textColor }}>Hola, ¿en qué puedo ayudarte?</div>
@@ -316,15 +414,17 @@ function ChatWidget({
 
               const messageStyle = {
                 alignSelf: isUser ? "flex-end" : "flex-start",
-                backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0", // 💬 burbujas neutras
-                color: "#1a1a1a", // 🔤 texto legible
+                backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
+                color: "#1a1a1a",
                 padding: "8px 12px",
                 borderRadius: "12px",
                 maxWidth: "80%",
                 wordBreak: "break-word",
                 fontSize: "14px",
                 fontFamily,
-                border: "1px solid #ccc",
+                // 🔥 Cambios aquí:
+                border: "none", // ❌ Quitamos el borde
+                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)", // ✅ Sombra suave
               };
 
               return (
@@ -353,25 +453,89 @@ function ChatWidget({
                   fontSize: "14px",
                   fontStyle: "italic",
                   opacity: 0.7,
+                  // 🔥 Le aplicamos también sombra
+                  border: "none",
+                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
                 }}
               >
-                Voia está escribiendo...
+                Escribiendo...
               </div>
             )}
           </div>
 
-          {/* Input */}
-          <div style={inputContainerStyle}>
-            <FaImage style={iconStyleLeft} />
+          {/* 📝 Input + Adjuntar + Enviar */}
+          <div
+            style={{
+              position: "relative",
+              padding: "10px 10px", // Margen externo (opcional, puedes ajustar)
+            }}
+          >
+            {/* 📎 Adjuntar dentro del input */}
+            <label
+              style={{
+                position: "absolute",
+                left: "20px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                cursor: "pointer",
+              }}
+            >
+              <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                style={{ display: "none" }}
+                onChange={handleFileUpload}
+              />
+            </label>
+
+            {/* 📝 Input */}
             <input
               type="text"
               placeholder="Escribe un mensaje..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-              style={inputStyle}
+              style={{
+                width: "100%",
+                padding: "10px 42px 10px 42px", // 👈 espacio a ambos lados para íconos
+                borderRadius: "12px",
+                border: `1.5px solid ${inputBorder}`,
+                fontFamily,
+                fontSize: "14px",
+                outline: "none",
+                color: inputText,
+                backgroundColor: inputBg,
+                boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+              }}
             />
-            <FaPaperPlane style={iconStyleRight} onClick={sendMessage} />
+
+            {/* 🚀 Enviar dentro del input */}
+            <FaPaperPlane
+              onClick={sendMessage}
+              style={{
+                position: "absolute",
+                right: "20px",
+                top: "50%",
+                transform: "translateY(-55%)",
+                color: inputText,
+                fontSize: "18px",
+                cursor: "pointer",
+              }}
+            />
+          </div>
+          <div
+            style={{
+              textAlign: "right",
+              fontSize: "11px",
+              color: "#999",
+              paddingBottom: "8px",
+              marginRight: "15px",
+              fontFamily: fontFamily || "Arial",
+            }}
+          >
+            © {new Date().getFullYear()} <b style={{ color: primaryColor }}>VoIA</b>. Todos los
+            derechos reservados.
           </div>
         </div>
       )}
@@ -381,10 +545,12 @@ function ChatWidget({
 
 // ✅ Esto va después de la función
 ChatWidget.propTypes = {
+  title: PropTypes.string,
   theme: PropTypes.oneOf(["light", "dark", "custom"]).isRequired,
   primaryColor: PropTypes.string,
   secondaryColor: PropTypes.string,
-  fontFamily: PropTypes.string,
+  headerBackgroundColor: PropTypes.string, // 👈 Agrega si usas este color también
+  fontFamily: PropTypes.string, // 👈 ✅ Este es el que está faltando
   avatarUrl: PropTypes.string,
   position: PropTypes.oneOf([
     "bottom-right",

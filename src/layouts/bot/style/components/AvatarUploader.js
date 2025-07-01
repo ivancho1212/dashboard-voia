@@ -9,10 +9,10 @@ export default function AvatarUploader({ style, setStyle }) {
 
   // Establecer el avatar por defecto si no hay uno definido
   useEffect(() => {
-    if (!style.avatar_url) {
-      setStyle((prev) => ({ ...prev, avatar_url: voaiGif }));
+    if (!style.avatarUrl) {
+      setStyle((prev) => ({ ...prev, avatarUrl: voaiGif }));
     }
-  }, []);
+  }, [style, setStyle]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -20,7 +20,7 @@ export default function AvatarUploader({ style, setStyle }) {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      setStyle((prev) => ({ ...prev, avatar_url: reader.result }));
+      setStyle((prev) => ({ ...prev, avatarUrl: reader.result }));
     };
     reader.readAsDataURL(file);
   };
@@ -29,7 +29,7 @@ export default function AvatarUploader({ style, setStyle }) {
     inputRef.current.click();
   };
 
-  const avatarSrc = style.avatar_url || voaiGif;
+  const avatarSrc = style.avatarUrl || voaiGif;
 
   return (
     <SoftBox display="flex" flexDirection="column" alignItems="center" gap={1} mb={2}>

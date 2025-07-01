@@ -218,7 +218,6 @@ function BotStylePage() {
     navigate("/bots/integration");
   };
 
-  console.log("[DEBUG] styleToPreview:", styleToPreview);
 
   return (
     <DashboardLayout>

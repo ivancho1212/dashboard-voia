@@ -23,10 +23,12 @@ export default function StyleEditor({
 }) {
   const [showPrimaryPicker, setShowPrimaryPicker] = useState(false);
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
+  const [showHeaderBgPicker, setShowHeaderBgPicker] = useState(false);
 
   const closePickers = () => {
     setShowPrimaryPicker(false);
     setShowSecondaryPicker(false);
+    setShowHeaderBgPicker(false);
   };
 
   useEffect(() => {
@@ -46,16 +48,18 @@ export default function StyleEditor({
 
     if (name === "theme") {
       setStyle((prev) => {
-        if (prev.theme === value) return prev; // evita sobreescribir si no cambia
+        if (prev.theme === value) return prev;
 
         let updated = { ...prev, theme: value };
 
         if (value === "light") {
-          updated.primaryColor = "#ffffff";
-          updated.secondaryColor = "#000000";
+          updated.primaryColor = "#000000"; // ✔️ Texto y botones
+          updated.secondaryColor = "#ffffff"; // ✔️ Fondo del widget
+          updated.headerBackgroundColor = "#f5f5f5"; // ✔️ Header claro
         } else if (value === "dark") {
-          updated.primaryColor = "#000000";
-          updated.secondaryColor = "#ffffff";
+          updated.primaryColor = "#ffffff"; // ✔️ Texto y botones
+          updated.secondaryColor = "#000000"; // ✔️ Fondo del widget
+          updated.headerBackgroundColor = "#2a2a2a"; // ✔️ Header oscuro
         }
 
         return updated;
@@ -92,6 +96,7 @@ export default function StyleEditor({
       </SoftBox>
 
       <SoftBox mb={2} display="flex" gap={3}>
+        {/* Color texto y botones */}
         <SoftBox flex={1}>
           <SoftTypography variant="caption">Color del texto y botones</SoftTypography>
           <SoftBox display="flex" alignItems="center" gap={2} mt={1}>
@@ -107,6 +112,7 @@ export default function StyleEditor({
                 onClick={() => {
                   setShowPrimaryPicker((prev) => !prev);
                   setShowSecondaryPicker(false);
+                  setShowHeaderBgPicker(false);
                 }}
                 size="small"
                 color="info"
@@ -117,10 +123,7 @@ export default function StyleEditor({
             )}
           </SoftBox>
           {showPrimaryPicker && (
-            <div
-              className="color-picker"
-              style={{ position: "relative", marginTop: "8px", display: "inline-block" }}
-            >
+            <div className="color-picker" style={{ position: "relative", marginTop: "8px" }}>
               <SketchPicker
                 color={style.primaryColor}
                 onChangeComplete={(color) =>
@@ -134,8 +137,8 @@ export default function StyleEditor({
                 color="error"
                 style={{
                   position: "absolute",
-                  top: "-22px",
-                  right: "-22px",
+                  top: "-8px",
+                  right: "22px",
                   minWidth: "32px",
                   height: "32px",
                   padding: 0,
@@ -150,6 +153,7 @@ export default function StyleEditor({
           )}
         </SoftBox>
 
+        {/* Color de fondo del widget */}
         <SoftBox flex={1}>
           <SoftTypography variant="caption">Color de fondo del widget</SoftTypography>
           <SoftBox display="flex" alignItems="center" gap={2} mt={1}>
@@ -165,6 +169,7 @@ export default function StyleEditor({
                 onClick={() => {
                   setShowSecondaryPicker((prev) => !prev);
                   setShowPrimaryPicker(false);
+                  setShowHeaderBgPicker(false);
                 }}
                 size="small"
                 color="info"
@@ -175,10 +180,7 @@ export default function StyleEditor({
             )}
           </SoftBox>
           {showSecondaryPicker && (
-            <div
-              className="color-picker"
-              style={{ position: "relative", marginTop: "8px", display: "inline-block" }}
-            >
+            <div className="color-picker" style={{ position: "relative", marginTop: "8px" }}>
               <SketchPicker
                 color={style.secondaryColor}
                 onChangeComplete={(color) =>
@@ -192,8 +194,65 @@ export default function StyleEditor({
                 color="error"
                 style={{
                   position: "absolute",
-                  top: "-22px",
-                  right: "-22px",
+                  top: "-8px",
+                  right: "22px",
+                  minWidth: "32px",
+                  height: "32px",
+                  padding: 0,
+                  fontSize: "14px",
+                  zIndex: 10,
+                  borderRadius: "50%",
+                }}
+              >
+                ✕
+              </SoftButton>
+            </div>
+          )}
+        </SoftBox>
+
+        {/* Color de fondo del header */}
+        <SoftBox flex={1}>
+          <SoftTypography variant="caption">Color de fondo del header</SoftTypography>
+          <SoftBox display="flex" alignItems="center" gap={2} mt={1}>
+            <SoftBox
+              width="40px"
+              height="40px"
+              bgcolor={style.headerBackgroundColor || "#f5f5f5"}
+              border="1px solid #ccc"
+              borderRadius="8px"
+            />
+            {style.theme === "custom" && (
+              <SoftButton
+                onClick={() => {
+                  setShowHeaderBgPicker((prev) => !prev);
+                  setShowPrimaryPicker(false);
+                  setShowSecondaryPicker(false);
+                }}
+                size="small"
+                color="info"
+                variant="outlined"
+              >
+                Elegir color
+              </SoftButton>
+            )}
+          </SoftBox>
+          {showHeaderBgPicker && (
+            <div className="color-picker" style={{ position: "relative", marginTop: "8px" }}>
+              <SketchPicker
+                color={style.headerBackgroundColor || "#f5f5f5"}
+                onChangeComplete={(color) =>
+                  setStyle((prev) => ({ ...prev, headerBackgroundColor: color.hex }))
+                }
+                disableAlpha
+              />
+              <SoftButton
+                onClick={() => setShowHeaderBgPicker(false)}
+                size="small"
+                color="error"
+                style={{
+                  position: "absolute",
+                  top: "-8px",
+                  right: "22px",
                   minWidth: "32px",
                   height: "32px",
                   padding: 0,
