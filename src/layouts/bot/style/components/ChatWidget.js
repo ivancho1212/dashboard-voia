@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import socket from "../../../../services/socket";
+import React, { useState, useEffect, useRef } from "react";
+import * as signalR from "@microsoft/signalr";
 import { FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import voaiGif from "../../../../assets/images/voai.gif";
@@ -27,40 +27,66 @@ function ChatWidget({
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false); // 👈 nuevo estado para "escribiendo"
 
+  const connectionRef = useRef(null);
+  const botId = 1;
+  const userId = 1;
+  const conversationId = `bot-${botId}-user-${userId}`;
+  
   useEffect(() => {
-    socket.connect();
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl("http://localhost:5006/chatHub") // Asegúrate que coincida con tu backend
+      .withAutomaticReconnect()
+      .build();
 
-    socket.on("bot_response", (msg) => {
-      setIsTyping(false); // 👈 desactiva el estado de escritura cuando llega la respuesta
+    connectionRef.current = connection;
 
-      if (msg.success) {
-        setMessages((prev) => [...prev, { from: "bot", text: msg.response }]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { from: "bot", text: "Error: " + (msg.error || "unknown") },
-        ]);
-      }
+    connection
+      .start()
+      .then(async () => {
+        console.log("✅ Conectado a SignalR");
+        await connection.invoke("JoinRoom", conversationId);
+      })
+      .catch((err) => console.error("❌ Error conectando a SignalR:", err));
+
+    // Limpiar y re-agregar los listeners para evitar duplicados
+    connection.off("ReceiveMessage");
+    connection.off("Typing");
+
+    connection.on("ReceiveMessage", (msg) => {
+      setMessages((prev) => [...prev, { from: msg.from, text: msg.text }]);
+      setIsTyping(false);
+    });
+
+    connection.on("Typing", () => {
+      setIsTyping(true);
     });
 
     return () => {
-      socket.disconnect();
+      connection.stop();
     };
   }, []);
 
   const sendMessage = () => {
     if (!message.trim()) return;
 
-    const payload = {
-      botId: "1",
-      userId: 1,
-      message: message.trim(),
-    };
+    const msg = message.trim();
 
-    socket.emit("user_message", payload);
-    setIsTyping(true); // 👈 activa el estado de escritura
-    setMessages((prev) => [...prev, { from: "user", text: message.trim() }]);
+    // Mostrar mensaje del usuario en el widget
+    setMessages((prev) => [...prev, { from: "user", text: msg }]);
     setMessage("");
+
+    // Mostrar efecto de que IA escribe
+    setIsTyping(true);
+
+    const payload = {
+      botId,
+      userId,
+      question: msg,
+    };    
+
+    connectionRef.current
+      ?.invoke("SendMessage", conversationId, payload)
+      .catch((err) => console.error("❌ Error enviando mensaje:", err));
   };
 
   const fallbackTextColor = "#1a1a1a"; // Color legible neutro

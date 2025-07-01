@@ -22,6 +22,7 @@ import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
+import Swal from "sweetalert2";
 
 import {
   getUploadedDocumentsByTemplate,
@@ -250,8 +251,23 @@ function BotTraining() {
             templateTrainingSessionId: sessionId,
           });
 
-          await uploadFile(file, parseInt(id), 45, sessionId); // <-- incluir sessionId
-          hasChanges = true;
+          try {
+            await uploadFile(file, parseInt(id), 45, sessionId); // <-- incluir sessionId
+            hasChanges = true;
+          } catch (uploadError) {
+            console.error("❌ Error al subir archivo:", uploadError);
+          
+            Swal.fire({
+              icon: "error",
+              title: "Archivo inválido",
+              text:
+                uploadError?.response?.data?.message ||
+                "No se pudo procesar el archivo. Puede estar cifrado o corrupto.",
+            });
+          
+            return; // ⛔ Detenemos la ejecución si hay error al subir
+          }
+          
         }
       }
 
@@ -328,7 +344,7 @@ function BotTraining() {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-avpi-1ksvddffvshs40lntvwf-le0df1dasñj7rbgfsgbcjhmkby5gvx5fftirss03sfgrfdrayv", // ✅ OK temporal
+      apiKey: "test-havevpi-8df16dfksvddffvsh0s430lntvwf-le0df1dasñj7rbgfsgbcjhmkby5gvx5fftirss03sfgrfdrayv", // ✅ OK temporal
       isActive: true,
       templateTrainingSessionId: sessionId,
     };
@@ -669,16 +685,15 @@ function BotTraining() {
                     setFileError("");
                   } else {
                     setFile(null);
-                    setFileError("Archivo no válido (PDF, DOCX, XLSX, máx. 5MB)");
+                    Swal.fire({
+                      icon: "error",
+                      title: "Archivo inválido",
+                      text: "Solo se permiten archivos PDF, DOCX o XLSX de máximo 5MB.",
+                    });
                   }
+                  
                 }}
               />
-
-              {fileError && (
-                <SoftTypography variant="caption" color="error" sx={{ mt: 1 }}>
-                  {fileError}
-                </SoftTypography>
-              )}
             </Grid>
 
             <Grid item xs={12} md={6}>
