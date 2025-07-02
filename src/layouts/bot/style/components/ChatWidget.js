@@ -4,6 +4,7 @@ import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import voaiGif from "../../../../assets/images/voai.gif";
 import connection from "services/signalr";
+import { createConversation } from "services/botConversationsService";
 
 function ChatWidget({
   title = "Voia",
@@ -22,22 +23,35 @@ function ChatWidget({
   const [isTyping, setIsTyping] = useState(false);
 
   const botId = 1;
-  const userId = 1;
+  const userId = 45;
   const conversationId = `bot-${botId}-user-${userId}`;
+  const [iaWarning, setIaWarning] = useState(null);
+
+  const waitForConnection = async (retries = 5) => {
+    while (connection.state !== "Connected" && retries > 0) {
+      console.log("⌛ Esperando conexión SignalR...");
+      await new Promise((res) => setTimeout(res, 300));
+      retries--;
+    }
+
+    if (connection.state !== "Connected") {
+      throw new Error("❌ No se pudo establecer conexión con SignalR.");
+    }
+  };
 
   // ✅ SignalR Setup
   useEffect(() => {
     const startConnection = async () => {
-      if (connection.state === "Disconnected") {
-        try {
+      try {
+        if (connection.state !== "Connected") {
           await connection.start();
           console.log("✅ Conectado a SignalR");
-          await connection.invoke("JoinRoom", conversationId);
-        } catch (err) {
-          console.error("❌ Error conectando a SignalR:", err);
         }
-      } else {
+
+        await waitForConnection();
         await connection.invoke("JoinRoom", conversationId);
+      } catch (err) {
+        console.error("❌ Error conectando a SignalR:", err);
       }
     };
 
@@ -45,6 +59,11 @@ function ChatWidget({
 
     const handleReceiveMessage = (msg) => {
       setMessages((prev) => [...prev, { from: msg.from, text: msg.text }]);
+
+      if (msg.text.includes("aún no está conectado")) {
+        setIaWarning("Este bot aún no está conectado a una IA. Pronto estará disponible.");
+      }
+
       setIsTyping(false);
     };
 
@@ -68,19 +87,45 @@ function ChatWidget({
   }, [conversationId]);
 
   // ✅ Enviar mensaje
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!message.trim()) return;
 
     const msg = message.trim();
-
     setMessage("");
     setIsTyping(true);
 
     const payload = { botId, userId, question: msg };
 
-    connection
-      .invoke("SendMessage", conversationId, payload)
-      .catch((err) => console.error("❌ Error enviando mensaje:", err));
+    // 🔌 Asegúrate de tener conexión
+    if (connection.state !== "Connected") {
+      console.warn("🔌 SignalR no está conectado todavía.");
+      try {
+        await connection.start();
+        await waitForConnection();
+        await connection.invoke("JoinRoom", conversationId);
+      } catch (error) {
+        console.error("❌ Error reconectando SignalR:", error);
+        return;
+      }
+    }
+
+    // ✅ Crear conversación si no existe
+    try {
+      await createConversation({ userId, botId });
+      console.log("✅ Conversación creada o ya existente");
+    } catch (error) {
+      console.warn(
+        "⚠️ Conversación ya existente o error al crearla:",
+        error?.response?.data || error.message
+      );
+    }
+
+    // 🚀 Enviar mensaje
+    try {
+      await connection.invoke("SendMessage", conversationId, payload);
+    } catch (err) {
+      console.error("❌ Error enviando mensaje:", err);
+    }
   };
 
   // ✅ Configuración de temas
@@ -395,6 +440,20 @@ function ChatWidget({
               ✕
             </button>
           </div>
+          {iaWarning && (
+            <div
+              style={{
+                color: "white",
+                backgroundColor: "red",
+                padding: "10px",
+                textAlign: "center",
+                fontSize: "13px",
+                fontWeight: "500",
+              }}
+            >
+              {iaWarning}
+            </div>
+          )}
 
           {/* 📜 Mensajes */}
           <div

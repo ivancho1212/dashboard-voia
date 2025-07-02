@@ -8,6 +8,9 @@ import SoftBox from "components/SoftBox";
 import ConversationList from "./ConversationList";
 import ChatPanel from "./ChatPanel";
 
+// 👇 Nuevo import
+import { getConversationsByUser } from "services/botConversationsService";
+
 function Conversations() {
   const [conversationList, setConversationList] = useState([]);
   const [selectedConversationId, setSelectedConversationId] = useState(null);
@@ -15,20 +18,40 @@ function Conversations() {
   const [isTyping, setIsTyping] = useState(false);
   const [iaPaused, setIaPaused] = useState(false);
 
+  // 👇 Simulación de userId hasta que tengas auth
+  const userId = 45;
+
   useEffect(() => {
+    const loadInitialConversations = async () => {
+      try {
+        const data = await getConversationsByUser(userId);
+        setConversationList(
+          data.map((c) => ({
+            id: c.id,
+            alias: c.User?.Name || `Usuario ${String(c.id).slice(-4)}`,
+            lastMessage: c.UserMessage || "",
+            updatedAt: c.CreatedAt || new Date().toISOString(),
+            status: "activa", // Puedes ajustar si tienes estado en el modelo
+            blocked: false,
+          }))
+        );
+      } catch (error) {
+        console.error("Error al cargar conversaciones iniciales:", error);
+      }
+    };
+
     const setupSignalR = async () => {
       try {
-        await connection.start();
+        if (connection.state !== "Connected") {
+          await connection.start();
+        }
 
-        // Unirse al grupo admin
-        await connection.invoke("JoinAdmin");
+        if (connection.state === "Connected") {
+          await connection.invoke("JoinAdmin");
+        } else {
+          console.warn("❌ No se pudo conectar con SignalR.");
+        }
 
-        // Recibir conversaciones iniciales (si las envías desde backend)
-        connection.on("InitialConversations", (list) => {
-          setConversationList(list);
-        });
-
-        // Recibir mensajes
         connection.on("ReceiveMessage", (msg) => {
           const id = msg.conversationId;
 
@@ -44,7 +67,7 @@ function Conversations() {
                 ...prev,
                 {
                   id,
-                  alias: `Usuario ${String(id).slice(-4)}`, // Asegúrate de que id sea string
+                  alias: `Usuario ${String(id).slice(-4)}`,
                   lastMessage: msg.text,
                   updatedAt: new Date().toISOString(),
                   status: "activa",
@@ -59,21 +82,30 @@ function Conversations() {
             );
           });
         });
+        
+        connection.on("NewConversation", (newConv) => {
+          setConversationList((prev) => {
+            const exists = prev.find((c) => c.id === newConv.id);
+            if (exists) return prev;
 
-        // Indicador de escritura
+            return [newConv, ...prev]; // Agrega al inicio
+          });
+        });
+
         connection.on("Typing", () => {
           setIsTyping(true);
           setTimeout(() => setIsTyping(false), 1500);
         });
       } catch (error) {
-        console.error("Error al conectar con SignalR:", error);
+        console.error("❌ Error al conectar con SignalR:", error);
       }
     };
 
+    loadInitialConversations();
     setupSignalR();
 
     return () => {
-      connection.stop(); // Detener conexión al desmontar
+      connection.stop();
     };
   }, []);
 
@@ -101,7 +133,7 @@ function Conversations() {
       text,
     };
 
-    socket.emit("admin_message", message);
+    connection.invoke("SendAdminMessage", message); // ajusta si tu método SignalR es diferente
 
     setMessages((prev) => ({
       ...prev,
