@@ -7,8 +7,9 @@ import SendIcon from "@mui/icons-material/Send";
 import Paper from "@mui/material/Paper";
 
 function InputChat({ value, onChange, onSend }) {
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter") {
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault(); // ✅ Previene salto de línea con Enter
       onSend();
     }
   };
@@ -18,21 +19,28 @@ function InputChat({ value, onChange, onSend }) {
       elevation={3}
       sx={{
         display: "flex",
-        alignItems: "center",
-        borderRadius: "999px",
+        alignItems: "flex-end",
+        borderRadius: "15px",
         px: 2,
         py: 0.5,
         boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
+        maxHeight: 100, // 👈 Límite visual para 2-3 líneas
       }}
     >
       <InputBase
         fullWidth
-        placeholder="Escribe un mensaje..."
+        multiline
+        maxRows={3} // ✅ permite hasta 3 líneas visibles
         value={value}
         onChange={onChange}
-        onKeyPress={handleKeyPress}
+        onKeyDown={handleKeyDown}
+        placeholder="Escribe un mensaje..."
         sx={{
           fontSize: "14px",
+          lineHeight: "1.4",
+          overflowY: "auto", // ✅ muestra scroll cuando hay más texto
+          maxHeight: "90px",
+          pr: 1,
         }}
       />
       <IconButton onClick={onSend} color="info">

@@ -43,7 +43,8 @@ function ConversationList({ conversations, onSelect, onStatusChange, onBlock }) 
     );
 
   return (
-    <>
+    <Box display="flex" flexDirection="column" sx={{ height: "100%", minHeight: 0 }}>
+      {/* Encabezado y Filtro */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
         <SoftTypography variant="h5" color="info.main" fontWeight="bold">
           Conversaciones
@@ -63,6 +64,7 @@ function ConversationList({ conversations, onSelect, onStatusChange, onBlock }) 
         </Menu>
       </Box>
 
+      {/* Buscador */}
       <Box mb={2}>
         <TextField
           variant="outlined"
@@ -82,94 +84,97 @@ function ConversationList({ conversations, onSelect, onStatusChange, onBlock }) 
         />
       </Box>
 
-      <List sx={{ width: "100%", overflowY: "auto", padding: 0 }}>
-        {filtered.map((conv) => (
-          <ListItemButton
-            key={conv.id}
-            onClick={() => onSelect(conv.id)}
-            sx={{
-              mb: 0.5,
-              borderRadius: "8px",
-              padding: "10px 12px",
-              backgroundColor: "#f5f5f5",
-              "&:hover": {
-                backgroundColor: "#d0f0f6",
-              },
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-            }}
-          >
-            {/* Info principal */}
-            <Box sx={{ flex: 1, pr: 1 }}>
-              <Typography
-                variant="subtitle2"
-                fontWeight="600"
-                color={conv.blocked ? "error" : "text.primary"}
-                noWrap
-              >
-                {conv.alias || `Usuario ${conv.id.slice(-4)}`}
-              </Typography>
-
-              <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: "13px" }}>
-                {conv.lastMessage}
-              </Typography>
-            </Box>
-
-            {/* Estado + tiempo + acciones */}
-            <Box
-              minWidth="105px"
-              display="flex"
-              flexDirection="column"
-              alignItems="flex-end"
-              justifyContent="center"
-              gap={0.5}
+      {/* Lista con scroll */}
+      <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+        <List sx={{ width: "100%", padding: 0 }}>
+          {filtered.map((conv) => (
+            <ListItemButton
+              key={conv.id}
+              onClick={() => onSelect(conv.id)}
+              sx={{
+                mb: 0.5,
+                borderRadius: "8px",
+                padding: "10px 12px",
+                backgroundColor: "#f5f5f5",
+                "&:hover": {
+                  backgroundColor: "#d0f0f6",
+                },
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+              }}
             >
-              <Chip
-                label={conv.status.toUpperCase()}
-                color={
-                  conv.status === "pendiente"
-                    ? "warning"
-                    : conv.status === "resuelta"
-                    ? "success"
-                    : conv.status === "cerrada"
-                    ? "default"
-                    : "info"
-                }
-                size="small"
-                sx={{
-                  fontSize: "11px",
-                  height: "22px",
-                  fontWeight: "bold",
-                  "& .MuiChip-label": {
-                    color: "white !important", // ✅ Esto lo fuerza correctamente
-                  },
-                }}
-              />
+              {/* Info principal */}
+              <Box sx={{ flex: 1, pr: 1 }}>
+                <Typography
+                  variant="subtitle2"
+                  fontWeight="600"
+                  color={conv.blocked ? "error" : "text.primary"}
+                  noWrap
+                >
+                  {conv.alias || `Usuario ${conv.id.slice(-4)}`}
+                </Typography>
 
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ fontSize: "11px", textAlign: "right" }}
+                <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: "13px" }}>
+                  {conv.lastMessage}
+                </Typography>
+              </Box>
+
+              {/* Estado + tiempo + acciones */}
+              <Box
+                minWidth="105px"
+                display="flex"
+                flexDirection="column"
+                alignItems="flex-end"
+                justifyContent="center"
+                gap={0.5}
               >
-                {formatDistanceToNow(new Date(conv.updatedAt), {
-                  addSuffix: true,
-                  locale: es,
-                })}
-              </Typography>
+                <Chip
+                  label={conv.status.toUpperCase()}
+                  color={
+                    conv.status === "pendiente"
+                      ? "warning"
+                      : conv.status === "resuelta"
+                      ? "success"
+                      : conv.status === "cerrada"
+                      ? "default"
+                      : "info"
+                  }
+                  size="small"
+                  sx={{
+                    fontSize: "11px",
+                    height: "22px",
+                    fontWeight: "bold",
+                    "& .MuiChip-label": {
+                      color: "white !important",
+                    },
+                  }}
+                />
 
-              <ConversationActions
-                onBlock={() => onBlock(conv.id)}
-                onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
-                blocked={conv.blocked}
-                currentStatus={conv.status}
-              />
-            </Box>
-          </ListItemButton>
-        ))}
-      </List>
-    </>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontSize: "11px", textAlign: "right" }}
+                >
+                  {formatDistanceToNow(new Date(conv.updatedAt), {
+                    addSuffix: true,
+                    locale: es,
+                  })}
+                </Typography>
+
+                <ConversationActions
+                  onBlock={() => onBlock(conv.id)}
+                  onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
+                  blocked={conv.blocked}
+                  currentStatus={conv.status}
+                />
+              </Box>
+            </ListItemButton>
+          ))}
+        </List>
+      </Box>
+    </Box>
   );
 }
 

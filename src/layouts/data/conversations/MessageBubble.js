@@ -2,22 +2,19 @@ import React from "react";
 import PropTypes from "prop-types";
 
 function MessageBubble({ msg }) {
-  const isUser = msg.from === "user";
-  const isBot = msg.from === "bot";
-  const isAdmin = msg.from === "admin";
+  const isRight = msg.from === "admin" || msg.from === "bot";
 
-  const backgroundColor = isUser
-    ? "#e0f7fa" // celeste claro para usuario
-    : isBot
-    ? "#f1f1f1" // gris claro para IA
-    : "#d0f0c0"; // verde suave para admin
+  const backgroundColor =
+    msg.from === "user" ? "#e0f7fa" : msg.from === "admin" ? "#d0f0c0" : "#f1f1f1";
 
-  const alignSelf = isUser ? "flex-end" : "flex-start";
+  const timestamp = msg.timestamp
+    ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    : "";
 
   return (
     <div
       style={{
-        alignSelf,
+        alignSelf: isRight ? "flex-end" : "flex-start",
         backgroundColor,
         color: "#1a1a1a",
         padding: "10px 14px",
@@ -28,9 +25,20 @@ function MessageBubble({ msg }) {
         fontFamily: "Arial",
         marginBottom: "8px",
         boxShadow: "0 1px 4px rgba(0, 0, 0, 0.1)",
+        position: "relative",
       }}
     >
-      {msg.text}
+      <div>{msg.text}</div>
+      <div
+        style={{
+          fontSize: "10px",
+          color: "#555",
+          marginTop: "0px",
+          textAlign: isRight ? "right" : "left", // alinea según el lado
+        }}
+      >
+        {timestamp}
+      </div>
     </div>
   );
 }
@@ -39,6 +47,7 @@ MessageBubble.propTypes = {
   msg: PropTypes.shape({
     from: PropTypes.oneOf(["user", "bot", "admin"]).isRequired,
     text: PropTypes.string.isRequired,
+    timestamp: PropTypes.string,
   }).isRequired,
 };
 
