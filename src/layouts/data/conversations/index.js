@@ -14,6 +14,8 @@ import IconButton from "@mui/material/IconButton";
 import CloseIcon from "@mui/icons-material/Close";
 import SoftTypography from "components/SoftTypography";
 import Tooltip from "@mui/material/Tooltip";
+// 👇 Drag and Drop
+import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 // 👇 Nuevo import
 import { getConversationsByUser } from "services/botConversationsService";
@@ -259,10 +261,22 @@ function Conversations() {
         <Grid container spacing={2}>
           {/* LISTA DE CONVERSACIONES */}
           <Grid item xs={12} md={4} lg={4}>
-            <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column" }}>
+            <Card
+              sx={{
+                height: "calc(100vh - 120px)",
+                display: "flex",
+                flexDirection: "column",
+                borderRadius: 0,
+              }}
+            >
               <SoftBox
                 p={2}
-                sx={{ overflow: "hidden", flex: 1, display: "flex", flexDirection: "column" }}
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  minHeight: 0,
+                }}
               >
                 <ConversationList
                   conversations={conversationList}
@@ -279,98 +293,166 @@ function Conversations() {
 
           {/* PANEL DE CHAT CON PESTAÑAS */}
           <Grid item xs={12} md={8} lg={8}>
-            <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column" }}>
-              <SoftBox p={2} sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                {/* Tabs tipo carpeta */}
-                <Tabs
-                  value={activeTab}
-                  onChange={(e, newValue) => setActiveTab(newValue)}
-                  variant="scrollable"
-                  scrollButtons="auto"
-                  sx={{
-                    minHeight: "48px",
-                    mb: 2,
-                    borderBottom: "1px solid #ccc",
+            <Card
+              sx={{
+                height: "calc(100vh - 120px)",
+                display: "flex",
+                flexDirection: "column",
+                borderRadius: 0,
+              }}
+            >
+              <SoftBox
+                sx={{
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  position: "relative",
+                }}
+              >
+                <DragDropContext
+                  onDragEnd={(result) => {
+                    const { source, destination } = result;
+                    if (!destination) return;
+
+                    const reordered = Array.from(openTabs);
+                    const [moved] = reordered.splice(source.index, 1);
+                    reordered.splice(destination.index, 0, moved);
+                    setOpenTabs(reordered);
                   }}
                 >
-                  {openTabs.map((tab) => {
-                    const isActive = activeTab === tab.id;
+                  <Droppable droppableId="tabs" direction="horizontal">
+                    {(provided) => (
+                      <Box
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        sx={{ overflow: "visible" }}
+                      >
+                        <Tabs
+                          value={activeTab}
+                          onChange={(e, newValue) => setActiveTab(newValue)}
+                          variant="scrollable"
+                          scrollButtons="auto"
+                          allowScrollButtonsMobile
+                          sx={{
+                            minHeight: "56px",
+                            px: 0,
+                            mb: 2,
+                            borderRadius: 0,
+                            overflow: "visible",
+                            "& .MuiTabs-scrollButtons": {
+                              mx: 0,
+                              backgroundColor: "transparent",
+                              zIndex: 2,
+                            },
+                          }}
+                        >
+                          {openTabs.map((tab, index) => {
+                            const isActive = activeTab === tab.id;
 
-                    return (
-                      <Tab
-                        key={tab.id}
-                        value={tab.id}
-                        label={
-                          <Tooltip title={tab.alias || `Usuario ${tab.id.slice(-4)}`} arrow>
-                            <Box
-                              display="flex"
-                              alignItems="center"
-                              justifyContent="space-between"
-                              sx={{
-                                maxWidth: isActive ? "none" : 150, // ❗ solo las inactivas se limitan
-                                flexShrink: isActive ? 0 : 1, // ❗ evita que la activa se comprima
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              <Box
-                                component="span"
-                                sx={{
-                                  flexGrow: 1,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                }}
-                              >
-                                {tab.alias || `Usuario ${tab.id.slice(-4)}`}
-                              </Box>
+                            return (
+                              <Draggable draggableId={tab.id.toString()} index={index} key={tab.id}>
+                                {(provided) => (
+                                  <Box
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    sx={{ display: "flex" }}
+                                  >
+                                    <Tab
+                                      value={tab.id}
+                                      label={
+                                        <Tooltip
+                                          title={tab.alias || `Usuario ${tab.id.slice(-4)}`}
+                                          arrow
+                                        >
+                                          <Box
+                                            display="flex"
+                                            alignItems="center"
+                                            justifyContent="space-between"
+                                            sx={{
+                                              maxWidth: { xs: 140, sm: 160, md: 180, lg: 200 },
+                                              flexShrink: 0,
+                                              overflow: "hidden",
+                                              whiteSpace: "nowrap",
+                                              textOverflow: "ellipsis",
+                                              pl: 0.8,
+                                              pr: 0.1,
+                                              gap: 0.5,
+                                            }}
+                                          >
+                                            <Box
+                                              component="span"
+                                              sx={{
+                                                flexGrow: 1,
+                                                overflow: "hidden",
+                                                textOverflow: "ellipsis",
+                                                color: isActive ? "#fff" : "inherit",
+                                              }}
+                                            >
+                                              {tab.alias || `Usuario ${tab.id.slice(-4)}`}
+                                            </Box>
 
-                              <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOpenTabs((prev) => {
-                                    const updated = prev.filter((t) => t.id !== tab.id);
-                                    if (activeTab === tab.id) {
-                                      setActiveTab(updated[0]?.id || null);
-                                    }
-                                    return updated;
-                                  });
-                                }}
-                                sx={{
-                                  ml: 1,
-                                  color: isActive ? "#fff" : "inherit",
-                                  padding: "2px",
-                                }}
-                              >
-                                <CloseIcon fontSize="small" />
-                              </IconButton>
-                            </Box>
-                          </Tooltip>
-                        }
-                        sx={{
-                          textTransform: "none",
-                          minHeight: "48px",
-                          px: 1.5,
-                          fontWeight: isActive ? "bold" : "normal",
-                          borderTopLeftRadius: "8px",
-                          borderTopRightRadius: "8px",
-                          bgcolor: isActive ? "info.main" : "transparent",
-                          flexShrink: 0, // <--- importante para scroll correcto
-                          "&.Mui-selected": {
-                            bgcolor: "info.main",
-                          },
-                          "&.Mui-selected .MuiTab-wrapper": {
-                            color: "#fff",
-                          },
-                          "&:hover": {
-                            bgcolor: isActive ? "info.dark" : "action.hover",
-                          },
-                        }}
-                      />
-                    );
-                  })}
-                </Tabs>
+                                            <IconButton
+                                              size="small"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setOpenTabs((prev) => {
+                                                  const updated = prev.filter(
+                                                    (t) => t.id !== tab.id
+                                                  );
+                                                  if (activeTab === tab.id) {
+                                                    setActiveTab(updated[0]?.id || null);
+                                                  }
+                                                  return updated;
+                                                });
+                                              }}
+                                              sx={{
+                                                ml: 1,
+                                                padding: "2px",
+                                                color: isActive ? "#fff" : "inherit",
+                                              }}
+                                            >
+                                              <CloseIcon fontSize="small" />
+                                            </IconButton>
+                                          </Box>
+                                        </Tooltip>
+                                      }
+                                      sx={{
+                                        textTransform: "none",
+                                        minHeight: "56px",
+                                        px: 2,
+                                        fontWeight: isActive ? "bold" : "normal",
+                                        mr: 0.5,
+                                        borderTopLeftRadius: "8px",
+                                        borderTopRightRadius: "8px",
+                                        borderBottomLeftRadius: 0,
+                                        borderBottomRightRadius: 0,
+                                        flexShrink: 0,
+                                        bgcolor: isActive ? "info.main" : "transparent",
+                                        zIndex: isActive ? 3 : 1,
+                                        "&.Mui-selected": {
+                                          bgcolor: "info.main",
+                                          boxShadow: "0px 8px 16px rgba(0, 0, 0, 0.3)",
+                                        },
+                                        "&.Mui-selected .MuiTab-wrapper": {
+                                          color: "#fff",
+                                        },
+                                        "&:hover": {
+                                          bgcolor: isActive ? "info.dark" : "action.hover",
+                                        },
+                                      }}
+                                    />
+                                  </Box>
+                                )}
+                              </Draggable>
+                            );
+                          })}
+                          {provided.placeholder}
+                        </Tabs>
+                      </Box>
+                    )}
+                  </Droppable>
+                </DragDropContext>
 
                 {/* Panel de chat activo */}
                 {selectedConversation ? (

@@ -33,6 +33,7 @@
     "lucide-react": "^0.510.0",
     "prop-types": "^15.8.1",
     "react": ">=16.8.0",
+    "react-beautiful-dnd": "^13.1.1",
     "react-chartjs-2": "3.0.5",
     "react-color": "^2.19.3",
     "react-countup": "6.4.2",

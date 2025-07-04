@@ -58,23 +58,32 @@ function ChatPanel({
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      {/* Header del chat (Fijo) */}
+      {/* Encabezado fijo */}
       <Box
         sx={{
           px: 2,
-          pt: 2,
-          pb: 1,
+          pb: 2,
           borderBottom: "1px solid #eee",
+          bgcolor: "white",
           zIndex: 1,
-          bgcolor: "white", // fondo blanco para que no se mezcle con scroll
         }}
       >
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <SoftTypography variant="h6" fontWeight="bold" noWrap>
+        <Box
+          display="flex"
+          justifyContent="space-between"
+          alignItems="center"
+          height={20} // 👈 altura fija coherente
+        >
+          <SoftTypography
+            variant="subtitle1" // 👈 un poco más compacto
+            fontWeight="bold"
+            noWrap
+            sx={{ maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis" }}
+          >
             Chat con {userName}
           </SoftTypography>
 
-          <Box display="flex" alignItems="center" gap={1}>
+          <Box display="flex" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
             <Tooltip title={`Estado: ${status}`}>
               <Chip
                 label={status.toUpperCase()}
@@ -84,8 +93,10 @@ function ChatPanel({
                 size="small"
                 sx={{
                   fontWeight: "bold",
+                  height: 28, // 👈 altura fija para alinear
                   "& .MuiChip-label": {
                     color: "white !important",
+                    px: 1,
                   },
                 }}
               />
@@ -93,12 +104,17 @@ function ChatPanel({
 
             {blocked && (
               <Tooltip title="Usuario bloqueado">
-                <Chip label="Bloqueado" color="error" size="small" sx={{ fontWeight: "bold" }} />
+                <Chip
+                  label="Bloqueado"
+                  color="error"
+                  size="small"
+                  sx={{ fontWeight: "bold", height: 28 }}
+                />
               </Tooltip>
             )}
 
-            <IconButton onClick={handleOpenMenu}>
-              <MoreVertIcon />
+            <IconButton size="small" onClick={handleOpenMenu}>
+              <MoreVertIcon fontSize="small" />
             </IconButton>
 
             <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
@@ -118,17 +134,17 @@ function ChatPanel({
         </Box>
       </Box>
 
-      {/* Mensajes con scroll interno */}
+      {/* ÁREA DE BURBUJAS SCROLLEABLE */}
       <Box
         sx={{
           flex: 1,
           overflowY: "auto",
+          px: 2,
+          py: 2,
           display: "flex",
           flexDirection: "column",
-          px: 2,
-          pt: 2,
-          pb: 1,
-          minHeight: 0,
+          minHeight: 0, // 🛑 Esto es CLAVE para que el scroll funcione dentro del flexbox
+          bgcolor: "#f9f9f9",
         }}
       >
         {messages.map((msg, idx) => (
@@ -138,8 +154,17 @@ function ChatPanel({
         <div ref={bottomRef} />
       </Box>
 
-      {/* Input y controles (parte inferior fija) */}
-      <Box px={2} pt={1} pb={2} sx={{ borderTop: "1px solid #eee", bgcolor: "white" }}>
+      {/* Input fijo abajo */}
+      <Box
+        sx={{
+          px: 2,
+          pt: 1,
+          pb: 2,
+          borderTop: "1px solid #eee",
+          bgcolor: "white",
+          zIndex: 1,
+        }}
+      >
         {iaPaused && (
           <Box mb={1}>
             <InputChat
