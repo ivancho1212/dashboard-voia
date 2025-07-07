@@ -17,7 +17,8 @@ function WidgetFrame() {
         fontFamily="Arial"
         headerBackgroundColor="#F3F4F6"
         position="bottom-right"
-        avatarUrl="/logo192.png"
+        avatarUrl=""
+
       />
     </div>
   );

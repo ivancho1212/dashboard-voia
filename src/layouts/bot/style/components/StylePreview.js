@@ -2,6 +2,8 @@ import React from "react";
 import PropTypes from "prop-types";
 import ChatWidget from "./ChatWidget";
 
+const DEFAULT_AVATAR = "/voai.gif";
+
 export default function StylePreview({ style }) {
   console.log("[DEBUG] Datos recibidos en StylePreview:", style);
 
@@ -11,9 +13,9 @@ export default function StylePreview({ style }) {
         theme={style?.theme}
         primaryColor={style?.primaryColor}
         secondaryColor={style?.secondaryColor}
-        headerBackgroundColor={style?.headerBackgroundColor} // ✅ ← nuevo
+        headerBackgroundColor={style?.headerBackgroundColor}
         fontFamily={style?.fontFamily}
-        avatarUrl={style?.avatarUrl}
+        avatarUrl={style?.avatarUrl?.trim() ? style.avatarUrl : DEFAULT_AVATAR}
         position={style?.position}
       />
     </div>
@@ -25,7 +27,7 @@ StylePreview.propTypes = {
     theme: PropTypes.oneOf(["light", "dark", "custom"]),
     primaryColor: PropTypes.string,
     secondaryColor: PropTypes.string,
-    headerBackgroundColor: PropTypes.string, // ✅ ← nuevo
+    headerBackgroundColor: PropTypes.string,
     fontFamily: PropTypes.string,
     avatarUrl: PropTypes.string,
     position: PropTypes.oneOf([

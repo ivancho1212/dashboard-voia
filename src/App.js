@@ -25,7 +25,7 @@ import { CacheProvider } from "@emotion/react";
 import createCache from "@emotion/cache";
 
 // Rutas consolidadas desde src/routes/index.js
-import routes from "routes/index";  // Modificado para apuntar al archivo 'index.js'
+import routes from "routes/index"; // Modificado para apuntar al archivo 'index.js'
 
 // Soft UI Dashboard React contexts
 import { useSoftUIController, setMiniSidenav, setOpenConfigurator } from "context";
@@ -39,6 +39,7 @@ export default function App() {
   const [onMouseEnter, setOnMouseEnter] = useState(false);
   const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
+  const isWidgetFrame = pathname === "/widget-frame";
 
   // Cache for the rtl
   useMemo(() => {
@@ -121,7 +122,7 @@ export default function App() {
     <CacheProvider value={rtlCache}>
       <ThemeProvider theme={themeRTL}>
         <CssBaseline />
-        {layout === "dashboard" && (
+        {!isWidgetFrame && layout === "dashboard" && (
           <>
             <Sidenav
               color={sidenavColor}
@@ -134,7 +135,8 @@ export default function App() {
             {configsButton}
           </>
         )}
-        {layout === "vr" && <Configurator />}
+
+        {!isWidgetFrame && layout === "vr" && <Configurator />}
         <Routes>
           {getRoutes(routes)}
           <Route path="*" element={<Navigate to="/dashboard" />} />
@@ -144,7 +146,7 @@ export default function App() {
   ) : (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {layout === "dashboard" && (
+      {!isWidgetFrame && layout === "dashboard" && (
         <>
           <Sidenav
             color={sidenavColor}
@@ -157,7 +159,7 @@ export default function App() {
           {configsButton}
         </>
       )}
-      {layout === "vr" && <Configurator />}
+      {!isWidgetFrame && layout === "vr" && <Configurator />}
       <Routes>
         {getRoutes(routes)}
         <Route path="*" element={<Navigate to="/dashboard" />} />

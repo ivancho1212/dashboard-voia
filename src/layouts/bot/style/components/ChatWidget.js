@@ -29,6 +29,8 @@ function ChatWidget({
 
   const conversationId = `bot-${botId}-user-${userId}`;
   const [iaWarning, setIaWarning] = useState(null);
+  const textareaRef = useRef(null);
+  const [typingSender, setTypingSender] = useState(null);
 
   const waitForConnection = async (retries = 5) => {
     while (connection.state !== "Connected" && retries > 0) {
@@ -90,7 +92,20 @@ function ChatWidget({
       try {
         await waitForConnection();
         await connection.invoke("SendFile", conversationId, payload);
-        console.log("✅ Documentos enviados");
+        // 👉 Este mensaje es simbólico, solo para que la IA lo vea como texto
+        const phantomMessage = {
+          botId,
+          userId,
+          question:
+            "📎 El usuario ha enviado un archivo para revisión manual. No es necesario procesarlo.",
+        };
+
+        try {
+          await connection.invoke("SendMessage", conversationId, phantomMessage);
+          console.log("📨 Mensaje fantasma enviado a la IA");
+        } catch (err) {
+          console.error("❌ Error enviando mensaje fantasma:", err);
+        }
       } catch (err) {
         console.error("❌ Error enviando documentos:", err);
       }
@@ -142,7 +157,21 @@ function ChatWidget({
       try {
         await waitForConnection();
         await connection.invoke("SendFile", conversationId, payload);
-        console.log("✅ Imágenes enviadas");
+        // 👉 Este mensaje es simbólico, solo para que la IA lo vea como texto
+        const phantomMessage = {
+          botId,
+          userId,
+          question:
+            "📎 El usuario ha enviado un archivo para revisión manual. No es necesario procesarlo.",
+          meta: { internalOnly: true },
+        };
+
+        try {
+          await connection.invoke("SendMessage", conversationId, phantomMessage);
+          console.log("📨 Mensaje fantasma enviado a la IA");
+        } catch (err) {
+          console.error("❌ Error enviando mensaje fantasma:", err);
+        }
       } catch (err) {
         console.error("❌ Error enviando imágenes agrupadas:", err);
       }
@@ -153,9 +182,11 @@ function ChatWidget({
   useEffect(() => {
     const startConnection = async () => {
       try {
-        if (connection.state !== "Connected") {
+        if (connection.state === "Disconnected") {
           await connection.start();
           console.log("✅ Conectado a SignalR");
+        } else {
+          console.log("🔄 SignalR ya está conectado o en proceso:", connection.state);
         }
 
         await waitForConnection();
@@ -173,6 +204,15 @@ function ChatWidget({
       // 🕐 Simula latencia de IA (1.5s - 3s)
       const delay = Math.random() * 1500 + 1500;
       await new Promise((res) => setTimeout(res, delay));
+
+      // 🔒 Evitar mostrar mensajes fantasma al usuario
+      const isPhantomMessage = msg.text?.includes(
+        "📎 El usuario ha enviado un archivo para revisión manual"
+      );
+      if (isPhantomMessage) {
+        setIsTyping(false);
+        return; // ❌ No lo agregues al chat
+      }
 
       if (msg.multipleFiles && Array.isArray(msg.multipleFiles)) {
         setMessages((prev) => [
@@ -204,8 +244,9 @@ function ChatWidget({
       setIsTyping(false);
     };
 
-    const handleTyping = () => {
+    const handleTyping = (sender = "bot") => {
       setIsTyping(true);
+      setTypingSender(sender); // puede ser "bot" o "user" si en el futuro lo usas
     };
 
     const handleClose = (error) => {
@@ -222,6 +263,7 @@ function ChatWidget({
       connection.off("onclose", handleClose);
     };
   }, [conversationId]);
+
   useEffect(() => {
     if (isOpen && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -256,13 +298,11 @@ function ChatWidget({
 
     const msg = message.trim();
     setMessage("");
-    setIsTyping(true);
 
     const payload = { botId, userId, question: msg };
 
-    // 🔌 Asegúrate de tener conexión
+    // 🔌 Asegura conexión antes de enviar
     if (connection.state !== "Connected") {
-      console.warn("🔌 SignalR no está conectado todavía.");
       try {
         await connection.start();
         await waitForConnection();
@@ -273,10 +313,8 @@ function ChatWidget({
       }
     }
 
-    // ✅ Crear conversación si no existe
     try {
       await createConversation({ userId, botId });
-      console.log("✅ Conversación creada o ya existente");
     } catch (error) {
       console.warn(
         "⚠️ Conversación ya existente o error al crearla:",
@@ -284,7 +322,6 @@ function ChatWidget({
       );
     }
 
-    // 🚀 Enviar mensaje
     try {
       await connection.invoke("SendMessage", conversationId, payload);
     } catch (err) {
@@ -463,6 +500,14 @@ function ChatWidget({
     ...positionStyles[position],
   };
 
+  const autoResizeTextarea = () => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto"; // reset
+      textarea.style.height = `${textarea.scrollHeight}px`; // set nueva altura
+    }
+  };
+
   return (
     <div style={wrapperStyle}>
       {!isOpen ? (
@@ -599,7 +644,24 @@ function ChatWidget({
               padding: "16px",
             }}
           >
-            <div style={{ fontSize: "14px", color: textColor }}>Hola, ¿en qué puedo ayudarte?</div>
+            <div
+              style={{
+                fontSize: "10.5px",
+                color: isColorDark(backgroundColor) ? "#e0e0e0" : "#333333",
+                backgroundColor: isColorDark(backgroundColor)
+                  ? "rgba(255, 255, 255, 0.07)"
+                  : "rgba(0, 0, 0, 0.04)",
+                padding: "10px 16px",
+                borderRadius: "14px",
+                width: "100%", // 🔄 hace que ocupe todo el ancho del chat
+                margin: "-6px 0 10px 0", // 🔽 margen superior reducido, espacio inferior normal
+                textAlign: "center", // 🔁 centrado opcional
+                boxSizing: "border-box", // 🧱 asegura que padding no desborde
+              }}
+            >
+              Nuestro asistente virtual está potenciado por IA y supervisión humana para ofrecer
+              respuestas precisas y seguras.
+            </div>
 
             {messages.map((msg, index) => {
               const isUser = msg.from === "user";
@@ -710,7 +772,7 @@ function ChatWidget({
               );
             })}
 
-            {isTyping && (
+            {isTyping && typingSender === "bot" && (
               <div
                 style={{
                   alignSelf: "flex-start",
@@ -729,7 +791,6 @@ function ChatWidget({
                   fontSize: "14px",
                   fontStyle: "italic",
                   opacity: 0.7,
-                  // 🔥 Le aplicamos también sombra
                   border: "none",
                   boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
                 }}
@@ -737,6 +798,7 @@ function ChatWidget({
                 Escribiendo...
               </div>
             )}
+
             <div ref={messagesEndRef} />
           </div>
 
@@ -787,16 +849,35 @@ function ChatWidget({
               />
             </label>
 
-            {/* 📝 Input */}
-            <input
-              type="text"
+            {/* 📝 Textarea adaptativa */}
+            <textarea
+              ref={textareaRef}
               placeholder="Escribe un mensaje..."
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              onChange={(e) => {
+                setMessage(e.target.value);
+                autoResizeTextarea();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMessage();
+                  setMessage(""); // 🧹 Limpiar input
+
+                  // Esperar al siguiente ciclo de render y resetear altura
+                  requestAnimationFrame(() => {
+                    if (textareaRef.current) {
+                      textareaRef.current.style.height = "auto";
+                    }
+                  });
+                }
+              }}
+              rows={1}
               style={{
                 width: "100%",
-                padding: "10px 42px 10px 70px", // ✅ más espacio a la izquierda
+                minHeight: "42px",
+                maxHeight: "160px", // opcional: altura máxima
+                padding: "10px 42px 10px 70px",
                 borderRadius: "12px",
                 border: `1.5px solid ${inputBorder}`,
                 fontFamily,
@@ -804,18 +885,21 @@ function ChatWidget({
                 outline: "none",
                 color: inputText,
                 backgroundColor: inputBg,
+                resize: "none",
+                overflow: "", // ⛔ oculta scroll
                 boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                lineHeight: "1.5",
               }}
             />
 
-            {/* 🚀 Enviar dentro del input */}
+            {/* 🚀 Icono de enviar */}
             <FaPaperPlane
               onClick={sendMessage}
               style={{
                 position: "absolute",
                 right: "20px",
                 top: "50%",
-                transform: "translateY(-55%)",
+                transform: "translateY(-50%)",
                 color: inputText,
                 fontSize: "18px",
                 cursor: "pointer",
