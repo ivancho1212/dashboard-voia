@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import * as signalR from "@microsoft/signalr";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
-import voaiGif from "../../../../assets/images/voai.gif";
 import connection from "services/signalr";
 import { createConversation } from "services/botConversationsService";
+const voaiGif = "/voai.gif"; // ✅ Ruta relativa al dominio público
 
 function ChatWidget({
   title = "Voia",
@@ -15,15 +14,19 @@ function ChatWidget({
   fontFamily = "Arial",
   avatarUrl,
   position = "bottom-right",
+  botId: propBotId,
+  userId: propUserId,
 }) {
+  const botId = propBotId ?? 1;
+  const userId = propUserId ?? 45;
+
   const [isOpen, setIsOpen] = useState(false);
   const themeKey = initialTheme || "light";
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
+  const messagesEndRef = useRef(null);
 
-  const botId = 1;
-  const userId = 45;
   const conversationId = `bot-${botId}-user-${userId}`;
   const [iaWarning, setIaWarning] = useState(null);
 
@@ -37,6 +40,113 @@ function ChatWidget({
     if (connection.state !== "Connected") {
       throw new Error("❌ No se pudo establecer conexión con SignalR.");
     }
+  };
+  // ⬇️ Pega esto después de `waitForConnection` y antes de `useEffect`
+  const handleFileUpload = (event) => {
+    const files = Array.from(event.target.files);
+    const maxSizeInMB = 5;
+    const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
+
+    const filePayloads = [];
+
+    const promises = files.map((file) => {
+      return new Promise((resolve) => {
+        if (!file || file.type.startsWith("image/")) {
+          console.warn(`❌ ${file?.name} es una imagen o archivo inválido.`);
+          return resolve(null);
+        }
+
+        if (file.size > maxSizeInBytes) {
+          alert(`❌ ${file.name} excede los ${maxSizeInMB}MB permitidos.`);
+          return resolve(null);
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Data = reader.result.split(",")[1]; // Quita el "data:...base64,"
+          filePayloads.push({
+            fileName: file.name,
+            fileType: file.type,
+            fileContent: base64Data,
+          });
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(promises).then(async () => {
+      if (filePayloads.length === 0) {
+        console.warn("⚠️ Archivo inválido o vacío.");
+        return;
+      }
+
+      const payload = {
+        botId,
+        userId,
+        multipleFiles: filePayloads,
+      };
+
+      try {
+        await waitForConnection();
+        await connection.invoke("SendFile", conversationId, payload);
+        console.log("✅ Documentos enviados");
+      } catch (err) {
+        console.error("❌ Error enviando documentos:", err);
+      }
+    });
+  };
+
+  const handleImageUpload = (event) => {
+    const files = Array.from(event.target.files);
+    const maxSizeInMB = 5;
+    const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
+
+    const imagePayloads = [];
+
+    const promises = files.map((file) => {
+      return new Promise((resolve) => {
+        if (!file.type.startsWith("image/")) {
+          alert(`❌ ${file.name} no es una imagen válida.`);
+          return resolve(null);
+        }
+
+        if (file.size > maxSizeInBytes) {
+          alert(`❌ ${file.name} excede los ${maxSizeInMB}MB permitidos.`);
+          return resolve(null);
+        }
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Data = reader.result.split(",")[1]; // Elimina el header "data:image/..."
+          imagePayloads.push({
+            fileName: file.name,
+            fileType: file.type,
+            fileContent: base64Data,
+          });
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(promises).then(async () => {
+      if (imagePayloads.length === 0) return;
+
+      const payload = {
+        botId,
+        userId,
+        multipleFiles: imagePayloads,
+      };
+
+      try {
+        await waitForConnection();
+        await connection.invoke("SendFile", conversationId, payload);
+        console.log("✅ Imágenes enviadas");
+      } catch (err) {
+        console.error("❌ Error enviando imágenes agrupadas:", err);
+      }
+    });
   };
 
   // ✅ SignalR Setup
@@ -57,10 +167,37 @@ function ChatWidget({
 
     startConnection();
 
-    const handleReceiveMessage = (msg) => {
-      setMessages((prev) => [...prev, { from: msg.from, text: msg.text }]);
+    const handleReceiveMessage = async (msg) => {
+      setIsTyping(true);
 
-      if (msg.text.includes("aún no está conectado")) {
+      // 🕐 Simula latencia de IA (1.5s - 3s)
+      const delay = Math.random() * 1500 + 1500;
+      await new Promise((res) => setTimeout(res, delay));
+
+      if (msg.multipleFiles && Array.isArray(msg.multipleFiles)) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            from: msg.from,
+            files: msg.multipleFiles,
+            timestamp: msg.timestamp || new Date().toISOString(),
+          },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            from: msg.from,
+            text: msg.text || null,
+            fileName: msg.fileName || null,
+            fileType: msg.fileType || null,
+            fileContent: msg.fileContent || null,
+            timestamp: msg.timestamp || new Date().toISOString(),
+          },
+        ]);
+      }
+
+      if (msg.text?.includes("aún no está conectado")) {
         setIaWarning("Este bot aún no está conectado a una IA. Pronto estará disponible.");
       }
 
@@ -85,6 +222,33 @@ function ChatWidget({
       connection.off("onclose", handleClose);
     };
   }, [conversationId]);
+  useEffect(() => {
+    if (isOpen && messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    const iniciarConversacionConContexto = async () => {
+      try {
+        await waitForConnection();
+        await connection.invoke("InitializeContext", conversationId, { botId, userId });
+        console.log("📡 Contexto inicial enviado al bot");
+      } catch (error) {
+        console.error("❌ Error enviando contexto inicial:", error);
+      }
+    };
+
+    if (isOpen && messages.length === 0) {
+      iniciarConversacionConContexto();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isTyping]);
 
   // ✅ Enviar mensaje
   const sendMessage = async () => {
@@ -299,37 +463,6 @@ function ChatWidget({
     ...positionStyles[position],
   };
 
-  // ✅ Manejo de archivos adjuntos
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const maxSizeInMB = 5;
-    const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
-
-    if (file.size > maxSizeInBytes) {
-      alert(`El archivo no debe superar los ${maxSizeInMB}MB.`);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const payload = {
-        botId,
-        userId,
-        fileName: file.name,
-        fileType: file.type,
-        fileContent: reader.result, // 🔥 base64
-      };
-
-      connection
-        .invoke("SendFile", conversationId, payload)
-        .catch((err) => console.error("❌ Error enviando archivo:", err));
-    };
-
-    reader.readAsDataURL(file);
-  };
-
   return (
     <div style={wrapperStyle}>
       {!isOpen ? (
@@ -364,7 +497,7 @@ function ChatWidget({
             }}
           >
             <img
-              src={avatarUrl || voaiGif}
+              src={avatarUrl?.trim() ? avatarUrl : voaiGif}
               alt="Avatar"
               style={{
                 width: "60px",
@@ -402,7 +535,7 @@ function ChatWidget({
               }}
             >
               <img
-                src={avatarUrl || voaiGif}
+                src={avatarUrl?.trim() ? avatarUrl : voaiGif}
                 alt="Avatar"
                 style={{
                   width: "42px",
@@ -471,7 +604,7 @@ function ChatWidget({
             {messages.map((msg, index) => {
               const isUser = msg.from === "user";
 
-              const messageStyle = {
+              const containerStyle = {
                 alignSelf: isUser ? "flex-end" : "flex-start",
                 backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
                 color: "#1a1a1a",
@@ -481,14 +614,98 @@ function ChatWidget({
                 wordBreak: "break-word",
                 fontSize: "14px",
                 fontFamily,
-                // 🔥 Cambios aquí:
-                border: "none", // ❌ Quitamos el borde
-                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)", // ✅ Sombra suave
+                border: "none",
+                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
+                display: "flex",
+                flexDirection: "column",
               };
 
               return (
-                <div key={index} style={messageStyle}>
-                  {msg.text}
+                <div key={index} style={containerStyle}>
+                  {/* 📎 Archivos múltiples */}
+                  {msg.files && Array.isArray(msg.files) && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                      {msg.files.map((file, i) =>
+                        file.fileType?.startsWith("image/") ? (
+                          <img
+                            key={i}
+                            src={`data:${file.fileType};base64,${file.fileContent}`}
+                            alt={file.fileName}
+                            style={{
+                              maxWidth: "120px",
+                              maxHeight: "120px",
+                              borderRadius: "8px",
+                            }}
+                          />
+                        ) : (
+                          <a
+                            key={i}
+                            href={`data:${file.fileType};base64,${file.fileContent}`}
+                            download={file.fileName}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: "block",
+                              color: "#007bff",
+                              textDecoration: "underline",
+                            }}
+                          >
+                            📎 {file.fileName}
+                          </a>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                  {/* 📄 Archivo o imagen individual */}
+                  {!msg.files && msg.fileContent && msg.fileName ? (
+                    msg.fileType?.startsWith("image/") ? (
+                      <img
+                        src={`data:${msg.fileType};base64,${msg.fileContent}`}
+                        alt={msg.fileName}
+                        style={{
+                          maxWidth: "100%",
+                          borderRadius: "8px",
+                          marginBottom: "4px",
+                        }}
+                      />
+                    ) : (
+                      <a
+                        href={`data:${msg.fileType};base64,${msg.fileContent}`}
+                        download={msg.fileName}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          color: "#007bff",
+                          textDecoration: "underline",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        📎 {msg.fileName}
+                      </a>
+                    )
+                  ) : null}
+
+                  {/* 💬 Texto */}
+                  {msg.text && <span>{msg.text}</span>}
+
+                  {/* 🕒 Timestamp */}
+                  {msg.timestamp && (
+                    <span
+                      style={{
+                        fontSize: "10px",
+                        color: "#555",
+                        marginTop: "4px",
+                        alignSelf: "flex-end",
+                        opacity: 0.7,
+                      }}
+                    >
+                      {new Date(msg.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -520,6 +737,7 @@ function ChatWidget({
                 Escribiendo...
               </div>
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* 📝 Input + Adjuntar + Enviar */}
@@ -529,6 +747,27 @@ function ChatWidget({
               padding: "10px 10px", // Margen externo (opcional, puedes ajustar)
             }}
           >
+            {/* 🖼️ Subir imágenes (solo imágenes, múltiples) */}
+            <label
+              style={{
+                position: "absolute",
+                left: "50px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                cursor: "pointer",
+              }}
+              title="Enviar imágenes"
+            >
+              <FaImage style={{ color: inputText, fontSize: "18px" }} />
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: "none" }}
+                onChange={handleImageUpload}
+              />
+            </label>
+
             {/* 📎 Adjuntar dentro del input */}
             <label
               style={{
@@ -542,7 +781,7 @@ function ChatWidget({
               <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
               <input
                 type="file"
-                accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
                 style={{ display: "none" }}
                 onChange={handleFileUpload}
               />
@@ -557,7 +796,7 @@ function ChatWidget({
               onKeyDown={(e) => e.key === "Enter" && sendMessage()}
               style={{
                 width: "100%",
-                padding: "10px 42px 10px 42px", // 👈 espacio a ambos lados para íconos
+                padding: "10px 42px 10px 70px", // ✅ más espacio a la izquierda
                 borderRadius: "12px",
                 border: `1.5px solid ${inputBorder}`,
                 fontFamily,
@@ -604,12 +843,14 @@ function ChatWidget({
 
 // ✅ Esto va después de la función
 ChatWidget.propTypes = {
+  botId: PropTypes.number.isRequired,
+  userId: PropTypes.number.isRequired,
   title: PropTypes.string,
   theme: PropTypes.oneOf(["light", "dark", "custom"]).isRequired,
   primaryColor: PropTypes.string,
   secondaryColor: PropTypes.string,
-  headerBackgroundColor: PropTypes.string, // 👈 Agrega si usas este color también
-  fontFamily: PropTypes.string, // 👈 ✅ Este es el que está faltando
+  headerBackgroundColor: PropTypes.string,
+  fontFamily: PropTypes.string,
   avatarUrl: PropTypes.string,
   position: PropTypes.oneOf([
     "bottom-right",

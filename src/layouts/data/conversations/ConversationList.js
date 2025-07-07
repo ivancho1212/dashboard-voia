@@ -16,7 +16,7 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import ConversationActions from "./ConversationActions";
 
-function ConversationList({ conversations, onSelect, onStatusChange, onBlock }) {
+function ConversationList({ conversations, messagesMap, onSelect, onStatusChange, onBlock }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -38,9 +38,14 @@ function ConversationList({ conversations, onSelect, onStatusChange, onBlock }) 
       return true;
     })
 
-    .filter((conv) =>
-      `${conv.alias || ""} ${conv.lastMessage || ""}`.toLowerCase().includes(search.toLowerCase())
-    );
+    .filter((conv) => {
+      const convId = `${conv.id}`; // 👈 asegura que es string
+
+      const textToSearch = `${conv.alias || ""} ${conv.lastMessage || ""}`;
+      const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
+
+      return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
+    });
 
   return (
     <Box display="flex" flexDirection="column" sx={{ height: "100%", minHeight: 0 }}>
@@ -94,7 +99,8 @@ function ConversationList({ conversations, onSelect, onStatusChange, onBlock }) 
               sx={{
                 mb: 0.5,
                 borderRadius: "8px",
-                padding: "10px 12px",
+                padding: "12px",
+                paddingLeft: "20px",
                 backgroundColor: "#f5f5f5",
                 "&:hover": {
                   backgroundColor: "#d0f0f6",
@@ -116,53 +122,75 @@ function ConversationList({ conversations, onSelect, onStatusChange, onBlock }) 
                   {conv.alias || `Usuario ${conv.id.slice(-4)}`}
                 </Typography>
 
-                <Typography variant="body2" color="text.secondary" noWrap sx={{ fontSize: "13px" }}>
-                  {conv.lastMessage}
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "13px" }}>
+                  {(() => {
+                    const lowerSearch = search.toLowerCase();
+                    const matchMessage = (messagesMap[conv.id] || []).find((msg) =>
+                      msg.text?.toLowerCase().includes(lowerSearch)
+                    );
+
+                    if (!search || !matchMessage) return conv.lastMessage;
+
+                    const index = matchMessage.text.toLowerCase().indexOf(lowerSearch);
+                    const start = Math.max(index - 20, 0);
+                    const end = Math.min(index + lowerSearch.length + 20, matchMessage.text.length);
+                    const fragment = matchMessage.text.slice(start, end);
+
+                    // Opcional: resaltamos el texto buscado
+                    const before = fragment.slice(0, index - start);
+                    const match = fragment.slice(index - start, index - start + lowerSearch.length);
+                    const after = fragment.slice(index - start + lowerSearch.length);
+
+                    return (
+                      <>
+                        ...{before}
+                        <strong style={{ backgroundColor: "#ffff00" }}>{match}</strong>
+                        {after}...
+                      </>
+                    );
+                  })()}
                 </Typography>
               </Box>
 
               {/* Estado + tiempo + acciones */}
-              <Box
-                minWidth="105px"
-                display="flex"
-                flexDirection="column"
-                alignItems="flex-end"
-                justifyContent="center"
-                gap={0.5}
-              >
-                <Chip
-                  label={conv.status.toUpperCase()}
-                  color={
-                    conv.status === "pendiente"
-                      ? "warning"
-                      : conv.status === "resuelta"
-                      ? "success"
-                      : conv.status === "cerrada"
-                      ? "default"
-                      : "info"
-                  }
-                  size="small"
-                  sx={{
-                    fontSize: "11px",
-                    height: "22px",
-                    fontWeight: "bold",
-                    "& .MuiChip-label": {
-                      color: "white !important",
-                    },
-                  }}
-                />
+              <Box display="flex" alignItems="center" justifyContent="flex-end">
+                {/* Estado + hora, en columna alineados a la derecha */}
+                <Box display="flex" flexDirection="column" alignItems="flex-end">
+                  <Chip
+                    label={conv.status.toUpperCase()}
+                    color={
+                      conv.status === "pendiente"
+                        ? "warning"
+                        : conv.status === "resuelta"
+                        ? "success"
+                        : conv.status === "cerrada"
+                        ? "default"
+                        : "info"
+                    }
+                    size="small"
+                    sx={{
+                      fontSize: "11px",
+                      height: "22px",
+                      fontWeight: "bold",
+                      "& .MuiChip-label": {
+                        color: "white !important",
+                      },
+                    }}
+                  />
 
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{ fontSize: "11px", textAlign: "right" }}
-                >
-                  {formatDistanceToNow(new Date(conv.updatedAt), {
-                    addSuffix: true,
-                    locale: es,
-                  })}
-                </Typography>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ fontSize: "9.5px", mt: 0.6 }}
+                  >
+                    {formatDistanceToNow(new Date(conv.updatedAt), {
+                      addSuffix: true,
+                      locale: es,
+                    })}
+                  </Typography>
+                </Box>
 
+                {/* Botón de acciones (tres puntos) */}
                 <ConversationActions
                   onBlock={() => onBlock(conv.id)}
                   onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
@@ -189,6 +217,15 @@ ConversationList.propTypes = {
       blocked: PropTypes.bool.isRequired,
     })
   ).isRequired,
+  messagesMap: PropTypes.objectOf(
+    PropTypes.arrayOf(
+      PropTypes.shape({
+        text: PropTypes.string.isRequired,
+        from: PropTypes.string,
+        timestamp: PropTypes.string,
+      })
+    )
+  ).isRequired, // 👈 agregado
   onSelect: PropTypes.func.isRequired,
   onStatusChange: PropTypes.func.isRequired,
   onBlock: PropTypes.func.isRequired,

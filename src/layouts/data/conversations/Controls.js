@@ -1,29 +1,46 @@
 import React from "react";
 import PropTypes from "prop-types";
-import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
+import Switch from "@mui/material/Switch";
+import Typography from "@mui/material/Typography";
 
 function Controls({ onToggle, iaPaused }) {
   return (
-    <Box mt={2} display="flex" justifyContent="flex-end">
-      <Button
-        variant="contained"
-        size="medium"
-        onClick={onToggle}
+    <Box
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      sx={{
+        minWidth: 80,
+        px: 1,
+      }}
+    >
+      <Typography
+        variant="caption"
+        color="text.secondary"
         sx={{
-          backgroundColor: iaPaused ? "info.main" : "info.dark",
-          color: "#fff",
-          "&:hover": {
-            backgroundColor: iaPaused ? "info.dark" : "info.main",
-          },
           fontWeight: "bold",
-          px: 3,
-          borderRadius: "8px",
-          textTransform: "none",
+          textAlign: "center",
+          fontSize: "0.7rem",
+          lineHeight: 1.2,
+          mb: 0.3,
         }}
       >
-        {iaPaused ? "Reanudar IA" : "Pausar IA"}
-      </Button>
+        {iaPaused ? "Activa IA" : "Pausar IA"}
+      </Typography>
+
+      <Box
+        sx={{
+          transform: "scale(1.2)", // reduce visualmente el switch sin romper su animación
+          transformOrigin: "center",
+        }}
+      >
+        <Switch
+          checked={!iaPaused}
+          onChange={onToggle}
+          color="info"
+        />
+      </Box>
     </Box>
   );
 }

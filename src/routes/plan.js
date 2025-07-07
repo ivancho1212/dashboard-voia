@@ -1,4 +1,4 @@
-import { FaListAlt, FaClipboardCheck, FaTools } from "react-icons/fa";
+import { FaListAlt, FaTools } from "react-icons/fa";
 
 import Plans from "layouts/plan";
 import PlanChange from "layouts/plan/change";

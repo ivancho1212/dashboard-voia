@@ -72,13 +72,18 @@ function ChatPanel({
           display="flex"
           justifyContent="space-between"
           alignItems="center"
-          height={20} // 👈 altura fija coherente
+          height={25} // 👈 altura fija coherente
         >
           <SoftTypography
-            variant="subtitle1" // 👈 un poco más compacto
-            fontWeight="bold"
+            variant="caption" // 👈 más pequeño que subtitle1
+            fontWeight="500"
             noWrap
-            sx={{ maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis" }}
+            sx={{
+              maxWidth: "60%",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              fontSize: "1rem", // 👈 ajuste fino si quieres aún más pequeño
+            }}
           >
             Chat con {userName}
           </SoftTypography>
@@ -92,11 +97,13 @@ function ChatPanel({
                 }
                 size="small"
                 sx={{
-                  fontWeight: "bold",
-                  height: 28, // 👈 altura fija para alinear
+                  fontSize: "0.7rem", // 👈 texto más pequeño
+                  height: 22, // 👈 altura menor
+                  fontWeight: "500",
                   "& .MuiChip-label": {
                     color: "white !important",
                     px: 1,
+                    lineHeight: "18px",
                   },
                 }}
               />
@@ -105,10 +112,18 @@ function ChatPanel({
             {blocked && (
               <Tooltip title="Usuario bloqueado">
                 <Chip
-                  label="Bloqueado"
+                  label="BLOQUEADO"
                   color="error"
                   size="small"
-                  sx={{ fontWeight: "bold", height: 28 }}
+                  sx={{
+                    fontSize: "0.7rem", // ✅ texto más pequeño
+                    height: 22, // ✅ altura más compacta
+                    fontWeight: 500,
+                    "& .MuiChip-label": {
+                      px: 1, // ✅ padding horizontal interno
+                      lineHeight: "18px", // ✅ asegura alineación vertical
+                    },
+                  }}
                 />
               </Tooltip>
             )}
@@ -157,7 +172,6 @@ function ChatPanel({
       {/* Input fijo abajo */}
       <Box
         sx={{
-          px: 2,
           pt: 1,
           pb: 2,
           borderTop: "1px solid #eee",
@@ -165,16 +179,21 @@ function ChatPanel({
           zIndex: 1,
         }}
       >
-        {iaPaused && (
-          <Box mb={1}>
-            <InputChat
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onSend={handleSendMessage}
-            />
-          </Box>
-        )}
-        <Controls onToggle={onToggleIA} iaPaused={iaPaused} />
+        <Box display="flex" alignItems="center" gap={1}>
+          {/* Switch IA */}
+          <Controls onToggle={onToggleIA} iaPaused={iaPaused} />
+
+          {/* Input solo si IA está pausada */}
+          {iaPaused && (
+            <Box flex={1}>
+              <InputChat
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onSend={handleSendMessage}
+              />
+            </Box>
+          )}
+        </Box>
       </Box>
     </Box>
   );

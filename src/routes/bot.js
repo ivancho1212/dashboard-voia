@@ -4,7 +4,6 @@ import BotTraining from "layouts/bot/training";
 import BotStyle from "layouts/bot/style";
 import BotIntegration from "layouts/bot/integration";
 import BotPreview from "layouts/bot/preview";
-import BotWidget from "layouts/bot/widget";
 import BotUsageLogs from "layouts/bot/usage-logs";
 import BotsAdmin from "layouts/bot/admin";
 
@@ -16,7 +15,6 @@ import {
   FaPalette,
   FaPlug,
   FaEye,
-  FaTools,
   FaHistory,
 } from "react-icons/fa";
 
@@ -85,13 +83,6 @@ const botRoutes = [
     name: "Vista previa del Bot",
     icon: <FaEye size={14} />,
     component: <BotPreview />,
-  },
-  {
-    key: "bot-widget",
-    route: "/bots/widget",
-    name: "Widget del Bot",
-    icon: <FaRobot size={14} />,
-    component: <BotWidget />,
   },
   {
     key: "bot-usage-logs",

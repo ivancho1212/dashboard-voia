@@ -8,6 +8,8 @@ import dataRoutes from "./data";
 import configRoutes from "./config";
 import authRoutes from "./auth";
 import otherRoutes from "./others";
+import widgetRoutes from "./widget";
+
 
 const routes = [
   ...dashboardRoutes,
@@ -20,6 +22,7 @@ const routes = [
   ...supportRoutes,
   ...authRoutes,
   ...otherRoutes, 
+  ...widgetRoutes,
 ];
 
 export default routes;

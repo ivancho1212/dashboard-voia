@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from "react";
 import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
-import voaiGif from "../../../../assets/images/voai.gif";
+const voaiGif = "/voai.gif";
 
 export default function AvatarUploader({ style, setStyle }) {
   const inputRef = useRef();

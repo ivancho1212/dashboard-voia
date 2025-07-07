@@ -1,7 +1,6 @@
-import { FaComments, FaFileAlt, FaKeyboard, FaFolderOpen } from "react-icons/fa";
+import { FaComments, FaFileAlt, FaFolderOpen } from "react-icons/fa";
 import Conversations from "layouts/data/conversations";
 import Documents from "layouts/data/documents";
-import Prompts from "layouts/data/prompts";
 import Resources from "layouts/data/resources";
 
 const dataRoutes = [

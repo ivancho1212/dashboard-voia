@@ -15,7 +15,7 @@ function TypingIndicator() {
         marginBottom: "6px",
       }}
     >
-      Voia está escribiendo...
+      Escribiendo...
     </div>
   );
 }

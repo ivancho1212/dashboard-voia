@@ -1,6 +1,6 @@
 import SignIn from "layouts/authentication/sign-in";
 import SignUp from "layouts/authentication/sign-up";
-import { FaLock, FaUserEdit, FaKey } from "react-icons/fa";  // Nuevos iconos
+import { FaLock, FaUserEdit} from "react-icons/fa";  // Nuevos iconos
 
 const authRoutes = [
   {

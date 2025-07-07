@@ -21,7 +21,7 @@ function InputChat({ value, onChange, onSend }) {
         display: "flex",
         alignItems: "flex-end",
         borderRadius: "15px",
-        px: 2,
+        pr: 2,
         py: 0.5,
         boxShadow: "0 2px 6px rgba(0,0,0,0.05)",
         maxHeight: 100, // 👈 Límite visual para 2-3 líneas

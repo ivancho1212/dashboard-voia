@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import SoftButton from "components/SoftButton";
 import Grid from "@mui/material/Grid";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
