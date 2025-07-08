@@ -1,7 +1,9 @@
+import { TransitionGroup, CSSTransition } from "react-transition-group";
 import React, { useState, useEffect, useRef } from "react";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import connection from "services/signalr";
+
 import { createConversation } from "services/botConversationsService";
 const voaiGif = "/voai.gif"; // ✅ Ruta relativa al dominio público
 
@@ -31,6 +33,11 @@ function ChatWidget({
   const [iaWarning, setIaWarning] = useState(null);
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
+  
+  // 🧠 Refs para animación individual de mensajes
+  const messageRefs = useRef([]);
+  messageRefs.current = messages.map((_, i) => messageRefs.current[i] ?? React.createRef());
+  const typingRef = useRef(null);
 
   const waitForConnection = async (retries = 5) => {
     while (connection.state !== "Connected" && retries > 0) {
@@ -199,54 +206,64 @@ function ChatWidget({
     startConnection();
 
     const handleReceiveMessage = async (msg) => {
-      setIsTyping(true);
-
-      // 🕐 Simula latencia de IA (1.5s - 3s)
-      const delay = Math.random() * 1500 + 1500;
-      await new Promise((res) => setTimeout(res, delay));
-
-      // 🔒 Evitar mostrar mensajes fantasma al usuario
+      const isFromBot = msg.from === "bot";
       const isPhantomMessage = msg.text?.includes(
         "📎 El usuario ha enviado un archivo para revisión manual"
       );
-      if (isPhantomMessage) {
+    
+      if (isPhantomMessage) return;
+    
+      if (isFromBot) {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    
+      if (!msg.text && !msg.fileContent && !msg.multipleFiles) {
+        const errorMsg = {
+          from: "bot",
+          text: "❌ Ocurrió un error al procesar tu mensaje. Intenta nuevamente.",
+          timestamp: new Date().toISOString(),
+        };
+        setMessages((prev) => [...prev, errorMsg]);
         setIsTyping(false);
-        return; // ❌ No lo agregues al chat
+        setTypingSender(null);
+        return;
       }
-
-      if (msg.multipleFiles && Array.isArray(msg.multipleFiles)) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            from: msg.from,
-            files: msg.multipleFiles,
-            timestamp: msg.timestamp || new Date().toISOString(),
-          },
-        ]);
+    
+      const newMessage = {
+        from: msg.from,
+        text: msg.text || null,
+        fileName: msg.fileName || null,
+        fileType: msg.fileType || null,
+        fileContent: msg.fileContent || null,
+        files: msg.multipleFiles || null,
+        timestamp: msg.timestamp || new Date().toISOString(),
+      };
+    
+      if (isFromBot) {
+        // Paso 1: Oculta los puntos
+        setIsTyping(false);
+        setTypingSender(null);
+    
+        // Paso 2: Espera que React haga re-render SIN los puntos
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // Paso 3: Ahora sí muestra el mensaje
+            setMessages((prev) => [...prev, newMessage]);
+          });
+        });
       } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            from: msg.from,
-            text: msg.text || null,
-            fileName: msg.fileName || null,
-            fileType: msg.fileType || null,
-            fileContent: msg.fileContent || null,
-            timestamp: msg.timestamp || new Date().toISOString(),
-          },
-        ]);
+        setMessages((prev) => [...prev, newMessage]);
       }
-
+    
       if (msg.text?.includes("aún no está conectado")) {
         setIaWarning("Este bot aún no está conectado a una IA. Pronto estará disponible.");
       }
-
-      setIsTyping(false);
     };
+    
 
     const handleTyping = (sender = "bot") => {
-      setIsTyping(true);
-      setTypingSender(sender); // puede ser "bot" o "user" si en el futuro lo usas
+      if (sender === "bot") {
+      }
     };
 
     const handleClose = (error) => {
@@ -254,7 +271,6 @@ function ChatWidget({
     };
 
     connection.on("ReceiveMessage", handleReceiveMessage);
-    connection.on("Typing", handleTyping);
     connection.onclose(handleClose);
 
     return () => {
@@ -292,7 +308,6 @@ function ChatWidget({
     }
   }, [messages, isTyping]);
 
-  // ✅ Enviar mensaje
   const sendMessage = async () => {
     if (!message.trim()) return;
 
@@ -301,7 +316,6 @@ function ChatWidget({
 
     const payload = { botId, userId, question: msg };
 
-    // 🔌 Asegura conexión antes de enviar
     if (connection.state !== "Connected") {
       try {
         await connection.start();
@@ -313,16 +327,20 @@ function ChatWidget({
       }
     }
 
-    try {
-      await createConversation({ userId, botId });
-    } catch (error) {
+    // ⚡ No bloquear envío de mensaje por esto
+    createConversation({ userId, botId }).catch((error) => {
       console.warn(
         "⚠️ Conversación ya existente o error al crearla:",
         error?.response?.data || error.message
       );
-    }
+    });
 
     try {
+      setTimeout(() => {
+        setIsTyping(true);
+        setTypingSender("bot");
+      }, 500); // puedes ajustar este tiempo (400ms recomendado)
+
       await connection.invoke("SendMessage", conversationId, payload);
     } catch (err) {
       console.error("❌ Error enviando mensaje:", err);
@@ -508,6 +526,38 @@ function ChatWidget({
     }
   };
 
+  const TypingDots = ({ color = "#000" }) => {
+    return (
+      <div style={{ display: "flex", gap: "4px", alignItems: "flex-end", height: "16px" }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            style={{
+              width: "4px",
+              height: "8px",
+              background: color,
+              animation: "equalizer 0.8s infinite ease-in-out",
+              animationDelay: `${i * 0.15}s`,
+              borderRadius: "2px",
+            }}
+          />
+        ))}
+        <style>
+          {`
+            @keyframes equalizer {
+              0%, 100% { height: 8px; }
+              50% { height: 16px; }
+            }
+          `}
+        </style>
+      </div>
+    );
+  };
+  
+  TypingDots.propTypes = {
+    color: PropTypes.string,
+  };
+  
   return (
     <div style={wrapperStyle}>
       {!isOpen ? (
@@ -663,141 +713,157 @@ function ChatWidget({
               respuestas precisas y seguras.
             </div>
 
-            {messages.map((msg, index) => {
-              const isUser = msg.from === "user";
+            <TransitionGroup style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {messages.map((msg, index) => {
+                const isUser = msg.from === "user";
+                const nodeRef = messageRefs.current[index];
 
-              const containerStyle = {
-                alignSelf: isUser ? "flex-end" : "flex-start",
-                backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
-                color: "#1a1a1a",
-                padding: "8px 12px",
-                borderRadius: "12px",
-                maxWidth: "80%",
-                wordBreak: "break-word",
-                fontSize: "14px",
-                fontFamily,
-                border: "none",
-                boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
-                display: "flex",
-                flexDirection: "column",
-              };
+                const containerStyle = {
+                  alignSelf: isUser ? "flex-end" : "flex-start",
+                  backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
+                  color: "#1a1a1a",
+                  padding: "8px 12px",
+                  borderRadius: "12px",
+                  maxWidth: "80%",
+                  wordBreak: "break-word",
+                  fontSize: "14px",
+                  fontFamily,
+                  border: "none",
+                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
+                  display: "flex",
+                  flexDirection: "column",
+                };
 
-              return (
-                <div key={index} style={containerStyle}>
-                  {/* 📎 Archivos múltiples */}
-                  {msg.files && Array.isArray(msg.files) && (
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                      {msg.files.map((file, i) =>
-                        file.fileType?.startsWith("image/") ? (
+                return (
+                  <CSSTransition
+                    key={index}
+                    timeout={300}
+                    classNames="fade"
+                    nodeRef={nodeRef}
+                    unmountOnExit
+                  >
+                    <div ref={nodeRef} style={containerStyle}>
+                      {/* Archivos múltiples */}
+                      {msg.files && Array.isArray(msg.files) && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                          {msg.files.map((file, i) =>
+                            file.fileType?.startsWith("image/") ? (
+                              <img
+                                key={i}
+                                src={`data:${file.fileType};base64,${file.fileContent}`}
+                                alt={file.fileName}
+                                style={{
+                                  maxWidth: "120px",
+                                  maxHeight: "120px",
+                                  borderRadius: "8px",
+                                }}
+                              />
+                            ) : (
+                              <a
+                                key={i}
+                                href={`data:${file.fileType};base64,${file.fileContent}`}
+                                download={file.fileName}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: "block",
+                                  color: "#007bff",
+                                  textDecoration: "underline",
+                                }}
+                              >
+                                📎 {file.fileName}
+                              </a>
+                            )
+                          )}
+                        </div>
+                      )}
+
+                      {/* Archivo único */}
+                      {!msg.files && msg.fileContent && msg.fileName ? (
+                        msg.fileType?.startsWith("image/") ? (
                           <img
-                            key={i}
-                            src={`data:${file.fileType};base64,${file.fileContent}`}
-                            alt={file.fileName}
+                            src={`data:${msg.fileType};base64,${msg.fileContent}`}
+                            alt={msg.fileName}
                             style={{
-                              maxWidth: "120px",
-                              maxHeight: "120px",
+                              maxWidth: "100%",
                               borderRadius: "8px",
+                              marginBottom: "4px",
                             }}
                           />
                         ) : (
                           <a
-                            key={i}
-                            href={`data:${file.fileType};base64,${file.fileContent}`}
-                            download={file.fileName}
+                            href={`data:${msg.fileType};base64,${msg.fileContent}`}
+                            download={msg.fileName}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{
-                              display: "block",
                               color: "#007bff",
                               textDecoration: "underline",
+                              marginBottom: "4px",
                             }}
                           >
-                            📎 {file.fileName}
+                            📎 {msg.fileName}
                           </a>
                         )
+                      ) : null}
+
+                      {/* Texto */}
+                      {msg.text && <span>{msg.text}</span>}
+
+                      {/* Timestamp */}
+                      {msg.timestamp && (
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#555",
+                            marginTop: "4px",
+                            alignSelf: "flex-end",
+                            opacity: 0.7,
+                          }}
+                        >
+                          {new Date(msg.timestamp).toLocaleTimeString([], {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
                       )}
                     </div>
-                  )}
+                  </CSSTransition>
+                );
+              })}
 
-                  {/* 📄 Archivo o imagen individual */}
-                  {!msg.files && msg.fileContent && msg.fileName ? (
-                    msg.fileType?.startsWith("image/") ? (
-                      <img
-                        src={`data:${msg.fileType};base64,${msg.fileContent}`}
-                        alt={msg.fileName}
-                        style={{
-                          maxWidth: "100%",
-                          borderRadius: "8px",
-                          marginBottom: "4px",
-                        }}
-                      />
-                    ) : (
-                      <a
-                        href={`data:${msg.fileType};base64,${msg.fileContent}`}
-                        download={msg.fileName}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{
-                          color: "#007bff",
-                          textDecoration: "underline",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        📎 {msg.fileName}
-                      </a>
-                    )
-                  ) : null}
-
-                  {/* 💬 Texto */}
-                  {msg.text && <span>{msg.text}</span>}
-
-                  {/* 🕒 Timestamp */}
-                  {msg.timestamp && (
-                    <span
+              {isTyping &&
+                typingSender === "bot" &&
+                messages[messages.length - 1]?.from !== "bot" && ( // ⬅️ Verificación adicional
+                  <CSSTransition key="typing" timeout={300} classNames="fade" nodeRef={typingRef}>
+                    <div
+                      ref={typingRef}
                       style={{
-                        fontSize: "10px",
-                        color: "#555",
-                        marginTop: "4px",
-                        alignSelf: "flex-end",
+                        alignSelf: "flex-start",
+                        backgroundColor:
+                          primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+                            ? fallbackBgColor
+                            : secondaryColor,
+                        color:
+                          primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+                            ? fallbackTextColor
+                            : primaryColor,
+                        padding: "8px 12px",
+                        borderRadius: "12px",
+                        maxWidth: "60%",
+                        fontFamily,
+                        fontSize: "14px",
+                        fontStyle: "italic",
                         opacity: 0.7,
+                        border: "none",
+                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
                       }}
                     >
-                      {new Date(msg.timestamp).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-
-            {isTyping && typingSender === "bot" && (
-              <div
-                style={{
-                  alignSelf: "flex-start",
-                  backgroundColor:
-                    primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-                      ? fallbackBgColor
-                      : secondaryColor,
-                  color:
-                    primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-                      ? fallbackTextColor
-                      : primaryColor,
-                  padding: "8px 12px",
-                  borderRadius: "12px",
-                  maxWidth: "60%",
-                  fontFamily,
-                  fontSize: "14px",
-                  fontStyle: "italic",
-                  opacity: 0.7,
-                  border: "none",
-                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
-                }}
-              >
-                Escribiendo...
-              </div>
-            )}
+                      <TypingDots color={primaryColor} />
+                    </div>
+                  </CSSTransition>
+                )}
+            </TransitionGroup>
 
             <div ref={messagesEndRef} />
           </div>
