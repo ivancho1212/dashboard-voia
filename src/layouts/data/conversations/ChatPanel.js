@@ -3,7 +3,6 @@ import PropTypes from "prop-types";
 import SoftTypography from "components/SoftTypography";
 import Divider from "@mui/material/Divider";
 import MessageBubble from "./MessageBubble";
-import TypingIndicator from "./TypingIndicator";
 import Controls from "./Controls";
 import InputChat from "./InputChat";
 import Chip from "@mui/material/Chip";
@@ -13,12 +12,17 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Box from "@mui/material/Box";
 import Tooltip from "@mui/material/Tooltip";
+import connection from "../../../services/signalr";
+import TypingIndicator from "./TypingIndicator";
+import { CSSTransition } from "react-transition-group";
+import { injectTypingAnimation } from "./typingAnimation"; // ✅ asegúrate de importar esto
 
 function ChatPanel({
-  conversationId, // ✅ obligatorio para enviar correctamente
+  conversationId,
   messages = [],
   userName,
   isTyping,
+  typingSender,
   onToggleIA,
   iaPaused,
   onSendAdminMessage,
@@ -29,7 +33,8 @@ function ChatPanel({
 }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const [inputValue, setInputValue] = useState("");
-  const bottomRef = useRef(null); // 👈 Referencia para hacer scroll automático
+  const bottomRef = useRef(null);
+  const typingRef = useRef(null); // ✅ necesario para CSSTransition
 
   const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseMenu = () => setAnchorEl(null);
@@ -46,49 +51,48 @@ function ChatPanel({
 
   const handleSendMessage = () => {
     if (inputValue.trim()) {
-      onSendAdminMessage(inputValue.trim(), conversationId); // ✅ pasa el ID
+      onSendAdminMessage(inputValue.trim(), conversationId);
+
+      const adminMessage = {
+        from: "admin",
+        text: inputValue.trim(),
+        timestamp: new Date().toISOString(),
+      };
+
       setInputValue("");
+      messages.push(adminMessage);
     }
   };
 
-  // 🔁 Scroll automático al último mensaje
   useEffect(() => {
+    injectTypingAnimation(); // ✅ esto inyecta las animaciones fade y typing
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
+  const handleInputChange = (text) => {
+    setInputValue(text);
+    if (text.trim()) {
+      connection
+        .invoke("Typing", conversationId, "admin")
+        .catch((err) => console.error("❌ Error enviando Typing:", err));
+    }
+  };
+
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-      {/* Encabezado fijo */}
-      <Box
-        sx={{
-          px: 2,
-          pb: 2,
-          borderBottom: "1px solid #eee",
-          bgcolor: "white",
-          zIndex: 1,
-        }}
-      >
-        <Box
-          display="flex"
-          justifyContent="space-between"
-          alignItems="center"
-          height={25} // 👈 altura fija coherente
-        >
+      {/* ENCABEZADO */}
+      <Box sx={{ px: 2, pb: 2, borderBottom: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" height={25}>
           <SoftTypography
-            variant="caption" // 👈 más pequeño que subtitle1
+            variant="caption"
             fontWeight="500"
             noWrap
-            sx={{
-              maxWidth: "60%",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              fontSize: "1rem", // 👈 ajuste fino si quieres aún más pequeño
-            }}
+            sx={{ maxWidth: "60%", overflow: "hidden", textOverflow: "ellipsis", fontSize: "1rem" }}
           >
             Chat con {userName}
           </SoftTypography>
 
-          <Box display="flex" alignItems="center" gap={1} sx={{ flexShrink: 0 }}>
+          <Box display="flex" alignItems="center" gap={1}>
             <Tooltip title={`Estado: ${status}`}>
               <Chip
                 label={status.toUpperCase()}
@@ -97,8 +101,8 @@ function ChatPanel({
                 }
                 size="small"
                 sx={{
-                  fontSize: "0.7rem", // 👈 texto más pequeño
-                  height: 22, // 👈 altura menor
+                  fontSize: "0.7rem",
+                  height: 22,
                   fontWeight: "500",
                   "& .MuiChip-label": {
                     color: "white !important",
@@ -116,12 +120,12 @@ function ChatPanel({
                   color="error"
                   size="small"
                   sx={{
-                    fontSize: "0.7rem", // ✅ texto más pequeño
-                    height: 22, // ✅ altura más compacta
+                    fontSize: "0.7rem",
+                    height: 22,
                     fontWeight: 500,
                     "& .MuiChip-label": {
-                      px: 1, // ✅ padding horizontal interno
-                      lineHeight: "18px", // ✅ asegura alineación vertical
+                      px: 1,
+                      lineHeight: "18px",
                     },
                   }}
                 />
@@ -149,7 +153,7 @@ function ChatPanel({
         </Box>
       </Box>
 
-      {/* ÁREA DE BURBUJAS SCROLLEABLE */}
+      {/* CUERPO DEL CHAT */}
       <Box
         sx={{
           flex: 1,
@@ -158,37 +162,44 @@ function ChatPanel({
           py: 2,
           display: "flex",
           flexDirection: "column",
-          minHeight: 0, // 🛑 Esto es CLAVE para que el scroll funcione dentro del flexbox
+          minHeight: 0,
           bgcolor: "#f9f9f9",
         }}
       >
-        {messages.map((msg, idx) => (
-          <MessageBubble key={idx} msg={msg} />
-        ))}
-        {isTyping && <TypingIndicator />}
+        {messages.map((msg, idx) => {
+          console.log("📨 Mensaje recibido:", msg);
+          return <MessageBubble key={idx} msg={msg} />;
+        })}
+
+        {isTyping &&
+          (typingSender === "bot" || typingSender === "admin" || typingSender === "user") && (
+            <CSSTransition
+              in={true}
+              appear
+              timeout={300}
+              classNames="fade"
+              nodeRef={typingRef}
+              unmountOnExit
+            >
+              <div ref={typingRef}>
+                <TypingIndicator color="#00bcd4" background="#e0f7fa" variant="bars" />
+              </div>
+            </CSSTransition>
+          )}
+
         <div ref={bottomRef} />
       </Box>
 
-      {/* Input fijo abajo */}
-      <Box
-        sx={{
-          pt: 1,
-          pb: 2,
-          borderTop: "1px solid #eee",
-          bgcolor: "white",
-          zIndex: 1,
-        }}
-      >
+      {/* INPUT */}
+      <Box sx={{ pt: 1, pb: 2, borderTop: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
         <Box display="flex" alignItems="center" gap={1}>
-          {/* Switch IA */}
           <Controls onToggle={onToggleIA} iaPaused={iaPaused} />
 
-          {/* Input solo si IA está pausada */}
           {iaPaused && (
             <Box flex={1}>
               <InputChat
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => handleInputChange(e.target.value)}
                 onSend={handleSendMessage}
               />
             </Box>
@@ -200,10 +211,11 @@ function ChatPanel({
 }
 
 ChatPanel.propTypes = {
-  conversationId: PropTypes.number.isRequired, // ✅ nuevo prop obligatorio
+  conversationId: PropTypes.number.isRequired,
   messages: PropTypes.array.isRequired,
   userName: PropTypes.string.isRequired,
   isTyping: PropTypes.bool.isRequired,
+  typingSender: PropTypes.string,
   onToggleIA: PropTypes.func.isRequired,
   iaPaused: PropTypes.bool.isRequired,
   onSendAdminMessage: PropTypes.func.isRequired,

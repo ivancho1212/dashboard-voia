@@ -26,13 +26,17 @@ function Conversations() {
   const tabRefs = useRef({});
 
   const [showScrollButtons, setShowScrollButtons] = useState(false);
-
   const [conversationList, setConversationList] = useState([]);
-  const [openTabs, setOpenTabs] = useState([]); // [{ id, alias }]
-  const [activeTab, setActiveTab] = useState(null); // id actual mostrado
+  const [openTabs, setOpenTabs] = useState([]);
+  const [activeTab, setActiveTab] = useState(null);
   const [messages, setMessages] = useState({});
   const [isTyping, setIsTyping] = useState(false);
   const [iaPausedMap, setIaPausedMap] = useState({});
+  const [isConnected, setIsConnected] = useState(false);
+  const [typingSender, setTypingSender] = useState(null);
+  const [typingState, setTypingState] = useState({});
+
+  const userId = 45; // Simulado
 
   const handleToggleIA = (conversationId) => {
     setIaPausedMap((prev) => ({
@@ -40,11 +44,6 @@ function Conversations() {
       [conversationId]: !prev[conversationId],
     }));
   };
-
-  const [isConnected, setIsConnected] = useState(false);
-
-  // 👇 Simulación de userId hasta que tengas auth
-  const userId = 45;
 
   useEffect(() => {
     const loadInitialConversations = async () => {
@@ -56,7 +55,7 @@ function Conversations() {
             alias: c.User?.Name || `Usuario ${String(c.id).slice(-4)}`,
             lastMessage: c.UserMessage || "",
             updatedAt: c.CreatedAt || new Date().toISOString(),
-            status: "activa", // Puedes ajustar si tienes estado en el modelo
+            status: "activa",
             blocked: false,
           }))
         );
@@ -73,68 +72,23 @@ function Conversations() {
 
         if (connection.state === "Connected") {
           await connection.invoke("JoinAdmin");
-          setIsConnected(true); // ✅ Ya está listo
+          setIsConnected(true);
         } else {
           console.warn("❌ No se pudo conectar con SignalR.");
         }
 
-        connection.on("ReceiveMessage", (msg) => {
-          const id = msg.conversationId;
-
-          setMessages((prev) => ({
-            ...prev,
-            [id]: [
-              ...(prev[id] || []),
-              {
-                from: msg.from,
-                text: msg.text,
-                timestamp: new Date().toISOString(), // 👈 agrega timestamp
-              },
-            ],
-          }));
-
-          setConversationList((prev) => {
-            const exists = prev.find((c) => c.id === id);
-            if (!exists) {
-              return [
-                ...prev,
-                {
-                  id,
-                  alias: `Usuario ${String(id).slice(-4)}`,
-                  lastMessage: msg.text,
-                  updatedAt: new Date().toISOString(),
-                  status: "activa",
-                  blocked: false,
-                },
-              ];
-            }
-            return prev.map((conv) =>
-              conv.id === id
-                ? { ...conv, lastMessage: msg.text, updatedAt: new Date().toISOString() }
-                : conv
-            );
-          });
-        });
-
-        connection.on("NewConversation", (newConv) => {
-          setConversationList((prev) => {
-            const exists = prev.find((c) => c.id === newConv.id);
-            if (exists) return prev;
-
-            return [newConv, ...prev]; // Agrega al inicio
-          });
-        });
+        // 👇 ESTE BLOQUE ES EL NUEVO QUE DEBES AGREGAR
         connection.on("NewConversationOrMessage", (msg) => {
           const id = msg.conversationId;
 
           setMessages((prev) => ({
             ...prev,
-            [id]: [
-              ...(prev[id] || []),
+            [msg.conversationId]: [
+              ...(prev[msg.conversationId] || []),
               {
                 from: msg.from,
                 text: msg.text,
-                timestamp: msg.timestamp || new Date().toISOString(), // usa el timestamp si viene del backend
+                timestamp: msg.timestamp || new Date().toISOString(),
               },
             ],
           }));
@@ -153,9 +107,9 @@ function Conversations() {
               return [
                 {
                   id,
-                  alias: msg.alias,
+                  alias: msg.alias || `Usuario ${String(id).slice(-4)}`,
                   lastMessage: msg.text,
-                  updatedAt: msg.timestamp,
+                  updatedAt: msg.timestamp || new Date().toISOString(),
                   status: "activa",
                   blocked: false,
                 },
@@ -164,19 +118,44 @@ function Conversations() {
             }
 
             return prev.map((conv) =>
-              conv.id === id ? { ...conv, lastMessage: msg.text, updatedAt: msg.timestamp } : conv
+              conv.id === id
+                ? {
+                    ...conv,
+                    lastMessage: msg.text,
+                    updatedAt: msg.timestamp || new Date().toISOString(),
+                  }
+                : conv
             );
           });
         });
 
-        connection.on("Typing", () => {
-          setIsTyping(true);
-          setTimeout(() => setIsTyping(false), 1500);
+        connection.on("NewConversation", (newConv) => {
+          setConversationList((prev) => {
+            const exists = prev.find((c) => c.id === newConv.id);
+            if (exists) return prev;
+            return [newConv, ...prev];
+          });
+        });
+
+        connection.on("Typing", (conversationId, sender) => {
+          if (sender !== "user") return;
+
+          setTypingState((prev) => ({
+            ...prev,
+            [conversationId]: true,
+          }));
+
+          setTimeout(() => {
+            setTypingState((prev) => ({
+              ...prev,
+              [conversationId]: false,
+            }));
+          }, 2000);
         });
       } catch (error) {
         console.error("❌ Error al conectar con SignalR:", error);
       }
-    };
+    }; // 👈 AQUÍ estaba faltando esta llave de cierre
 
     loadInitialConversations();
     setupSignalR();
@@ -193,7 +172,6 @@ function Conversations() {
         setShowScrollButtons(el.scrollWidth > el.clientWidth);
       }
     };
-
     checkOverflow();
     window.addEventListener("resize", checkOverflow);
     return () => window.removeEventListener("resize", checkOverflow);
@@ -202,16 +180,13 @@ function Conversations() {
   useEffect(() => {
     const activeTabEl = tabRefs.current[activeTab];
     const container = tabContainerRef.current;
-
     if (activeTabEl && container) {
       const tabLeft = activeTabEl.offsetLeft;
       const tabRight = tabLeft + activeTabEl.offsetWidth;
       const containerScrollLeft = container.scrollLeft;
       const containerWidth = container.clientWidth;
-
       const isOutOfView =
         tabLeft < containerScrollLeft || tabRight > containerScrollLeft + containerWidth;
-
       if (isOutOfView) {
         activeTabEl.scrollIntoView({ behavior: "smooth", inline: "center" });
       }
@@ -220,14 +195,10 @@ function Conversations() {
 
   const handleSelectConversation = (conv) => {
     const exists = openTabs.find((t) => t.id === conv.id);
-
     if (!exists) {
       setOpenTabs((prev) => [...prev, { ...conv, unreadCount: 0 }]);
     }
-
     setActiveTab(conv.id);
-
-    // Reinicia contador de no leídos al abrir la conversación
     setOpenTabs((prev) =>
       prev.map((tab) => (tab.id === conv.id ? { ...tab, unreadCount: 0 } : tab))
     );
@@ -245,7 +216,6 @@ function Conversations() {
           timestamp: new Date().toISOString(),
         },
       ];
-
       setMessages((prev) => ({
         ...prev,
         [conv.id]: historialSimulado,
@@ -258,18 +228,6 @@ function Conversations() {
       console.warn("SignalR connection not ready yet");
       return;
     }
-
-    const message = {
-      conversationId,
-      from: "admin",
-      text,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => ({
-      ...prev,
-      [conversationId]: [...(prev[conversationId] || []), message],
-    }));
 
     try {
       await connection.invoke("AdminMessage", conversationId, text);
@@ -541,7 +499,8 @@ function Conversations() {
                     conversationId={selectedConversation.id}
                     userName={selectedConversation.alias}
                     messages={selectedMessages}
-                    isTyping={isTyping}
+                    isTyping={!!typingState[selectedConversation.id]}
+                    typingSender="user"
                     iaPaused={!!iaPausedMap[selectedConversation.id]} // ✅ obtiene el estado por conversación
                     onToggleIA={() => handleToggleIA(selectedConversation.id)} // ✅ alterna solo la conversación activa
                     iaPausedMap={iaPausedMap}

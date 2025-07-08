@@ -27,13 +27,17 @@ function ChatWidget({
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [conversationId, setConversationId] = useState(null);
+
   const messagesEndRef = useRef(null);
 
-  const conversationId = `bot-${botId}-user-${userId}`;
+  console.log("📌 conversationId en el widget:", conversationId);
+
   const [iaWarning, setIaWarning] = useState(null);
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
-  
+  const typingTimeoutRef = useRef(null);
+
   // 🧠 Refs para animación individual de mensajes
   const messageRefs = useRef([]);
   messageRefs.current = messages.map((_, i) => messageRefs.current[i] ?? React.createRef());
@@ -50,6 +54,34 @@ function ChatWidget({
       throw new Error("❌ No se pudo establecer conexión con SignalR.");
     }
   };
+
+  const iniciarConversacion = async () => {
+    try {
+      await waitForConnection();
+
+      if (!conversationId) {
+        const nuevaConversacion = await createConversation({
+          userId,
+          botId,
+          title: "Primera interacción",
+          userMessage: "Hola",
+          botResponse: "",
+        });
+
+        const realConversationId = nuevaConversacion.id;
+        setConversationId(realConversationId); // Actualiza el estado
+
+        console.log("🧪 Devolviendo conversationId:", realConversationId);
+        return realConversationId; // 🔁 Devuelve el valor directamente
+      }
+
+      return conversationId; // Si ya existía, lo devuelve
+    } catch (error) {
+      console.error("❌ Error al iniciar conversación:", error);
+      return null;
+    }
+  };
+
   // ⬇️ Pega esto después de `waitForConnection` y antes de `useEffect`
   const handleFileUpload = (event) => {
     const files = Array.from(event.target.files);
@@ -72,12 +104,29 @@ function ChatWidget({
 
         const reader = new FileReader();
         reader.onloadend = () => {
-          const base64Data = reader.result.split(",")[1]; // Quita el "data:...base64,"
+          const base64Data = reader.result.split(",")[1];
+          const fullBase64 = `data:${file.type};base64,${base64Data}`;
+
           filePayloads.push({
             fileName: file.name,
             fileType: file.type,
             fileContent: base64Data,
           });
+
+          // ✅ Mostrar en el chat del usuario
+          setMessages((prev) => [
+            ...prev,
+            {
+              from: "user",
+              file: {
+                name: file.name,
+                type: file.type,
+                content: fullBase64,
+              },
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+
           resolve();
         };
         reader.readAsDataURL(file);
@@ -85,10 +134,13 @@ function ChatWidget({
     });
 
     Promise.all(promises).then(async () => {
-      if (filePayloads.length === 0) {
-        console.warn("⚠️ Archivo inválido o vacío.");
-        return;
-      }
+      if (filePayloads.length === 0) return;
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(true);
+        setTypingSender("bot");
+      }, 300);
 
       const payload = {
         botId,
@@ -99,20 +151,14 @@ function ChatWidget({
       try {
         await waitForConnection();
         await connection.invoke("SendFile", conversationId, payload);
-        // 👉 Este mensaje es simbólico, solo para que la IA lo vea como texto
+
         const phantomMessage = {
           botId,
           userId,
-          question:
-            "📎 El usuario ha enviado un archivo para revisión manual. No es necesario procesarlo.",
+          question: "📎 El usuario ha enviado un archivo para revisión manual.",
+          meta: { internalOnly: true },
         };
-
-        try {
-          await connection.invoke("SendMessage", conversationId, phantomMessage);
-          console.log("📨 Mensaje fantasma enviado a la IA");
-        } catch (err) {
-          console.error("❌ Error enviando mensaje fantasma:", err);
-        }
+        await connection.invoke("SendMessage", conversationId, phantomMessage);
       } catch (err) {
         console.error("❌ Error enviando documentos:", err);
       }
@@ -140,12 +186,29 @@ function ChatWidget({
 
         const reader = new FileReader();
         reader.onloadend = () => {
-          const base64Data = reader.result.split(",")[1]; // Elimina el header "data:image/..."
+          const base64Data = reader.result.split(",")[1];
+          const fullBase64 = `data:${file.type};base64,${base64Data}`;
+
           imagePayloads.push({
             fileName: file.name,
             fileType: file.type,
             fileContent: base64Data,
           });
+
+          // ✅ Mostrar en el chat del usuario
+          setMessages((prev) => [
+            ...prev,
+            {
+              from: "user",
+              file: {
+                name: file.name,
+                type: file.type,
+                content: fullBase64,
+              },
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+
           resolve();
         };
         reader.readAsDataURL(file);
@@ -154,6 +217,12 @@ function ChatWidget({
 
     Promise.all(promises).then(async () => {
       if (imagePayloads.length === 0) return;
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(true);
+        setTypingSender("bot");
+      }, 300);
 
       const payload = {
         botId,
@@ -164,29 +233,25 @@ function ChatWidget({
       try {
         await waitForConnection();
         await connection.invoke("SendFile", conversationId, payload);
-        // 👉 Este mensaje es simbólico, solo para que la IA lo vea como texto
+
         const phantomMessage = {
           botId,
           userId,
-          question:
-            "📎 El usuario ha enviado un archivo para revisión manual. No es necesario procesarlo.",
+          question: "📎 El usuario ha enviado un archivo para revisión manual.",
           meta: { internalOnly: true },
         };
 
-        try {
-          await connection.invoke("SendMessage", conversationId, phantomMessage);
-          console.log("📨 Mensaje fantasma enviado a la IA");
-        } catch (err) {
-          console.error("❌ Error enviando mensaje fantasma:", err);
-        }
+        await connection.invoke("SendMessage", conversationId, phantomMessage);
       } catch (err) {
-        console.error("❌ Error enviando imágenes agrupadas:", err);
+        console.error("❌ Error enviando imágenes:", err);
       }
     });
   };
 
   // ✅ SignalR Setup
   useEffect(() => {
+    let isMounted = true;
+
     const startConnection = async () => {
       try {
         if (connection.state === "Disconnected") {
@@ -197,38 +262,54 @@ function ChatWidget({
         }
 
         await waitForConnection();
-        await connection.invoke("JoinRoom", conversationId);
+
+        // 🔒 Asegura que solo se cree una conversación
+        if (!conversationId && isMounted) {
+          const realConversationId = await iniciarConversacion();
+          setConversationId(realConversationId);
+          await connection.invoke("JoinRoom", realConversationId);
+        } else if (conversationId) {
+          await connection.invoke("JoinRoom", conversationId);
+        }
       } catch (err) {
         console.error("❌ Error conectando a SignalR:", err);
       }
     };
 
-    startConnection();
-
     const handleReceiveMessage = async (msg) => {
+      console.log("📩 Mensaje recibido del backend:", msg);
       const isFromBot = msg.from === "bot";
       const isPhantomMessage = msg.text?.includes(
         "📎 El usuario ha enviado un archivo para revisión manual"
       );
-    
       if (isPhantomMessage) return;
-    
+
       if (isFromBot) {
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = null;
+        }
+
+        setIsTyping(false);
+        setTypingSender(null);
+
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
-    
+
       if (!msg.text && !msg.fileContent && !msg.multipleFiles) {
-        const errorMsg = {
-          from: "bot",
-          text: "❌ Ocurrió un error al procesar tu mensaje. Intenta nuevamente.",
-          timestamp: new Date().toISOString(),
-        };
-        setMessages((prev) => [...prev, errorMsg]);
+        setMessages((prev) => [
+          ...prev,
+          {
+            from: "bot",
+            text: "❌ Ocurrió un error al procesar tu mensaje. Intenta nuevamente.",
+            timestamp: new Date().toISOString(),
+          },
+        ]);
         setIsTyping(false);
         setTypingSender(null);
         return;
       }
-    
+
       const newMessage = {
         from: msg.from,
         text: msg.text || null,
@@ -238,31 +319,11 @@ function ChatWidget({
         files: msg.multipleFiles || null,
         timestamp: msg.timestamp || new Date().toISOString(),
       };
-    
-      if (isFromBot) {
-        // Paso 1: Oculta los puntos
-        setIsTyping(false);
-        setTypingSender(null);
-    
-        // Paso 2: Espera que React haga re-render SIN los puntos
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            // Paso 3: Ahora sí muestra el mensaje
-            setMessages((prev) => [...prev, newMessage]);
-          });
-        });
-      } else {
-        setMessages((prev) => [...prev, newMessage]);
-      }
-    
+
+      setMessages((prev) => [...prev, newMessage]);
+
       if (msg.text?.includes("aún no está conectado")) {
         setIaWarning("Este bot aún no está conectado a una IA. Pronto estará disponible.");
-      }
-    };
-    
-
-    const handleTyping = (sender = "bot") => {
-      if (sender === "bot") {
       }
     };
 
@@ -270,10 +331,35 @@ function ChatWidget({
       console.warn("🔌 Conexión cerrada:", error);
     };
 
+    const handleTyping = (sender = "admin") => {
+      if (sender === "admin") {
+        setIsTyping(true);
+        setTypingSender("admin");
+
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+
+        typingTimeoutRef.current = setTimeout(() => {
+          setIsTyping(false);
+          setTypingSender(null);
+        }, 1500);
+      }
+    };
+
+    // 🔁 Limpia eventos anteriores antes de registrar nuevos
+    connection.off("ReceiveMessage");
+    connection.off("Typing");
+    connection.off("onclose");
+
     connection.on("ReceiveMessage", handleReceiveMessage);
+    connection.on("Typing", handleTyping);
     connection.onclose(handleClose);
 
+    startConnection();
+
     return () => {
+      isMounted = false;
       connection.off("ReceiveMessage", handleReceiveMessage);
       connection.off("Typing", handleTyping);
       connection.off("onclose", handleClose);
@@ -316,6 +402,15 @@ function ChatWidget({
 
     const payload = { botId, userId, question: msg };
 
+    // 👇 Mostrar mensaje del usuario en el chat antes de la respuesta del bot
+    // Ya no agregamos manualmente el mensaje del usuario aquí.
+    // El backend enviará el mensaje a través de SignalR y lo capturará handleReceiveMessage.
+
+    if (!conversationId) {
+      console.warn("⛔ conversationId no está definido aún");
+      return;
+    }
+
     if (connection.state !== "Connected") {
       try {
         await connection.start();
@@ -327,21 +422,22 @@ function ChatWidget({
       }
     }
 
-    // ⚡ No bloquear envío de mensaje por esto
-    createConversation({ userId, botId }).catch((error) => {
-      console.warn(
-        "⚠️ Conversación ya existente o error al crearla:",
-        error?.response?.data || error.message
-      );
-    });
-
     try {
-      setTimeout(() => {
+      // 🧹 Limpiar cualquier timeout anterior
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+
+      // 🕒 Mostrar "escribiendo..." si el bot no responde pronto
+      typingTimeoutRef.current = setTimeout(() => {
         setIsTyping(true);
         setTypingSender("bot");
-      }, 500); // puedes ajustar este tiempo (400ms recomendado)
+      }, 500);
 
+      console.log("📤 Enviando mensaje con payload:", payload, "a conversación:", conversationId);
       await connection.invoke("SendMessage", conversationId, payload);
+      console.log("✅ Mensaje enviado por SignalR");
     } catch (err) {
       console.error("❌ Error enviando mensaje:", err);
     }
@@ -405,17 +501,8 @@ function ChatWidget({
     },
   };
 
-  const {
-    backgroundColor,
-    textColor,
-    headerBackground,
-    borderColor,
-    inputBg,
-    inputText,
-    inputBorder,
-    buttonBg,
-    buttonColor,
-  } = themeConfig[themeKey] || themeConfig.light;
+  const { backgroundColor, textColor, headerBackground, inputBg, inputText, inputBorder } =
+    themeConfig[themeKey] || themeConfig.light;
 
   // ✅ Calcular color de texto del header según fondo
   const isColorDark = (hexColor) => {
@@ -446,61 +533,6 @@ function ChatWidget({
     flexDirection: "column",
     justifyContent: "space-between",
     overflow: "hidden",
-  };
-
-  const avatarFloatingStyle = {
-    width: "70px",
-    height: "70px",
-    borderRadius: "50%",
-    objectFit: "contain",
-    border: `2px solid ${primaryColor}`,
-  };
-
-  const avatarHeaderStyle = {
-    width: "36px",
-    height: "36px",
-    borderRadius: "50%",
-    objectFit: "contain",
-    border: `1px solid ${primaryColor}`,
-  };
-
-  const inputContainerStyle = {
-    position: "relative",
-    marginTop: "10px",
-    width: "100%",
-  };
-
-  const inputStyle = {
-    width: "80%",
-    padding: "10px 40px 10px 35px",
-    borderRadius: "12px",
-    border: `1.5px solid ${inputBorder}`,
-    fontFamily,
-    fontSize: "14px",
-    outline: "none",
-    color: inputText,
-    backgroundColor: inputBg,
-    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-  };
-
-  const iconStyleLeft = {
-    position: "absolute",
-    left: "10px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    color: inputText,
-    fontSize: "16px",
-    cursor: "pointer",
-  };
-
-  const iconStyleRight = {
-    position: "absolute",
-    right: "10px",
-    top: "50%",
-    transform: "translateY(-50%)",
-    color: inputText,
-    fontSize: "16px",
-    cursor: "pointer",
   };
 
   const positionStyles = {
@@ -535,7 +567,7 @@ function ChatWidget({
             style={{
               width: "4px",
               height: "8px",
-              background: color,
+              background: "#00bcd4",
               animation: "equalizer 0.8s infinite ease-in-out",
               animationDelay: `${i * 0.15}s`,
               borderRadius: "2px",
@@ -553,11 +585,11 @@ function ChatWidget({
       </div>
     );
   };
-  
+
   TypingDots.propTypes = {
     color: PropTypes.string,
   };
-  
+
   return (
     <div style={wrapperStyle}>
       {!isOpen ? (
@@ -714,155 +746,160 @@ function ChatWidget({
             </div>
 
             <TransitionGroup style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {messages.map((msg, index) => {
-                const isUser = msg.from === "user";
-                const nodeRef = messageRefs.current[index];
+              {messages
+                .filter((msg) => !msg?.meta?.internalOnly)
+                .map((msg, index) => {
+                  const isUser = msg.from === "user";
+                  const nodeRef = messageRefs.current[index];
 
-                const containerStyle = {
-                  alignSelf: isUser ? "flex-end" : "flex-start",
-                  backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
-                  color: "#1a1a1a",
-                  padding: "8px 12px",
-                  borderRadius: "12px",
-                  maxWidth: "80%",
-                  wordBreak: "break-word",
-                  fontSize: "14px",
-                  fontFamily,
-                  border: "none",
-                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
-                  display: "flex",
-                  flexDirection: "column",
-                };
+                  const containerStyle = {
+                    alignSelf: isUser ? "flex-end" : "flex-start",
+                    backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
+                    color: "#1a1a1a",
+                    padding: "8px 12px",
+                    borderRadius: "12px",
+                    maxWidth: "80%",
+                    wordBreak: "break-word",
+                    fontSize: "14px",
+                    fontFamily,
+                    border: "none",
+                    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
+                    display: "flex",
+                    flexDirection: "column",
+                  };
 
-                return (
-                  <CSSTransition
-                    key={index}
-                    timeout={300}
-                    classNames="fade"
-                    nodeRef={nodeRef}
-                    unmountOnExit
-                  >
-                    <div ref={nodeRef} style={containerStyle}>
-                      {/* Archivos múltiples */}
-                      {msg.files && Array.isArray(msg.files) && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                          {msg.files.map((file, i) =>
-                            file.fileType?.startsWith("image/") ? (
-                              <img
-                                key={i}
-                                src={`data:${file.fileType};base64,${file.fileContent}`}
-                                alt={file.fileName}
-                                style={{
-                                  maxWidth: "120px",
-                                  maxHeight: "120px",
-                                  borderRadius: "8px",
-                                }}
-                              />
-                            ) : (
-                              <a
-                                key={i}
-                                href={`data:${file.fileType};base64,${file.fileContent}`}
-                                download={file.fileName}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: "block",
-                                  color: "#007bff",
-                                  textDecoration: "underline",
-                                }}
-                              >
-                                📎 {file.fileName}
-                              </a>
-                            )
-                          )}
-                        </div>
-                      )}
+                  return (
+                    <CSSTransition
+                      key={index}
+                      timeout={300}
+                      classNames="fade"
+                      nodeRef={nodeRef}
+                      unmountOnExit
+                    >
+                      <div ref={nodeRef} style={containerStyle}>
+                        {/* Archivos múltiples */}
+                        {msg.files && Array.isArray(msg.files) && (
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                            {msg.files.map((file, i) =>
+                              file.fileType?.startsWith("image/") ? (
+                                <img
+                                  key={i}
+                                  src={`data:${file.fileType};base64,${file.fileContent}`}
+                                  alt={file.fileName}
+                                  style={{
+                                    maxWidth: "120px",
+                                    maxHeight: "120px",
+                                    borderRadius: "8px",
+                                  }}
+                                />
+                              ) : (
+                                <a
+                                  key={i}
+                                  href={`data:${file.fileType};base64,${file.fileContent}`}
+                                  download={file.fileName}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: "block",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    color: "#007bff",
+                                    textDecoration: "underline",
+                                    fontSize: "12px",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: "20px", // 👈 tamaño más grande para el clip
+                                      textShadow: "1px 1px 2px rgba(0,0,0,0.2)",
+                                    }}
+                                  >
+                                    📎
+                                  </span>
+                                  <span>{file.fileName}</span>
+                                </a>
+                              )
+                            )}
+                          </div>
+                        )}
 
-                      {/* Archivo único */}
-                      {!msg.files && msg.fileContent && msg.fileName ? (
-                        msg.fileType?.startsWith("image/") ? (
-                          <img
-                            src={`data:${msg.fileType};base64,${msg.fileContent}`}
-                            alt={msg.fileName}
+                        {/* Archivo único */}
+                        {!msg.files && msg.fileContent && msg.fileName ? (
+                          msg.fileType?.startsWith("image/") ? (
+                            <img
+                              src={`data:${msg.fileType};base64,${msg.fileContent}`}
+                              alt={msg.fileName}
+                              style={{
+                                maxWidth: "100%",
+                                borderRadius: "8px",
+                                marginBottom: "4px",
+                              }}
+                            />
+                          ) : (
+                            <a
+                              href={`data:${msg.fileType};base64,${msg.fileContent}`}
+                              download={msg.fileName}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                color: "#007bff",
+                                textDecoration: "underline",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              📎 {msg.fileName}
+                            </a>
+                          )
+                        ) : null}
+
+                        {/* Texto */}
+                        {msg.text && <span>{msg.text}</span>}
+
+                        {/* Timestamp */}
+                        {msg.timestamp && (
+                          <span
                             style={{
-                              maxWidth: "100%",
-                              borderRadius: "8px",
-                              marginBottom: "4px",
-                            }}
-                          />
-                        ) : (
-                          <a
-                            href={`data:${msg.fileType};base64,${msg.fileContent}`}
-                            download={msg.fileName}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              color: "#007bff",
-                              textDecoration: "underline",
-                              marginBottom: "4px",
+                              fontSize: "9px",
+                              color: "#555",
+                              alignSelf: "flex-end",
+                              opacity: 0.7,
                             }}
                           >
-                            📎 {msg.fileName}
-                          </a>
-                        )
-                      ) : null}
+                            {new Date(msg.timestamp).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    </CSSTransition>
+                  );
+                })}
 
-                      {/* Texto */}
-                      {msg.text && <span>{msg.text}</span>}
+              {isTyping && (typingSender === "bot" || typingSender === "admin") && (
+                <CSSTransition key="typing" timeout={300} classNames="fade" nodeRef={typingRef}>
+                  <div
+                    ref={typingRef}
+                    style={{
+                      alignSelf: "flex-start",
+                      backgroundColor: typingSender === "admin" ? "#ccc" : secondaryColor,
+                      color: typingSender === "admin" ? "#000" : primaryColor,
 
-                      {/* Timestamp */}
-                      {msg.timestamp && (
-                        <span
-                          style={{
-                            fontSize: "10px",
-                            color: "#555",
-                            marginTop: "4px",
-                            alignSelf: "flex-end",
-                            opacity: 0.7,
-                          }}
-                        >
-                          {new Date(msg.timestamp).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </span>
-                      )}
-                    </div>
-                  </CSSTransition>
-                );
-              })}
-
-              {isTyping &&
-                typingSender === "bot" &&
-                messages[messages.length - 1]?.from !== "bot" && ( // ⬅️ Verificación adicional
-                  <CSSTransition key="typing" timeout={300} classNames="fade" nodeRef={typingRef}>
-                    <div
-                      ref={typingRef}
-                      style={{
-                        alignSelf: "flex-start",
-                        backgroundColor:
-                          primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-                            ? fallbackBgColor
-                            : secondaryColor,
-                        color:
-                          primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-                            ? fallbackTextColor
-                            : primaryColor,
-                        padding: "8px 12px",
-                        borderRadius: "12px",
-                        maxWidth: "60%",
-                        fontFamily,
-                        fontSize: "14px",
-                        fontStyle: "italic",
-                        opacity: 0.7,
-                        border: "none",
-                        boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
-                      }}
-                    >
-                      <TypingDots color={primaryColor} />
-                    </div>
-                  </CSSTransition>
-                )}
+                      padding: "8px 12px",
+                      borderRadius: "12px",
+                      maxWidth: "60%",
+                      fontFamily,
+                      fontSize: "14px",
+                      fontStyle: "italic",
+                      opacity: 0.7,
+                      border: "none",
+                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
+                    }}
+                  >
+                    <TypingDots color={primaryColor} />
+                  </div>
+                </CSSTransition>
+              )}
             </TransitionGroup>
 
             <div ref={messagesEndRef} />
@@ -920,9 +957,20 @@ function ChatWidget({
               ref={textareaRef}
               placeholder="Escribe un mensaje..."
               value={message}
-              onChange={(e) => {
-                setMessage(e.target.value);
+              onChange={async (e) => {
+                const text = e.target.value;
+                setMessage(text);
                 autoResizeTextarea();
+
+                if (text.trim()) {
+                  try {
+                    console.log("✍️ Enviando Typing del usuario", conversationId);
+
+                    await connection.invoke("Typing", conversationId, "user");
+                  } catch (err) {
+                    console.error("❌ Error enviando Typing del usuario:", err);
+                  }
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -930,7 +978,6 @@ function ChatWidget({
                   sendMessage();
                   setMessage(""); // 🧹 Limpiar input
 
-                  // Esperar al siguiente ciclo de render y resetear altura
                   requestAnimationFrame(() => {
                     if (textareaRef.current) {
                       textareaRef.current.style.height = "auto";
@@ -942,7 +989,7 @@ function ChatWidget({
               style={{
                 width: "100%",
                 minHeight: "42px",
-                maxHeight: "160px", // opcional: altura máxima
+                maxHeight: "160px",
                 padding: "10px 42px 10px 70px",
                 borderRadius: "12px",
                 border: `1.5px solid ${inputBorder}`,
@@ -952,7 +999,7 @@ function ChatWidget({
                 color: inputText,
                 backgroundColor: inputBg,
                 resize: "none",
-                overflow: "", // ⛔ oculta scroll
+                overflow: "",
                 boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
                 lineHeight: "1.5",
               }}

@@ -1,6 +1,5 @@
 import React from "react";
 import PropTypes from "prop-types";
-import Box from "@mui/material/Box";
 import InputBase from "@mui/material/InputBase";
 import IconButton from "@mui/material/IconButton";
 import SendIcon from "@mui/icons-material/Send";
