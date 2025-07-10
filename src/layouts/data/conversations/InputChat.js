@@ -18,20 +18,33 @@ function InputChat({ value, onChange, onSend, replyTo, onCancelReply }) {
       {replyTo && (
         <div
           style={{
-            background: "#f4f4f4",
-            padding: "6px 10px",
-            borderLeft: "3px solid #999",
+            background: "#e3f2fd",
+            padding: "8px 12px",
+            borderLeft: "4px solid #2196f3",
+            borderRadius: "10px",
             fontSize: "13px",
-            borderRadius: "8px",
+            color: "#0d47a1",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            maxWidth: "100%",
-            overflow: "hidden",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+            marginLeft: "35px", // 👈 CORRERLO A LA DERECHA
+            maxWidth: "81%", // 👈 QUE NO LLEGUE HASTA EL BORDE DERECHO
           }}
         >
-          <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flexGrow: 1 }}>
-            <strong>Respondiendo:</strong> {replyTo.text || replyTo.fileName || "mensaje"}
+          <div
+            style={{
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              flexGrow: 1,
+              fontWeight: 500,
+            }}
+          >
+            <strong>Respondiendo:</strong>{" "}
+            <span style={{ fontStyle: "italic" }}>
+              {replyTo.text || replyTo.fileName || "mensaje"}
+            </span>
           </div>
           <button
             onClick={onCancelReply}

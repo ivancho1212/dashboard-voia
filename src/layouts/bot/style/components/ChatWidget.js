@@ -678,6 +678,8 @@ function ChatWidget({
                     padding: "8px 12px",
                     borderRadius: "12px",
                     maxWidth: "80%",
+                    minWidth: "120px",
+
                     wordBreak: "break-word",
                     fontSize: "14px",
                     fontFamily,
@@ -735,11 +737,6 @@ function ChatWidget({
                           </div>
                         )}
 
-                        {/* Texto solo si NO hay archivos */}
-                        {msg.text && (!msg.multipleFiles || msg.multipleFiles.length === 0) && (
-                          <span>{msg.text}</span>
-                        )}
-
                         {/* Archivo único */}
                         {!msg.files && msg.fileContent && msg.fileName ? (
                           msg.fileType?.startsWith("image/") ? (
@@ -769,10 +766,7 @@ function ChatWidget({
                           )
                         ) : null}
 
-                        {/* Texto solo si NO hay archivos (evita duplicación) */}
-                        {msg.text && !msg.multipleFiles && !msg.fileContent && (
-                          <span>{msg.text}</span>
-                        )}
+                        {msg.text && <span>{msg.text}</span>}
 
                         {/* Timestamp */}
                         {msg.timestamp && (

@@ -24,6 +24,7 @@ import { getConversationsByUser } from "services/botConversationsService";
 function Conversations() {
   const tabContainerRef = useRef(null);
   const tabRefs = useRef({});
+  const messageRefs = useRef({}); // ✅ Añade esto
 
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [conversationList, setConversationList] = useState([]);
@@ -35,6 +36,8 @@ function Conversations() {
   const [isConnected, setIsConnected] = useState(false);
   const [typingSender, setTypingSender] = useState(null);
   const [typingState, setTypingState] = useState({});
+  const [replyToMessage, setReplyToMessage] = useState(null); // ✅ NUEVO
+  const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
   const userId = 45; // Simulado
 
@@ -86,10 +89,12 @@ function Conversations() {
             [id]: [
               ...(prev[id] || []),
               {
+                id: msg.id || `${id}-${Date.now()}`,
                 from: msg.from,
                 text: msg.text,
                 timestamp: msg.timestamp || new Date().toISOString(),
-                multipleFiles: msg.multipleFiles, // ✅ AÑADIR ESTO
+                multipleFiles: msg.multipleFiles,
+                replyTo: msg.replyTo || null,
               },
             ],
           }));
@@ -224,18 +229,43 @@ function Conversations() {
     }
   };
 
-  const handleSendAdminMessage = async (text, conversationId) => {
-    if (!connection || connection.state !== "Connected") {
-      console.warn("SignalR connection not ready yet");
-      return;
-    }
+  const handleReply = (message) => {
+    setReplyToMessage(message);
+  };
 
-    try {
-      await connection.invoke("AdminMessage", conversationId, text);
-    } catch (err) {
-      console.error("❌ Error sending message:", err);
+  const handleJumpToReply = (messageId) => {
+    console.log("🔍 Buscando mensaje ID:", messageId, messageRefs.current);
+
+    const target = messageRefs.current[messageId];
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedMessageId(messageId);
+
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 2000);
+    } else {
+      console.warn("❌ No se encontró el mensaje en refs:", messageId);
     }
   };
+
+  const handleSendAdminMessage = async (text, conversationId) => {
+  if (!connection || connection.state !== "Connected") {
+    console.warn("SignalR connection not ready yet");
+    return;
+  }
+
+  try {
+    // Solo envía por SignalR
+    await connection.invoke("AdminMessage", conversationId, text, replyToMessage || null);
+
+    // Limpia el estado de respuesta si aplica
+    setReplyToMessage(null);
+  } catch (err) {
+    console.error("❌ Error sending message:", err);
+  }
+};
+
 
   const handleChangeStatus = (id, newStatus) => {
     setConversationList((prev) =>
@@ -502,8 +532,8 @@ function Conversations() {
                     messages={selectedMessages}
                     isTyping={!!typingState[selectedConversation.id]}
                     typingSender="user"
-                    iaPaused={!!iaPausedMap[selectedConversation.id]} // ✅ obtiene el estado por conversación
-                    onToggleIA={() => handleToggleIA(selectedConversation.id)} // ✅ alterna solo la conversación activa
+                    iaPaused={!!iaPausedMap[selectedConversation.id]}
+                    onToggleIA={() => handleToggleIA(selectedConversation.id)}
                     iaPausedMap={iaPausedMap}
                     onSendAdminMessage={(msg) =>
                       handleSendAdminMessage(msg, selectedConversation.id)
@@ -514,6 +544,14 @@ function Conversations() {
                     onBlock={() => handleBlockUser(selectedConversation.id)}
                     status={selectedConversation.status}
                     blocked={selectedConversation.blocked}
+                    // 👇 NUEVAS PROPS para flujo de respuesta
+                    onReply={handleReply}
+                    replyTo={replyToMessage}
+                    onCancelReply={() => setReplyToMessage(null)}
+                    // 👇 NUEVAS PROPS para scroll al mensaje referenciado
+                    onJumpToReply={handleJumpToReply}
+                    messageRefs={messageRefs}
+                    highlightedMessageId={highlightedMessageId} // ✅ pasa este prop
                   />
                 ) : (
                   <SoftBox display="flex" justifyContent="center" alignItems="center" height="100%">

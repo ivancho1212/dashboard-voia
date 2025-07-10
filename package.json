@@ -29,6 +29,7 @@
     "chroma-js": "2.4.2",
     "date-fns": "^4.1.0",
     "file-saver": "^2.0.5",
+    "jszip": "^3.10.1",
     "lottie-react": "^2.4.1",
     "lucide-react": "^0.510.0",
     "prop-types": "^15.8.1",
