@@ -85,20 +85,14 @@ function ChatWidget({
   // ⬇️ Pega esto después de `waitForConnection` y antes de `useEffect`
   const handleFileUpload = (event) => {
     const files = Array.from(event.target.files);
-    const maxSizeInMB = 5;
-    const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
-
+    const maxSizeInBytes = 5 * 1024 * 1024;
     const filePayloads = [];
 
     const promises = files.map((file) => {
       return new Promise((resolve) => {
-        if (!file || file.type.startsWith("image/")) {
-          console.warn(`❌ ${file?.name} es una imagen o archivo inválido.`);
-          return resolve(null);
-        }
-
+        if (!file || file.type.startsWith("image/")) return resolve(null);
         if (file.size > maxSizeInBytes) {
-          alert(`❌ ${file.name} excede los ${maxSizeInMB}MB permitidos.`);
+          alert(`❌ ${file.name} excede los 5MB permitidos.`);
           return resolve(null);
         }
 
@@ -112,20 +106,6 @@ function ChatWidget({
             fileType: file.type,
             fileContent: base64Data,
           });
-
-          // ✅ Mostrar en el chat del usuario
-          setMessages((prev) => [
-            ...prev,
-            {
-              from: "user",
-              file: {
-                name: file.name,
-                type: file.type,
-                content: fullBase64,
-              },
-              timestamp: new Date().toISOString(),
-            },
-          ]);
 
           resolve();
         };
@@ -142,45 +122,27 @@ function ChatWidget({
         setTypingSender("bot");
       }, 300);
 
-      const payload = {
-        botId,
-        userId,
-        multipleFiles: filePayloads,
-      };
-
       try {
         await waitForConnection();
-        await connection.invoke("SendFile", conversationId, payload);
-
-        const phantomMessage = {
-          botId,
-          userId,
-          question: "📎 El usuario ha enviado un archivo para revisión manual.",
-          meta: { internalOnly: true },
-        };
-        await connection.invoke("SendMessage", conversationId, phantomMessage);
+        await connection.invoke("SendFile", conversationId, {
+          multipleFiles: filePayloads,
+        });
       } catch (err) {
-        console.error("❌ Error enviando documentos:", err);
+        console.error("❌ Error enviando archivos:", err);
       }
     });
   };
 
   const handleImageUpload = (event) => {
     const files = Array.from(event.target.files);
-    const maxSizeInMB = 5;
-    const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
-
+    const maxSizeInBytes = 5 * 1024 * 1024;
     const imagePayloads = [];
 
     const promises = files.map((file) => {
       return new Promise((resolve) => {
-        if (!file.type.startsWith("image/")) {
-          alert(`❌ ${file.name} no es una imagen válida.`);
-          return resolve(null);
-        }
-
+        if (!file.type.startsWith("image/")) return resolve(null);
         if (file.size > maxSizeInBytes) {
-          alert(`❌ ${file.name} excede los ${maxSizeInMB}MB permitidos.`);
+          alert(`❌ ${file.name} excede los 5MB permitidos.`);
           return resolve(null);
         }
 
@@ -194,20 +156,6 @@ function ChatWidget({
             fileType: file.type,
             fileContent: base64Data,
           });
-
-          // ✅ Mostrar en el chat del usuario
-          setMessages((prev) => [
-            ...prev,
-            {
-              from: "user",
-              file: {
-                name: file.name,
-                type: file.type,
-                content: fullBase64,
-              },
-              timestamp: new Date().toISOString(),
-            },
-          ]);
 
           resolve();
         };
@@ -224,24 +172,11 @@ function ChatWidget({
         setTypingSender("bot");
       }, 300);
 
-      const payload = {
-        botId,
-        userId,
-        multipleFiles: imagePayloads,
-      };
-
       try {
         await waitForConnection();
-        await connection.invoke("SendFile", conversationId, payload);
-
-        const phantomMessage = {
-          botId,
-          userId,
-          question: "📎 El usuario ha enviado un archivo para revisión manual.",
-          meta: { internalOnly: true },
-        };
-
-        await connection.invoke("SendMessage", conversationId, phantomMessage);
+        await connection.invoke("SendFile", conversationId, {
+          multipleFiles: imagePayloads,
+        });
       } catch (err) {
         console.error("❌ Error enviando imágenes:", err);
       }
@@ -279,10 +214,6 @@ function ChatWidget({
     const handleReceiveMessage = async (msg) => {
       console.log("📩 Mensaje recibido del backend:", msg);
       const isFromBot = msg.from === "bot";
-      const isPhantomMessage = msg.text?.includes(
-        "📎 El usuario ha enviado un archivo para revisión manual"
-      );
-      if (isPhantomMessage) return;
 
       if (isFromBot) {
         if (typingTimeoutRef.current) {
@@ -292,31 +223,23 @@ function ChatWidget({
 
         setIsTyping(false);
         setTypingSender(null);
-
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
-      if (!msg.text && !msg.fileContent && !msg.multipleFiles) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            from: "bot",
-            text: "❌ Ocurrió un error al procesar tu mensaje. Intenta nuevamente.",
-            timestamp: new Date().toISOString(),
-          },
-        ]);
-        setIsTyping(false);
-        setTypingSender(null);
+      // 🚫 Evitar renderizar mensajes completamente vacíos
+      if (
+        !msg.text?.trim() &&
+        (!msg.multipleFiles || msg.multipleFiles.length === 0) &&
+        !msg.fileContent
+      ) {
+        console.warn("🚫 Mensaje ignorado por estar vacío.");
         return;
       }
 
       const newMessage = {
         from: msg.from,
-        text: msg.text || null,
-        fileName: msg.fileName || null,
-        fileType: msg.fileType || null,
-        fileContent: msg.fileContent || null,
-        files: msg.multipleFiles || null,
+        text: msg.multipleFiles?.length ? null : msg.text || null, // ❌ evita duplicar texto si hay archivos
+        multipleFiles: msg.multipleFiles || null,
         timestamp: msg.timestamp || new Date().toISOString(),
       };
 
@@ -401,10 +324,6 @@ function ChatWidget({
     setMessage("");
 
     const payload = { botId, userId, question: msg };
-
-    // 👇 Mostrar mensaje del usuario en el chat antes de la respuesta del bot
-    // Ya no agregamos manualmente el mensaje del usuario aquí.
-    // El backend enviará el mensaje a través de SignalR y lo capturará handleReceiveMessage.
 
     if (!conversationId) {
       console.warn("⛔ conversationId no está definido aún");
@@ -778,9 +697,9 @@ function ChatWidget({
                     >
                       <div ref={nodeRef} style={containerStyle}>
                         {/* Archivos múltiples */}
-                        {msg.files && Array.isArray(msg.files) && (
+                        {msg.multipleFiles?.length > 0 && (
                           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                            {msg.files.map((file, i) =>
+                            {msg.multipleFiles.map((file, i) =>
                               file.fileType?.startsWith("image/") ? (
                                 <img
                                   key={i}
@@ -800,7 +719,7 @@ function ChatWidget({
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{
-                                    display: "block",
+                                    display: "flex",
                                     alignItems: "center",
                                     gap: "6px",
                                     color: "#007bff",
@@ -808,19 +727,17 @@ function ChatWidget({
                                     fontSize: "12px",
                                   }}
                                 >
-                                  <span
-                                    style={{
-                                      fontSize: "20px", // 👈 tamaño más grande para el clip
-                                      textShadow: "1px 1px 2px rgba(0,0,0,0.2)",
-                                    }}
-                                  >
-                                    📎
-                                  </span>
+                                  <span style={{ fontSize: "20px" }}>📎</span>
                                   <span>{file.fileName}</span>
                                 </a>
                               )
                             )}
                           </div>
+                        )}
+
+                        {/* Texto solo si NO hay archivos */}
+                        {msg.text && (!msg.multipleFiles || msg.multipleFiles.length === 0) && (
+                          <span>{msg.text}</span>
                         )}
 
                         {/* Archivo único */}
@@ -852,8 +769,10 @@ function ChatWidget({
                           )
                         ) : null}
 
-                        {/* Texto */}
-                        {msg.text && <span>{msg.text}</span>}
+                        {/* Texto solo si NO hay archivos (evita duplicación) */}
+                        {msg.text && !msg.multipleFiles && !msg.fileContent && (
+                          <span>{msg.text}</span>
+                        )}
 
                         {/* Timestamp */}
                         {msg.timestamp && (

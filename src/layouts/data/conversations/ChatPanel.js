@@ -15,7 +15,7 @@ import Tooltip from "@mui/material/Tooltip";
 import connection from "../../../services/signalr";
 import TypingIndicator from "./TypingIndicator";
 import { CSSTransition } from "react-transition-group";
-import { injectTypingAnimation } from "./typingAnimation"; // ✅ asegúrate de importar esto
+import { injectTypingAnimation } from "./typingAnimation";
 
 function ChatPanel({
   conversationId,
@@ -34,7 +34,7 @@ function ChatPanel({
   const [anchorEl, setAnchorEl] = useState(null);
   const [inputValue, setInputValue] = useState("");
   const bottomRef = useRef(null);
-  const typingRef = useRef(null); // ✅ necesario para CSSTransition
+  const typingRef = useRef(null);
 
   const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseMenu = () => setAnchorEl(null);
@@ -65,7 +65,7 @@ function ChatPanel({
   };
 
   useEffect(() => {
-    injectTypingAnimation(); // ✅ esto inyecta las animaciones fade y typing
+    injectTypingAnimation();
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
 
@@ -77,6 +77,49 @@ function ChatPanel({
         .catch((err) => console.error("❌ Error enviando Typing:", err));
     }
   };
+
+  // ✅ Procesar archivos en mensajes con logs
+  const processedMessages = messages.map((msg, i) => {
+    console.log(`📩 Procesando mensaje[${i}]:`, msg);
+
+    if (msg.multipleFiles && msg.multipleFiles.length > 0) {
+      console.log(`📎 Mensaje[${i}] contiene archivos en multipleFiles:`, msg.multipleFiles);
+
+      const files = msg.multipleFiles.map((file, index) => {
+        console.log(`🔍 Archivo[${index}] en mensaje[${i}]:`, file);
+
+        try {
+          const byteCharacters = atob(file.fileContent);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: file.fileType });
+          const url = URL.createObjectURL(blob);
+
+          const processedFile = {
+            ...file,
+            url,
+          };
+
+          console.log(`✅ Archivo[${index}] procesado con URL:`, processedFile);
+          return processedFile;
+        } catch (error) {
+          console.error(`❌ Error procesando archivo[${index}] en mensaje[${i}]:`, error);
+          return file; // Retornar sin URL para que el render lo omita o lo maneje
+        }
+      });
+
+      return {
+        ...msg,
+        files: files.length > 0 ? files : undefined,
+        multipleFiles: undefined, // opcional: evita confusión
+      };      
+    }
+
+    return msg;
+  });
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -166,8 +209,8 @@ function ChatPanel({
           bgcolor: "#f9f9f9",
         }}
       >
-        {messages.map((msg, idx) => {
-          console.log("📨 Mensaje recibido:", msg);
+        {processedMessages.map((msg, idx) => {
+          console.log(`💬 Renderizando mensaje[${idx}]`, msg);
           return <MessageBubble key={idx} msg={msg} />;
         })}
 

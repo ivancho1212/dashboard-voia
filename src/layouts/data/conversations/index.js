@@ -83,12 +83,13 @@ function Conversations() {
 
           setMessages((prev) => ({
             ...prev,
-            [msg.conversationId]: [
-              ...(prev[msg.conversationId] || []),
+            [id]: [
+              ...(prev[id] || []),
               {
                 from: msg.from,
                 text: msg.text,
                 timestamp: msg.timestamp || new Date().toISOString(),
+                multipleFiles: msg.multipleFiles, // ✅ AÑADIR ESTO
               },
             ],
           }));
