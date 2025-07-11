@@ -228,7 +228,7 @@ const MessageBubble = React.forwardRef(
             )}
             {text && (
               <div
-                style={{ padding: "6px 12px", cursor: "pointer" }}
+                style={{ padding: "6px 12px", cursor: "pointer", color: "Gray" }}
                 onClick={() => {
                   navigator.clipboard.writeText(text);
                   setImageOptionsOpen(false);
@@ -238,7 +238,7 @@ const MessageBubble = React.forwardRef(
               </div>
             )}
             <div
-              style={{ padding: "6px 12px", cursor: "pointer" }}
+              style={{ padding: "6px 12px", cursor: "pointer",color: "Gray" }}
               onClick={() => {
                 onReply && onReply(msg);
                 setImageOptionsOpen(false);

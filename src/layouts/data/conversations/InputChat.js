@@ -1,11 +1,15 @@
-import React from "react";
+import React, { forwardRef } from "react";
 import PropTypes from "prop-types";
 import InputBase from "@mui/material/InputBase";
 import IconButton from "@mui/material/IconButton";
 import SendIcon from "@mui/icons-material/Send";
 import Paper from "@mui/material/Paper";
 
-function InputChat({ value, onChange, onSend, replyTo, onCancelReply }) {
+// ✅ Usamos forwardRef para poder enfocar el input desde el padre
+const InputChat = forwardRef(function InputChat(
+  { value, onChange, onSend, replyTo, onCancelReply },
+  ref
+) {
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -28,8 +32,8 @@ function InputChat({ value, onChange, onSend, replyTo, onCancelReply }) {
             justifyContent: "space-between",
             alignItems: "center",
             boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
-            marginLeft: "35px", // 👈 CORRERLO A LA DERECHA
-            maxWidth: "81%", // 👈 QUE NO LLEGUE HASTA EL BORDE DERECHO
+            marginLeft: "35px",
+            maxWidth: "81%",
           }}
         >
           <div
@@ -75,6 +79,7 @@ function InputChat({ value, onChange, onSend, replyTo, onCancelReply }) {
         }}
       >
         <InputBase
+          inputRef={ref} // 👈 ref aquí para que ChatPanel pueda hacer focus()
           fullWidth
           multiline
           maxRows={3}
@@ -96,14 +101,14 @@ function InputChat({ value, onChange, onSend, replyTo, onCancelReply }) {
       </Paper>
     </div>
   );
-}
+});
 
 InputChat.propTypes = {
   value: PropTypes.string.isRequired,
   onChange: PropTypes.func.isRequired,
   onSend: PropTypes.func.isRequired,
-  replyTo: PropTypes.object, // mensaje al que se está respondiendo
-  onCancelReply: PropTypes.func, // función para cancelar respuesta
+  replyTo: PropTypes.object,
+  onCancelReply: PropTypes.func,
 };
 
 export default InputChat;

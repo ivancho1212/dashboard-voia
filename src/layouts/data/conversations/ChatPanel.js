@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import PropTypes from "prop-types";
 import SoftTypography from "components/SoftTypography";
 import Divider from "@mui/material/Divider";
@@ -46,6 +46,20 @@ function ChatPanel({
   const lastMessageIdRef = useRef(null);
   const [hasNewMessageBelow, setHasNewMessageBelow] = useState(false);
 
+  useEffect(() => {
+    if (iaPaused && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [iaPaused]);
+
+  useEffect(() => {
+    if (replyTo && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [replyTo]);
+
+  const inputRef = useRef(null); // 👈 NUEVO
+
   const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseMenu = () => setAnchorEl(null);
 
@@ -61,10 +75,12 @@ function ChatPanel({
 
   const handleSendMessage = () => {
     if (inputValue.trim()) {
-      onSendAdminMessage(inputValue.trim(), conversationId);
+      const messageId = Date.now().toString(); // ✅ DECLARADO PRIMERO
+
+      onSendAdminMessage(inputValue.trim(), conversationId, messageId); // ✅ AHORA FUNCIONA
 
       const adminMessage = {
-        id: Date.now().toString(), // ✅ ID único (string)
+        id: messageId,
         from: "admin",
         text: inputValue.trim(),
         timestamp: new Date().toISOString(),
@@ -73,36 +89,64 @@ function ChatPanel({
 
       setInputValue("");
 
-      if (onCancelReply) onCancelReply(); // limpia el estado después de enviar
+      setTimeout(() => {
+        const msgElement = messageRefs.current[messageId];
+        if (msgElement) {
+          msgElement.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+          bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+      }, 100);
+
+      if (onCancelReply) onCancelReply();
     }
   };
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     injectTypingAnimation();
 
     const container = document.getElementById("chat-container");
     if (!container) return;
 
-    const atBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
-
     const lastMessage = messages[messages.length - 1];
 
-    if (
-      lastMessage &&
-      lastMessage.id !== lastMessageIdRef.current &&
-      lastMessage.from !== "admin" && // 👈 solo si NO es del admin
-      !atBottom &&
-      !isViewerOpen
-    ) {
-      setHasNewMessageBelow(true);
-    }
+    const isAtBottom = () => {
+      return container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+    };
 
-    if (atBottom && !isViewerOpen) {
-      setHasNewMessageBelow(false); // Oculta el aviso
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" }); // Scroll automático
-    }
+    const scrollToBottom = () => {
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 50); // Da tiempo a React de renderizar el nuevo mensaje
+    };
 
-    lastMessageIdRef.current = lastMessage?.id; // Guarda referencia del último mensaje
+    if (!lastMessage) return;
+
+    const fromOthers = lastMessage?.from !== "admin";
+    const isNew = lastMessage.id !== lastMessageIdRef.current;
+    const atBottom = isAtBottom();
+
+    if (!isNew) return;
+
+    lastMessageIdRef.current = lastMessage.id;
+
+    if (fromOthers && !isViewerOpen) {
+      if (atBottom) {
+        scrollToBottom();
+        setHasNewMessageBelow(false);
+      } else {
+        setHasNewMessageBelow(true);
+      }
+    } else {
+      if (!isViewerOpen) {
+        if (atBottom) {
+          scrollToBottom();
+          setHasNewMessageBelow(false);
+        } else if (lastMessage.from !== "admin") {
+          setHasNewMessageBelow(true);
+        }
+      }
+    }
   }, [messages, isTyping, isViewerOpen]);
 
   const handleInputChange = (text) => {
@@ -237,7 +281,7 @@ function ChatPanel({
         id="chat-container"
         onScroll={(e) => {
           const el = e.target;
-          const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50; // margen de tolerancia
+          const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
           setIsUserAtBottom(isAtBottom);
         }}
         style={{
@@ -294,9 +338,9 @@ function ChatPanel({
               setHasNewMessageBelow(false);
             }}
             sx={{
-              position: "absolute",
-              bottom: 16,
-              right: 20,
+              position: "fixed", // 👈 CAMBIAR A FIXED
+              bottom: 130, // 👈 ajusta según tu layout (80px si hay input abajo)
+              right: 60,
               backgroundColor: "#00bcd4",
               color: "white !important",
               px: 2,
@@ -305,7 +349,7 @@ function ChatPanel({
               cursor: "pointer",
               boxShadow: 3,
               fontSize: "0.8rem",
-              zIndex: 999,
+              zIndex: 1300, // encima del contenido
             }}
           >
             ⬇ Nuevo mensaje
@@ -321,6 +365,7 @@ function ChatPanel({
           {iaPaused && (
             <Box flex={1}>
               <InputChat
+                ref={inputRef}
                 value={inputValue}
                 onChange={(e) => handleInputChange(e.target.value)}
                 onSend={handleSendMessage}

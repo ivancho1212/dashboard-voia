@@ -41,11 +41,22 @@ function Conversations() {
 
   const userId = 45; // Simulado
 
-  const handleToggleIA = (conversationId) => {
+  const handleToggleIA = async (conversationId) => {
+    const newState = !iaPausedMap[conversationId];
+
+    // Actualiza el estado local
     setIaPausedMap((prev) => ({
       ...prev,
-      [conversationId]: !prev[conversationId],
+      [conversationId]: newState,
     }));
+
+    // Llama a SignalR para notificar al backend
+    try {
+      await connection.invoke("SetIAPaused", conversationId, newState);
+      console.log(`🟢 IA ${newState ? "pausada" : "activada"} para conversación ${conversationId}`);
+    } catch (err) {
+      console.error("❌ Error al cambiar el estado de la IA:", err);
+    }
   };
 
   useEffect(() => {
@@ -265,7 +276,6 @@ function Conversations() {
     console.error("❌ Error sending message:", err);
   }
 };
-
 
   const handleChangeStatus = (id, newStatus) => {
     setConversationList((prev) =>
@@ -534,7 +544,6 @@ function Conversations() {
                     typingSender="user"
                     iaPaused={!!iaPausedMap[selectedConversation.id]}
                     onToggleIA={() => handleToggleIA(selectedConversation.id)}
-                    iaPausedMap={iaPausedMap}
                     onSendAdminMessage={(msg) =>
                       handleSendAdminMessage(msg, selectedConversation.id)
                     }
@@ -551,7 +560,7 @@ function Conversations() {
                     // 👇 NUEVAS PROPS para scroll al mensaje referenciado
                     onJumpToReply={handleJumpToReply}
                     messageRefs={messageRefs}
-                    highlightedMessageId={highlightedMessageId} // ✅ pasa este prop
+                    highlightedMessageId={highlightedMessageId}
                   />
                 ) : (
                   <SoftBox display="flex" justifyContent="center" alignItems="center" height="100%">
