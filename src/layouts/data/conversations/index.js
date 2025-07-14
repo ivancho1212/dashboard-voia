@@ -19,11 +19,11 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 // 👇 Drag and Drop
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-// 👇 Nuevo import
 import {
   getConversationsByUser,
   getMessagesByConversationId,
-} from "services/botConversationsService";
+} from "services/conversationsService";
+
 
 function Conversations() {
   const tabContainerRef = useRef(null);
@@ -116,8 +116,16 @@ function Conversations() {
                 from: msg.from,
                 text: msg.text,
                 timestamp: msg.timestamp || new Date().toISOString(),
-                multipleFiles: msg.multipleFiles,
-                replyToMessageId: msg.replyToMessageId || null, // ✅ GUÁRDALO AQUÍ
+                multipleFiles: msg.multipleFiles || null,
+                fileContent: msg.fileContent || null,
+                fileType: msg.fileType || null,
+                fileName: msg.fileName || null,
+                replyTo: msg.replyToMessageId
+                  ? {
+                      id: msg.replyToMessageId,
+                      text: msg.replyToText || "mensaje anterior",
+                    }
+                  : null,
               },
             ],
           }));
@@ -187,8 +195,7 @@ function Conversations() {
       } catch (error) {
         console.error("❌ Error al conectar con SignalR:", error);
       }
-    }; // 👈 AQUÍ estaba faltando esta llave de cierre
-
+    };
     loadInitialConversations();
     setupSignalR();
 

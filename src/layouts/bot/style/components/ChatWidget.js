@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import connection from "services/signalr";
+import { sendChatFile, sendGroupedImages } from "services/chatUploadedFilesService";
 
 const voaiGif = "/voai.gif"; // ✅ Ruta relativa al dominio público
 
@@ -54,104 +55,55 @@ function ChatWidget({
     }
   };
 
-  const handleFileUpload = (event) => {
+  const handleUpload = async (event) => {
     const files = Array.from(event.target.files);
+    event.target.value = null;
+
     const maxSizeInBytes = 5 * 1024 * 1024;
-    const filePayloads = [];
+    const isImage = (file) => file.type.startsWith("image/");
 
-    const promises = files.map((file) => {
-      return new Promise((resolve) => {
-        if (!file || file.type.startsWith("image/")) return resolve(null);
-        if (file.size > maxSizeInBytes) {
-          alert(`❌ ${file.name} excede los 5MB permitidos.`);
-          return resolve(null);
+    const images = files.filter(isImage);
+    const documents = files.filter((file) => !isImage(file));
+
+    // ✅ MULTI-IMAGENES
+    if (images.length > 0) {
+      for (const img of images) {
+        if (img.size > maxSizeInBytes) {
+          alert(`❌ La imagen ${img.name} excede los 5MB.`);
+          return;
         }
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Data = reader.result.split(",")[1];
-          const fullBase64 = `data:${file.type};base64,${base64Data}`;
-
-          filePayloads.push({
-            fileName: file.name,
-            fileType: file.type,
-            fileContent: base64Data,
-          });
-
-          resolve();
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    Promise.all(promises).then(async () => {
-      if (filePayloads.length === 0) return;
-
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        setIsTyping(true);
-        setTypingSender("bot");
-      }, 300);
-
-      try {
-        await waitForConnection();
-        await connection.invoke("SendFile", conversationId, {
-          multipleFiles: filePayloads,
-        });
-      } catch (err) {
-        console.error("❌ Error enviando archivos:", err);
       }
-    });
-  };
 
-  const handleImageUpload = (event) => {
-    const files = Array.from(event.target.files);
-    const maxSizeInBytes = 5 * 1024 * 1024;
-    const imagePayloads = [];
-
-    const promises = files.map((file) => {
-      return new Promise((resolve) => {
-        if (!file.type.startsWith("image/")) return resolve(null);
-        if (file.size > maxSizeInBytes) {
-          alert(`❌ ${file.name} excede los 5MB permitidos.`);
-          return resolve(null);
+      if (images.length === 1) {
+        // ✅ Imagen individual
+        await sendChatFile({ connection, conversationId, file: images[0], userId });
+      } else {
+        // ✅ Varias imágenes agrupadas
+        if (images.length > 10) {
+          alert("❌ Máximo 10 imágenes.");
+          return;
         }
-
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Data = reader.result.split(",")[1];
-          const fullBase64 = `data:${file.type};base64,${base64Data}`;
-
-          imagePayloads.push({
-            fileName: file.name,
-            fileType: file.type,
-            fileContent: base64Data,
-          });
-
-          resolve();
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    Promise.all(promises).then(async () => {
-      if (imagePayloads.length === 0) return;
-
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        setIsTyping(true);
-        setTypingSender("bot");
-      }, 300);
-
-      try {
-        await waitForConnection();
-        await connection.invoke("SendFile", conversationId, {
-          multipleFiles: imagePayloads,
-        });
-      } catch (err) {
-        console.error("❌ Error enviando imágenes:", err);
+        await sendGroupedImages({ connection, conversationId, files: images, userId });
       }
-    });
+
+      return;
+    }
+
+    // ✅ DOCUMENTO INDIVIDUAL
+    if (documents.length > 1) {
+      alert("❌ Solo puedes subir un documento a la vez.");
+      return;
+    }
+
+    if (documents.length === 1) {
+      const file = documents[0];
+      if (file.size > maxSizeInBytes) {
+        alert(`❌ El archivo ${file.name} excede los 5MB.`);
+        return;
+      }
+
+      await sendChatFile({ connection, conversationId, file, userId });
+    }
   };
 
   // ✅ SignalR Setup
@@ -199,20 +151,22 @@ function ChatWidget({
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
-      // 🚫 Evitar renderizar mensajes completamente vacíos
-      if (
-        !msg.text?.trim() &&
-        (!msg.multipleFiles || msg.multipleFiles.length === 0) &&
-        !msg.fileContent
-      ) {
+      const hasText = !!msg.text?.trim();
+      const hasMultipleFiles = msg.multipleFiles?.length > 0;
+      const hasFile = !!msg.file;
+      const hasImages = Array.isArray(msg.images) && msg.images.length > 0;
+
+      if (!hasText && !hasMultipleFiles && !hasFile && !hasImages) {
         console.warn("🚫 Mensaje ignorado por estar vacío.");
         return;
       }
 
       const newMessage = {
         from: msg.from,
-        text: msg.multipleFiles?.length ? null : msg.text || null, // ❌ evita duplicar texto si hay archivos
+        text: hasMultipleFiles ? null : msg.text || null,
         multipleFiles: msg.multipleFiles || null,
+        file: msg.file || null,
+        images: hasImages ? msg.images : null,
         timestamp: msg.timestamp || new Date().toISOString(),
       };
 
@@ -661,18 +615,17 @@ function ChatWidget({
                     alignSelf: isUser ? "flex-end" : "flex-start",
                     backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
                     color: "#1a1a1a",
-                    padding: "8px 12px",
+                    padding: "10px",
                     borderRadius: "12px",
-                    maxWidth: "80%",
-                    minWidth: "120px",
-
+                    maxWidth: "75%",
+                    minWidth: "80px",
+                    width: "fit-content", // 👈 que se adapte al contenido
                     wordBreak: "break-word",
                     fontSize: "14px",
                     fontFamily,
-                    border: "none",
-                    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.15)",
                     display: "flex",
                     flexDirection: "column",
+                    boxSizing: "border-box",
                   };
 
                   return (
@@ -686,49 +639,78 @@ function ChatWidget({
                       <div ref={nodeRef} style={containerStyle}>
                         {/* Archivos múltiples */}
                         {msg.multipleFiles?.length > 0 && (
-                          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                            {msg.multipleFiles.map((file, i) =>
-                              file.fileType?.startsWith("image/") ? (
-                                <img
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "repeat(2, 1fr)", // 2 columnas
+                              gap: "6px",
+                              marginBottom: "6px",
+                              width: "100%", // ✅ para que se alinee con la burbuja
+                              boxSizing: "border-box",
+                            }}
+                          >
+                            {msg.multipleFiles.slice(0, 4).map((file, i) => {
+                              const isLastVisible = i === 3 && msg.multipleFiles.length > 4;
+
+                              return (
+                                <div
                                   key={i}
-                                  src={`data:${file.fileType};base64,${file.fileContent}`}
-                                  alt={file.fileName}
                                   style={{
-                                    maxWidth: "120px",
-                                    maxHeight: "120px",
+                                    position: "relative",
+                                    width: "100%",
+                                    aspectRatio: "1 / 1",
                                     borderRadius: "8px",
-                                  }}
-                                />
-                              ) : (
-                                <a
-                                  key={i}
-                                  href={`data:${file.fileType};base64,${file.fileContent}`}
-                                  download={file.fileName}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    color: "#007bff",
-                                    textDecoration: "underline",
-                                    fontSize: "12px",
+                                    overflow: "hidden",
                                   }}
                                 >
-                                  <span style={{ fontSize: "20px" }}>📎</span>
-                                  <span>{file.fileName}</span>
-                                </a>
-                              )
-                            )}
+                                  <img
+                                    src={`data:${file.fileType};base64,${file.fileContent}`}
+                                    alt={file.fileName}
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                      display: "block",
+                                      filter: isLastVisible ? "brightness(0.5)" : "none",
+                                    }}
+                                  />
+                                  {isLastVisible && (
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        top: 0,
+                                        left: 0,
+                                        width: "100%",
+                                        height: "100%",
+                                        backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                        color: "white",
+                                        display: "flex",
+                                        justifyContent: "center",
+                                        alignItems: "center",
+                                        fontSize: "18px",
+                                        fontWeight: "bold",
+                                        borderRadius: "8px",
+                                      }}
+                                    >
+                                      +{msg.multipleFiles.length - 4}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 
                         {/* Archivo único */}
-                        {!msg.files && msg.fileContent && msg.fileName ? (
-                          msg.fileType?.startsWith("image/") ? (
+                        {msg.file ? (
+                          msg.file.fileType?.startsWith("image/") ? (
                             <img
-                              src={`data:${msg.fileType};base64,${msg.fileContent}`}
-                              alt={msg.fileName}
+                              src={
+                                msg.file.fileUrl.startsWith("http")
+                                  ? msg.file.fileUrl
+                                  : `http://localhost:5006${msg.file.fileUrl}`
+                              }
+                              alt={msg.file.fileName}
                               style={{
                                 maxWidth: "100%",
                                 borderRadius: "8px",
@@ -737,20 +719,89 @@ function ChatWidget({
                             />
                           ) : (
                             <a
-                              href={`data:${msg.fileType};base64,${msg.fileContent}`}
-                              download={msg.fileName}
+                              href={
+                                msg.file.fileUrl.startsWith("http")
+                                  ? msg.file.fileUrl
+                                  : `http://localhost:5006${msg.file.fileUrl}`
+                              }
+                              download={msg.file.fileName}
                               target="_blank"
                               rel="noopener noreferrer"
                               style={{
                                 color: "#007bff",
                                 textDecoration: "underline",
                                 marginBottom: "4px",
+                                display: "inline-block",
                               }}
                             >
-                              📎 {msg.fileName}
+                              📎 {msg.file.fileName}
                             </a>
                           )
                         ) : null}
+
+                        {/* Imágenes agrupadas recibidas */}
+                        {msg.images?.length > 0 && (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "8px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            {msg.images.slice(0, 4).map((img, i) => {
+                              const isLastVisible = i === 3 && msg.images.length > 4;
+                              return (
+                                <div
+                                  key={i}
+                                  style={{
+                                    position: "relative",
+                                    width: "100px",
+                                    height: "100px",
+                                    borderRadius: "8px",
+                                    overflow: "hidden",
+                                  }}
+                                >
+                                  <img
+                                    src={
+                                      img.fileUrl.startsWith("http")
+                                        ? img.fileUrl
+                                        : `http://localhost:5006${img.fileUrl}`
+                                    }
+                                    alt={img.fileName}
+                                    style={{
+                                      width: "100%",
+                                      height: "100%",
+                                      objectFit: "cover",
+                                      filter: isLastVisible ? "brightness(0.5)" : "none",
+                                    }}
+                                  />
+                                  {isLastVisible && (
+                                    <div
+                                      style={{
+                                        position: "absolute",
+                                        top: 0,
+                                        left: 0,
+                                        width: "100%",
+                                        height: "100%",
+                                        backgroundColor: "rgba(0, 0, 0, 0.6)",
+                                        color: "white",
+                                        display: "flex",
+                                        justifyContent: "center",
+                                        alignItems: "center",
+                                        fontSize: "16px",
+                                        fontWeight: "bold",
+                                        borderRadius: "8px",
+                                      }}
+                                    >
+                                      +{msg.images.length - 4}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {msg.text && <span>{msg.text}</span>}
 
@@ -811,28 +862,7 @@ function ChatWidget({
               padding: "10px 10px", // Margen externo (opcional, puedes ajustar)
             }}
           >
-            {/* 🖼️ Subir imágenes (solo imágenes, múltiples) */}
-            <label
-              style={{
-                position: "absolute",
-                left: "50px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                cursor: "pointer",
-              }}
-              title="Enviar imágenes"
-            >
-              <FaImage style={{ color: inputText, fontSize: "18px" }} />
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                style={{ display: "none" }}
-                onChange={handleImageUpload}
-              />
-            </label>
-
-            {/* 📎 Adjuntar dentro del input */}
+            {/* 📎 Adjuntar documentos (solo uno, no imágenes) */}
             <label
               style={{
                 position: "absolute",
@@ -845,9 +875,31 @@ function ChatWidget({
               <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
               <input
                 type="file"
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                name="document"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.xlsx,.csv,.zip"
                 style={{ display: "none" }}
-                onChange={handleFileUpload}
+                onChange={handleUpload}
+              />
+            </label>
+
+            {/* 🖼️ Subir imágenes múltiples */}
+            <label
+              style={{
+                position: "absolute",
+                left: "50px",
+                top: "50%",
+                transform: "translateY(-50%)",
+                cursor: "pointer",
+              }}
+            >
+              <FaImage style={{ color: inputText, fontSize: "18px" }} />
+              <input
+                type="file"
+                name="image"
+                accept="image/*"
+                multiple
+                style={{ display: "none" }}
+                onChange={handleUpload}
               />
             </label>
 

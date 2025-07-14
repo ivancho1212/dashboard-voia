@@ -187,17 +187,57 @@ const ChatPanel = forwardRef(
         });
       }
 
+      // ✅ Si tiene archivo individual (no multipleFiles)
+      else if (msg.fileContent && msg.fileType && msg.fileName) {
+        console.log(`📎 Mensaje[${i}] contiene archivo individual:`, msg.fileName);
+
+        try {
+          const byteCharacters = atob(msg.fileContent);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let j = 0; j < byteCharacters.length; j++) {
+            byteNumbers[j] = byteCharacters.charCodeAt(j);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          const blob = new Blob([byteArray], { type: msg.fileType });
+          const url = URL.createObjectURL(blob);
+
+          files = [
+            {
+              fileName: msg.fileName,
+              fileType: msg.fileType,
+              fileContent: msg.fileContent,
+              url,
+            },
+          ];
+        } catch (error) {
+          console.error(`❌ Error procesando archivo individual en mensaje[${i}]:`, error);
+        }
+      }
+
       // ✅ Resolver replyTo si solo viene replyToMessageId
       let resolvedReplyTo = undefined;
       if (msg.replyToMessageId) {
-        const original = messages.find((m) => m.id === msg.replyToMessageId);
+        const original = messages.find(
+          (m) => m.id?.toString() === msg.replyToMessageId?.toString()
+        );
         if (original) {
+          const firstFile = original.files?.[0] || original.multipleFiles?.[0];
           resolvedReplyTo = {
             id: original.id,
-            text: original.text,
-            fileName:
-              original.multipleFiles?.[0]?.fileName || original.files?.[0]?.fileName || undefined,
+            text: original.text || (firstFile ? "📎 " + firstFile.fileName : null),
+            fileName: firstFile?.fileName,
           };
+        } else if (msg.replyToText) {
+          // ✅ Fallback si no está el mensaje original aún
+          resolvedReplyTo = {
+            id: msg.replyToMessageId,
+            text: msg.replyToText,
+          };
+        } else {
+          console.warn(
+            "⚠️ No se encontró el mensaje original ni texto directo para reply:",
+            msg.replyToMessageId
+          );
         }
       }
 
