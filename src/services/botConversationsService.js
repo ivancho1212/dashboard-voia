@@ -3,6 +3,7 @@ import axios from "axios";
 // Endpoints base
 const BOT_CONVERSATIONS_API = "http://localhost:5006/api/BotConversations";
 const CONVERSATIONS_API = "http://localhost:5006/api/Conversations";
+const MESSAGES_API = "http://localhost:5006/api/Messages";
 
 /**
  * Envía una pregunta a un bot
@@ -36,21 +37,16 @@ export const getConversationsByUser = async (userId) => {
     return [];
   }
 };
+
 /**
- * Crea una nueva conversación entre un usuario y un bot
+ * Obtiene los mensajes de una conversación específica
  */
-export const createConversation = async ({ userId, botId, title = "", userMessage = "", botResponse = "" }) => {
+export const getMessagesByConversationId = async (conversationId) => {
   try {
-    const response = await axios.post(CONVERSATIONS_API, {
-      userId,
-      botId,
-      title,
-      userMessage,
-      botResponse,
-    });
+    const response = await axios.get(`${MESSAGES_API}/by-conversation/${conversationId}`);
     return response.data;
   } catch (error) {
-    console.error("❌ Error al crear conversación:", error);
-    throw error;
+    console.error(`❌ Error al obtener mensajes de la conversación ${conversationId}:`, error);
+    return [];
   }
 };

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import SoftTypography from "components/SoftTypography";
 import List from "@mui/material/List";
@@ -16,10 +16,19 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import ConversationActions from "./ConversationActions";
 
-function ConversationList({ conversations, messagesMap, onSelect, onStatusChange, onBlock }) {
-  const [anchorEl, setAnchorEl] = useState(null);
-  const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+function ConversationList({
+  conversations,
+  messagesMap,
+  onSelect,
+  onStatusChange,
+  onBlock,
+  highlightedIds = [],
+  onClearHighlight = () => {},
+}) {
+  const [anchorEl, setAnchorEl] = React.useState(null);
+  const [filter, setFilter] = React.useState("all");
+  const [search, setSearch] = React.useState("");
+  const listRef = useRef(null);
 
   const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseMenu = () => setAnchorEl(null);
@@ -29,23 +38,41 @@ function ConversationList({ conversations, messagesMap, onSelect, onStatusChange
   };
 
   const filtered = conversations
-    .filter((conv) => {
-      if (filter === "active") return conv.status === "activa";
-      if (filter === "closed") return conv.status === "cerrada";
-      if (filter === "pending") return conv.status === "pendiente";
-      if (filter === "resolved") return conv.status === "resuelta";
-      if (filter === "blocked") return conv.blocked === true;
-      return true;
-    })
+  .filter((conv) => {
+    // ✅ Evita mostrar conversaciones sin mensaje visible
+    const hasAnyMessage = conv.lastMessage || (messagesMap[conv.id] || []).length > 0;
+    return hasAnyMessage;
+  })
+  .filter((conv) => {
+    if (filter === "active") return conv.status === "activa";
+    if (filter === "closed") return conv.status === "cerrada";
+    if (filter === "pending") return conv.status === "pendiente";
+    if (filter === "resolved") return conv.status === "resuelta";
+    if (filter === "blocked") return conv.blocked === true;
+    return true;
+  })
+  .filter((conv) => {
+    const convId = `${conv.id}`;
+    const textToSearch = `${conv.alias || ""} ${conv.lastMessage || ""}`;
+    const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
+    return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
+  })
+  .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); // ← 🔥 Esta línea ordena de más reciente a más antigua
 
-    .filter((conv) => {
-      const convId = `${conv.id}`; // 👈 asegura que es string
 
-      const textToSearch = `${conv.alias || ""} ${conv.lastMessage || ""}`;
-      const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
-
-      return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
-    });
+  useEffect(() => {
+    const styles = `
+      @keyframes flash {
+        0% { background-color: #fffde7; }
+        50% { background-color: #fff176; }
+        100% { background-color: #fffde7; }
+      }
+    `;
+    const styleTag = document.createElement("style");
+    styleTag.innerHTML = styles;
+    document.head.appendChild(styleTag);
+    return () => document.head.removeChild(styleTag);
+  }, []);
 
   return (
     <Box display="flex" flexDirection="column" sx={{ height: "100%", minHeight: 0 }}>
@@ -91,17 +118,23 @@ function ConversationList({ conversations, messagesMap, onSelect, onStatusChange
 
       {/* Lista con scroll */}
       <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-        <List sx={{ width: "100%", padding: 0 }}>
+        <List ref={listRef} sx={{ width: "100%", padding: 0 }}>
           {filtered.map((conv) => (
             <ListItemButton
               key={conv.id}
-              onClick={() => onSelect(conv.id)}
+              onClick={() => {
+                onSelect(conv.id);
+                onClearHighlight(conv.id);
+              }}
               sx={{
                 mb: 0.5,
                 borderRadius: "8px",
                 padding: "12px",
                 paddingLeft: "20px",
-                backgroundColor: "#f5f5f5",
+                backgroundColor: highlightedIds.includes(conv.id) ? "#fff8e1" : "#f5f5f5",
+                animation: highlightedIds.includes(conv.id)
+                  ? "flash 1s infinite ease-in-out"
+                  : "none",
                 "&:hover": {
                   backgroundColor: "#d0f0f6",
                 },
@@ -136,7 +169,6 @@ function ConversationList({ conversations, messagesMap, onSelect, onStatusChange
                     const end = Math.min(index + lowerSearch.length + 20, matchMessage.text.length);
                     const fragment = matchMessage.text.slice(start, end);
 
-                    // Opcional: resaltamos el texto buscado
                     const before = fragment.slice(0, index - start);
                     const match = fragment.slice(index - start, index - start + lowerSearch.length);
                     const after = fragment.slice(index - start + lowerSearch.length);
@@ -152,9 +184,8 @@ function ConversationList({ conversations, messagesMap, onSelect, onStatusChange
                 </Typography>
               </Box>
 
-              {/* Estado + tiempo + acciones */}
+              {/* Estado + acciones */}
               <Box display="flex" alignItems="center" justifyContent="flex-end">
-                {/* Estado + hora, en columna alineados a la derecha */}
                 <Box display="flex" flexDirection="column" alignItems="flex-end">
                   <Chip
                     label={conv.status.toUpperCase()}
@@ -177,7 +208,6 @@ function ConversationList({ conversations, messagesMap, onSelect, onStatusChange
                       },
                     }}
                   />
-
                   <Typography
                     variant="caption"
                     color="text.secondary"
@@ -190,7 +220,6 @@ function ConversationList({ conversations, messagesMap, onSelect, onStatusChange
                   </Typography>
                 </Box>
 
-                {/* Botón de acciones (tres puntos) */}
                 <ConversationActions
                   onBlock={() => onBlock(conv.id)}
                   onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
@@ -225,10 +254,12 @@ ConversationList.propTypes = {
         timestamp: PropTypes.string,
       })
     )
-  ).isRequired, // 👈 agregado
+  ).isRequired,
   onSelect: PropTypes.func.isRequired,
   onStatusChange: PropTypes.func.isRequired,
   onBlock: PropTypes.func.isRequired,
+  highlightedIds: PropTypes.arrayOf(PropTypes.string),
+  onClearHighlight: PropTypes.func,
 };
 
 export default ConversationList;

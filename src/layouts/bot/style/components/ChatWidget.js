@@ -4,7 +4,6 @@ import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import connection from "services/signalr";
 
-import { createConversation } from "services/botConversationsService";
 const voaiGif = "/voai.gif"; // ✅ Ruta relativa al dominio público
 
 function ChatWidget({
@@ -55,34 +54,6 @@ function ChatWidget({
     }
   };
 
-  const iniciarConversacion = async () => {
-    try {
-      await waitForConnection();
-
-      if (!conversationId) {
-        const nuevaConversacion = await createConversation({
-          userId,
-          botId,
-          title: "Primera interacción",
-          userMessage: "Hola",
-          botResponse: "",
-        });
-
-        const realConversationId = nuevaConversacion.id;
-        setConversationId(realConversationId); // Actualiza el estado
-
-        console.log("🧪 Devolviendo conversationId:", realConversationId);
-        return realConversationId; // 🔁 Devuelve el valor directamente
-      }
-
-      return conversationId; // Si ya existía, lo devuelve
-    } catch (error) {
-      console.error("❌ Error al iniciar conversación:", error);
-      return null;
-    }
-  };
-
-  // ⬇️ Pega esto después de `waitForConnection` y antes de `useEffect`
   const handleFileUpload = (event) => {
     const files = Array.from(event.target.files);
     const maxSizeInBytes = 5 * 1024 * 1024;
@@ -199,11 +170,7 @@ function ChatWidget({
         await waitForConnection();
 
         // 🔒 Asegura que solo se cree una conversación
-        if (!conversationId && isMounted) {
-          const realConversationId = await iniciarConversacion();
-          setConversationId(realConversationId);
-          await connection.invoke("JoinRoom", realConversationId);
-        } else if (conversationId) {
+        if (conversationId) {
           await connection.invoke("JoinRoom", conversationId);
         }
       } catch (err) {
@@ -212,6 +179,12 @@ function ChatWidget({
     };
 
     const handleReceiveMessage = async (msg) => {
+      // 🆕 Captura el conversationId si viene en el mensaje y aún no está definido
+      if (msg.conversationId && !conversationId) {
+        setConversationId(msg.conversationId);
+        console.log("🎯 conversationId recibido y establecido desde SignalR:", msg.conversationId);
+      }
+
       console.log("📩 Mensaje recibido del backend:", msg);
       const isFromBot = msg.from === "bot";
 
@@ -299,7 +272,13 @@ function ChatWidget({
     const iniciarConversacionConContexto = async () => {
       try {
         await waitForConnection();
-        await connection.invoke("InitializeContext", conversationId, { botId, userId });
+        const createdConversationId = await connection.invoke("InitializeContext", {
+          botId,
+          userId,
+        });
+        setConversationId(createdConversationId);
+        await connection.invoke("JoinRoom", createdConversationId);
+        console.log("📡 Contexto inicial enviado al bot, ID:", createdConversationId);
         console.log("📡 Contexto inicial enviado al bot");
       } catch (error) {
         console.error("❌ Error enviando contexto inicial:", error);
@@ -325,16 +304,20 @@ function ChatWidget({
 
     const payload = { botId, userId, question: msg };
 
-    if (!conversationId) {
-      console.warn("⛔ conversationId no está definido aún");
-      return;
+    let activeConversationId = conversationId;
+
+    if (!activeConversationId) {
+      console.log(
+        "⌛ conversationId aún no disponible. Esperando que InitializeContext lo cree..."
+      );
+      return; // Esperamos a que el backend cree y lo envíe por ReceiveMessage
     }
 
     if (connection.state !== "Connected") {
       try {
         await connection.start();
         await waitForConnection();
-        await connection.invoke("JoinRoom", conversationId);
+        await connection.invoke("JoinRoom", activeConversationId);
       } catch (error) {
         console.error("❌ Error reconectando SignalR:", error);
         return;
@@ -342,20 +325,23 @@ function ChatWidget({
     }
 
     try {
-      // 🧹 Limpiar cualquier timeout anterior
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
         typingTimeoutRef.current = null;
       }
 
-      // 🕒 Mostrar "escribiendo..." si el bot no responde pronto
       typingTimeoutRef.current = setTimeout(() => {
         setIsTyping(true);
         setTypingSender("bot");
       }, 500);
 
-      console.log("📤 Enviando mensaje con payload:", payload, "a conversación:", conversationId);
-      await connection.invoke("SendMessage", conversationId, payload);
+      console.log(
+        "📤 Enviando mensaje con payload:",
+        payload,
+        "a conversación:",
+        activeConversationId
+      );
+      await connection.invoke("SendMessage", activeConversationId, payload);
       console.log("✅ Mensaje enviado por SignalR");
     } catch (err) {
       console.error("❌ Error enviando mensaje:", err);

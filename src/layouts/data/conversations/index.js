@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
 import connection from "services/signalr";
@@ -19,12 +20,16 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
 // 👇 Nuevo import
-import { getConversationsByUser } from "services/botConversationsService";
+import {
+  getConversationsByUser,
+  getMessagesByConversationId,
+} from "services/botConversationsService";
 
 function Conversations() {
   const tabContainerRef = useRef(null);
   const tabRefs = useRef({});
   const messageRefs = useRef({}); // ✅ Añade esto
+  const chatPanelRef = useRef(null); // ✅ NECESARIO para limpiar parpadeo automáticamente
 
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [conversationList, setConversationList] = useState([]);
@@ -36,7 +41,9 @@ function Conversations() {
   const [isConnected, setIsConnected] = useState(false);
   const [typingSender, setTypingSender] = useState(null);
   const [typingState, setTypingState] = useState({});
-  const [replyToMessage, setReplyToMessage] = useState(null); // ✅ NUEVO
+  const [replyToMessage, setReplyToMessage] = useState(null);
+  const [highlightedIds, setHighlightedIds] = useState([]);
+
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
 
   const userId = 45; // Simulado
@@ -52,7 +59,7 @@ function Conversations() {
 
     // Llama a SignalR para notificar al backend
     try {
-      await connection.invoke("SetIAPaused", conversationId, newState);
+      await connection.invoke("SetIAPaused", Number(conversationId), newState);
       console.log(`🟢 IA ${newState ? "pausada" : "activada"} para conversación ${conversationId}`);
     } catch (err) {
       console.error("❌ Error al cambiar el estado de la IA:", err);
@@ -65,10 +72,10 @@ function Conversations() {
         const data = await getConversationsByUser(userId);
         setConversationList(
           data.map((c) => ({
-            id: c.id,
-            alias: c.User?.Name || `Usuario ${String(c.id).slice(-4)}`,
-            lastMessage: c.UserMessage || "",
-            updatedAt: c.CreatedAt || new Date().toISOString(),
+            id: `${c.id}`, // 👈 Fuerza a string
+            alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
+            lastMessage: c.userMessage || "",
+            updatedAt: c.createdAt || new Date().toISOString(),
             status: "activa",
             blocked: false,
           }))
@@ -93,8 +100,13 @@ function Conversations() {
 
         // 👇 ESTE BLOQUE ES EL NUEVO QUE DEBES AGREGAR
         connection.on("NewConversationOrMessage", (msg) => {
-          const id = msg.conversationId;
+          const id = `${msg.conversationId}`; // 👈 Fuerza a string
 
+          if (msg.from === "user" && id !== `${activeTab}`) {
+            setHighlightedIds((prev) => [...new Set([...prev, id])]);
+          }
+
+          // ✅ ya funciona bien con id como string
           setMessages((prev) => ({
             ...prev,
             [id]: [
@@ -105,7 +117,7 @@ function Conversations() {
                 text: msg.text,
                 timestamp: msg.timestamp || new Date().toISOString(),
                 multipleFiles: msg.multipleFiles,
-                replyTo: msg.replyTo || null,
+                replyToMessageId: msg.replyToMessageId || null, // ✅ GUÁRDALO AQUÍ
               },
             ],
           }));
@@ -119,8 +131,11 @@ function Conversations() {
           }
 
           setConversationList((prev) => {
-            const exists = prev.find((c) => c.id === id);
+            const exists = prev.find((c) => c.id === `${id}`);
             if (!exists) {
+              // Evita agregar conversaciones sin mensaje
+              if (!msg.text) return prev;
+
               return [
                 {
                   id,
@@ -155,7 +170,7 @@ function Conversations() {
         });
 
         connection.on("Typing", (conversationId, sender) => {
-          if (sender !== "user") return;
+          if (!["user", "admin"].includes(sender)) return;
 
           setTypingState((prev) => ({
             ...prev,
@@ -181,6 +196,17 @@ function Conversations() {
       connection.stop();
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeTab) return;
+
+    const isInputFocused = chatPanelRef.current?.isInputFocused?.() || false;
+    const chatIsOpen = activeTab !== null;
+
+    if (highlightedIds.includes(activeTab) && (chatIsOpen || isInputFocused)) {
+      setHighlightedIds((prev) => prev.filter((id) => id !== activeTab));
+    }
+  }, [messages, activeTab]);
 
   useEffect(() => {
     const checkOverflow = () => {
@@ -210,33 +236,26 @@ function Conversations() {
     }
   }, [activeTab]);
 
-  const handleSelectConversation = (conv) => {
-    const exists = openTabs.find((t) => t.id === conv.id);
+  const handleSelectConversation = async (conv) => {
+    const idStr = `${conv.id}`;
+    const exists = openTabs.find((t) => t.id === idStr);
     if (!exists) {
-      setOpenTabs((prev) => [...prev, { ...conv, unreadCount: 0 }]);
+      setOpenTabs((prev) => [...prev, { ...conv, id: idStr, unreadCount: 0 }]); // 👈 fuerza ID string aquí también
     }
-    setActiveTab(conv.id);
-    setOpenTabs((prev) =>
-      prev.map((tab) => (tab.id === conv.id ? { ...tab, unreadCount: 0 } : tab))
-    );
+    setActiveTab(idStr); // 👈 fuerza string aquí también
 
-    if (!messages[conv.id]) {
-      const historialSimulado = [
-        {
-          from: "user",
-          text: "Hola",
-          timestamp: new Date().toISOString(),
-        },
-        {
-          from: "bot",
-          text: "Hola, ¿en qué puedo ayudarte?",
-          timestamp: new Date().toISOString(),
-        },
-      ];
-      setMessages((prev) => ({
-        ...prev,
-        [conv.id]: historialSimulado,
-      }));
+    setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
+
+    if (!messages[idStr]) {
+      try {
+        const fetchedMessages = await getMessagesByConversationId(conv.id);
+        setMessages((prev) => ({
+          ...prev,
+          [idStr]: fetchedMessages,
+        }));
+      } catch (err) {
+        console.error("❌ Error cargando mensajes de la conversación:", err);
+      }
     }
   };
 
@@ -261,21 +280,27 @@ function Conversations() {
   };
 
   const handleSendAdminMessage = async (text, conversationId) => {
-  if (!connection || connection.state !== "Connected") {
-    console.warn("SignalR connection not ready yet");
-    return;
-  }
+    if (!connection || connection.state !== "Connected") {
+      console.warn("SignalR connection not ready yet");
+      return;
+    }
 
-  try {
-    // Solo envía por SignalR
-    await connection.invoke("AdminMessage", conversationId, text, replyToMessage || null);
+    try {
+      // 👇 Envía mensaje al servidor con solo el ID del mensaje que se responde
+      await connection.invoke(
+        "AdminMessage",
+        Number(conversationId),
+        text,
+        replyToMessage?.id ? Number(replyToMessage.id) : null
+      );
 
-    // Limpia el estado de respuesta si aplica
-    setReplyToMessage(null);
-  } catch (err) {
-    console.error("❌ Error sending message:", err);
-  }
-};
+      // ❌ Ya no agregar el mensaje manualmente, lo enviará SignalR
+
+      setReplyToMessage(null); // limpia si se estaba respondiendo a algo
+    } catch (err) {
+      console.error("❌ Error sending message:", err);
+    }
+  };
 
   const handleChangeStatus = (id, newStatus) => {
     setConversationList((prev) =>
@@ -319,9 +344,14 @@ function Conversations() {
                 <ConversationList
                   conversations={conversationList}
                   messagesMap={messages}
+                  highlightedIds={highlightedIds} // ✅ NUEVO
+                  onClearHighlight={
+                    (id) => setHighlightedIds((prev) => prev.filter((cid) => cid !== id)) // ✅ NUEVO
+                  }
                   onSelect={(id) => {
                     const conv = conversationList.find((c) => c.id === id);
                     if (conv) handleSelectConversation(conv);
+                    setHighlightedIds((prev) => prev.filter((cid) => cid !== id)); // ✅ Limpiar parpadeo al abrir
                   }}
                   onStatusChange={handleChangeStatus}
                   onBlock={(id) => handleBlockUser(id)}
@@ -537,29 +567,24 @@ function Conversations() {
                 {/* Panel de chat activo */}
                 {selectedConversation ? (
                   <ChatPanel
-                    conversationId={selectedConversation.id}
-                    userName={selectedConversation.alias}
+                    ref={chatPanelRef} // ✅ Aquí le pasas el ref
+                    conversationId={activeTab}
                     messages={selectedMessages}
-                    isTyping={!!typingState[selectedConversation.id]}
-                    typingSender="user"
-                    iaPaused={!!iaPausedMap[selectedConversation.id]}
-                    onToggleIA={() => handleToggleIA(selectedConversation.id)}
-                    onSendAdminMessage={(msg) =>
-                      handleSendAdminMessage(msg, selectedConversation.id)
-                    }
-                    onStatusChange={(newStatus) =>
-                      handleChangeStatus(selectedConversation.id, newStatus)
-                    }
-                    onBlock={() => handleBlockUser(selectedConversation.id)}
-                    status={selectedConversation.status}
-                    blocked={selectedConversation.blocked}
-                    // 👇 NUEVAS PROPS para flujo de respuesta
-                    onReply={handleReply}
+                    userName={selectedConversation?.alias || ""}
+                    isTyping={typingState[activeTab] || false}
+                    typingSender={"user"}
+                    onToggleIA={() => handleToggleIA(activeTab)}
+                    iaPaused={!!iaPausedMap[activeTab]}
+                    onSendAdminMessage={handleSendAdminMessage}
+                    onStatusChange={(newStatus) => handleChangeStatus(activeTab, newStatus)}
+                    onBlock={() => handleBlockUser(activeTab)}
+                    status={selectedConversation?.status || "activa"}
+                    blocked={selectedConversation?.blocked || false}
                     replyTo={replyToMessage}
+                    onReply={handleReply}
                     onCancelReply={() => setReplyToMessage(null)}
-                    // 👇 NUEVAS PROPS para scroll al mensaje referenciado
-                    onJumpToReply={handleJumpToReply}
                     messageRefs={messageRefs}
+                    onJumpToReply={handleJumpToReply}
                     highlightedMessageId={highlightedMessageId}
                   />
                 ) : (
