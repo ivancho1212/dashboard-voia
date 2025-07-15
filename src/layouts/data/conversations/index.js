@@ -19,11 +19,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 // 👇 Drag and Drop
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-import {
-  getConversationsByUser,
-  getMessagesByConversationId,
-} from "services/conversationsService";
-
+import { getConversationsByUser, getMessagesByConversationId } from "services/conversationsService";
 
 function Conversations() {
   const tabContainerRef = useRef(null);
@@ -116,10 +112,8 @@ function Conversations() {
                 from: msg.from,
                 text: msg.text,
                 timestamp: msg.timestamp || new Date().toISOString(),
-                multipleFiles: msg.multipleFiles || null,
-                fileContent: msg.fileContent || null,
-                fileType: msg.fileType || null,
-                fileName: msg.fileName || null,
+                file: msg.file || null,
+                images: msg.images || [],
                 replyTo: msg.replyToMessageId
                   ? {
                       id: msg.replyToMessageId,

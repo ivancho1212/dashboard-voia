@@ -79,7 +79,7 @@ const InputChat = forwardRef(function InputChat(
         }}
       >
         <InputBase
-          inputRef={ref} // 👈 ref aquí para que ChatPanel pueda hacer focus()
+          inputRef={ref}
           fullWidth
           multiline
           maxRows={3}

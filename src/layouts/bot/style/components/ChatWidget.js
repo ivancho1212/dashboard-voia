@@ -26,6 +26,11 @@ function ChatWidget({
   const themeKey = initialTheme || "light";
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const [previewImageUrl, setPreviewImageUrl] = useState(null);
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [imageGroup, setImageGroup] = useState([]); // todas las imágenes
+  const [activeImageIndex, setActiveImageIndex] = useState(0); // imagen activa
+
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState(null);
 
@@ -448,6 +453,26 @@ function ChatWidget({
   TypingDots.propTypes = {
     color: PropTypes.string,
   };
+  const openImageModal = (images, clickedImageUrl) => {
+    // Limpiar primero
+    setImageGroup([]);
+    setActiveImageIndex(0);
+    setIsImageModalOpen(false);
+
+    // Esperar al siguiente frame para asegurar que el estado se "limpie"
+    setTimeout(() => {
+      const index = images.findIndex((img) => {
+        const url = img.fileUrl.startsWith("http")
+          ? img.fileUrl
+          : `http://localhost:5006${img.fileUrl}`;
+        return url === clickedImageUrl;
+      });
+
+      setImageGroup(images);
+      setActiveImageIndex(index >= 0 ? index : 0);
+      setIsImageModalOpen(true);
+    }, 10); // Pequeño delay para asegurar la limpieza
+  };
 
   return (
     <div style={wrapperStyle}>
@@ -666,14 +691,24 @@ function ChatWidget({
                                   <img
                                     src={`data:${file.fileType};base64,${file.fileContent}`}
                                     alt={file.fileName}
+                                    onClick={() => {
+                                      if (!isLastVisible) {
+                                        setPreviewImageUrl(
+                                          `data:${file.fileType};base64,${file.fileContent}`
+                                        );
+                                        setIsImageModalOpen(true);
+                                      }
+                                    }}
                                     style={{
                                       width: "100%",
                                       height: "100%",
                                       objectFit: "cover",
                                       display: "block",
                                       filter: isLastVisible ? "brightness(0.5)" : "none",
+                                      cursor: isLastVisible ? "default" : "pointer", // 👈 sólo si no es la imagen 4+
                                     }}
                                   />
+
                                   {isLastVisible && (
                                     <div
                                       style={{
@@ -711,10 +746,35 @@ function ChatWidget({
                                   : `http://localhost:5006${msg.file.fileUrl}`
                               }
                               alt={msg.file.fileName}
+                              onClick={() => {
+                                const fullUrl = msg.file.fileUrl.startsWith("http")
+                                  ? msg.file.fileUrl
+                                  : `http://localhost:5006${msg.file.fileUrl}`;
+
+                                // Agrupar todas las imágenes del chat (msg.file e imágenes múltiples)
+                                const allImages = messages
+                                  .flatMap((m) => {
+                                    const imgs = [];
+                                    if (m.file && m.file.fileType?.startsWith("image/")) {
+                                      imgs.push({
+                                        fileUrl: m.file.fileUrl,
+                                        fileName: m.file.fileName,
+                                      });
+                                    }
+                                    if (Array.isArray(m.images)) {
+                                      imgs.push(...m.images);
+                                    }
+                                    return imgs;
+                                  })
+                                  .filter((img) => img.fileUrl); // Limpiar nulls
+
+                                openImageModal(allImages, fullUrl);
+                              }}
                               style={{
                                 maxWidth: "100%",
                                 borderRadius: "8px",
                                 marginBottom: "4px",
+                                cursor: "pointer", // 👈 importante para UX
                               }}
                             />
                           ) : (
@@ -751,6 +811,10 @@ function ChatWidget({
                           >
                             {msg.images.slice(0, 4).map((img, i) => {
                               const isLastVisible = i === 3 && msg.images.length > 4;
+                              const fullUrl = img.fileUrl.startsWith("http")
+                                ? img.fileUrl
+                                : `http://localhost:5006${img.fileUrl}`;
+
                               return (
                                 <div
                                   key={i}
@@ -761,19 +825,19 @@ function ChatWidget({
                                     borderRadius: "8px",
                                     overflow: "hidden",
                                   }}
+                                  onClick={() => {
+                                    openImageModal(msg.images, fullUrl);
+                                  }}
                                 >
                                   <img
-                                    src={
-                                      img.fileUrl.startsWith("http")
-                                        ? img.fileUrl
-                                        : `http://localhost:5006${img.fileUrl}`
-                                    }
+                                    src={fullUrl}
                                     alt={img.fileName}
                                     style={{
                                       width: "100%",
                                       height: "100%",
                                       objectFit: "cover",
                                       filter: isLastVisible ? "brightness(0.5)" : "none",
+                                      cursor: "pointer",
                                     }}
                                   />
                                   {isLastVisible && (
@@ -983,9 +1047,79 @@ function ChatWidget({
             © {new Date().getFullYear()} <b style={{ color: primaryColor }}>VoIA</b>. Todos los
             derechos reservados.
           </div>
-        </div>
+          {/* 🖼️ Modal de vista previa de imagen */}
+          {isImageModalOpen && (
+            <div
+              onClick={() => setIsImageModalOpen(false)}
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                width: "100vw",
+                height: "100vh",
+                backgroundColor: "rgba(0, 0, 0, 0.85)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 9999,
+                flexDirection: "row",
+              }}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveImageIndex((prev) => (prev - 1 + imageGroup.length) % imageGroup.length);
+                }}
+                style={{
+                  position: "absolute",
+                  left: "20px",
+                  backgroundColor: "transparent",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: "32px",
+                  cursor: "pointer",
+                }}
+              >
+                ‹
+              </button>
+
+              <img
+                src={
+                  imageGroup[activeImageIndex]?.fileUrl.startsWith("http")
+                    ? imageGroup[activeImageIndex]?.fileUrl
+                    : `http://localhost:5006${imageGroup[activeImageIndex]?.fileUrl}`
+                }
+                alt="Vista previa"
+                style={{
+                  maxWidth: "90%",
+                  maxHeight: "90%",
+                  borderRadius: "10px",
+                  boxShadow: "0 0 10px #000",
+                }}
+              />
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveImageIndex((prev) => (prev + 1) % imageGroup.length);
+                }}
+                style={{
+                  position: "absolute",
+                  right: "20px",
+                  backgroundColor: "transparent",
+                  border: "none",
+                  color: "#fff",
+                  fontSize: "32px",
+                  cursor: "pointer",
+                }}
+              >
+                ›
+              </button>
+            </div>
+          )}
+        </div> // 👈 Este cierra el widget abierto
       )}
-    </div>
+    </div> // 👈 Este cierra el contenedor principal
   );
 }
 

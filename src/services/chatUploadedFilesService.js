@@ -59,3 +59,13 @@ export const sendGroupedImages = async ({ connection, conversationId, files, use
     console.error("❌ Error al enviar imágenes agrupadas:", err);
   }
 };
+// ✅ Obtener archivos ya subidos a una conversación
+export const getFilesByConversation = async (conversationId) => {
+  try {
+    const response = await axios.get(`/api/ChatUploadedFiles/conversation/${conversationId}`);
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error al obtener archivos de la conversación:", error);
+    return [];
+  }
+};

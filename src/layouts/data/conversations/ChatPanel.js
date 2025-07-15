@@ -159,76 +159,43 @@ const ChatPanel = forwardRef(
     const processedMessages = messages.map((msg, i) => {
       console.log(`📩 Procesando mensaje[${i}]:`, msg);
 
-      let files = msg.files;
+      // Normalizar archivos
+      let files = [];
 
-      // ✅ Si tiene multipleFiles, convertirlos
-      if (msg.multipleFiles && msg.multipleFiles.length > 0) {
-        console.log(`📎 Mensaje[${i}] contiene archivos en multipleFiles:`, msg.multipleFiles);
+      // Caso 1: mensaje tiene un archivo individual
+      if (msg.file && msg.file.fileUrl) {
+        files.push({
+          ...msg.file,
+          url: msg.file.fileUrl,
+        });
+      }
 
-        files = msg.multipleFiles.map((file, index) => {
-          try {
-            const byteCharacters = atob(file.fileContent);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: file.fileType });
-            const url = URL.createObjectURL(blob);
-
-            return {
-              ...file,
-              url,
-            };
-          } catch (error) {
-            console.error(`❌ Error procesando archivo[${index}] en mensaje[${i}]:`, error);
-            return file;
+      // Caso 2: mensaje tiene múltiples imágenes
+      if (msg.images && Array.isArray(msg.images)) {
+        msg.images.forEach((img) => {
+          if (img.fileUrl) {
+            files.push({
+              ...img,
+              url: img.fileUrl,
+            });
           }
         });
       }
 
-      // ✅ Si tiene archivo individual (no multipleFiles)
-      else if (msg.fileContent && msg.fileType && msg.fileName) {
-        console.log(`📎 Mensaje[${i}] contiene archivo individual:`, msg.fileName);
-
-        try {
-          const byteCharacters = atob(msg.fileContent);
-          const byteNumbers = new Array(byteCharacters.length);
-          for (let j = 0; j < byteCharacters.length; j++) {
-            byteNumbers[j] = byteCharacters.charCodeAt(j);
-          }
-          const byteArray = new Uint8Array(byteNumbers);
-          const blob = new Blob([byteArray], { type: msg.fileType });
-          const url = URL.createObjectURL(blob);
-
-          files = [
-            {
-              fileName: msg.fileName,
-              fileType: msg.fileType,
-              fileContent: msg.fileContent,
-              url,
-            },
-          ];
-        } catch (error) {
-          console.error(`❌ Error procesando archivo individual en mensaje[${i}]:`, error);
-        }
-      }
-
-      // ✅ Resolver replyTo si solo viene replyToMessageId
+      // Resolver replyTo si solo viene replyToMessageId
       let resolvedReplyTo = undefined;
       if (msg.replyToMessageId) {
         const original = messages.find(
           (m) => m.id?.toString() === msg.replyToMessageId?.toString()
         );
         if (original) {
-          const firstFile = original.files?.[0] || original.multipleFiles?.[0];
+          const firstFile = original.file || original.images?.[0];
           resolvedReplyTo = {
             id: original.id,
             text: original.text || (firstFile ? "📎 " + firstFile.fileName : null),
             fileName: firstFile?.fileName,
           };
         } else if (msg.replyToText) {
-          // ✅ Fallback si no está el mensaje original aún
           resolvedReplyTo = {
             id: msg.replyToMessageId,
             text: msg.replyToText,
@@ -243,9 +210,8 @@ const ChatPanel = forwardRef(
 
       return {
         ...msg,
-        files: files?.length > 0 ? files : undefined,
+        files: files.length > 0 ? files : undefined,
         replyTo: resolvedReplyTo ?? msg.replyTo ?? null,
-        multipleFiles: undefined,
       };
     });
 

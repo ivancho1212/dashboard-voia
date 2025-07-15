@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
 const MessageBubble = React.forwardRef(
   ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen }, ref) => {
@@ -20,13 +21,17 @@ const MessageBubble = React.forwardRef(
     const optionsRef = useRef(null);
     const iconRef = useRef(null);
     const bubbleRef = useRef(null);
-    const imageFiles = files.filter((file) => file.fileType.startsWith("image/"));
+    const imageFiles = (files || msg.images || []).filter((file) =>
+      file.fileType?.startsWith("image/")
+    );
     const showOptionsIcon = isHovered && (text || imageFiles.length > 0);
 
     const handlePrev = () =>
       setPreviewIndex((prev) => (prev > 0 ? prev - 1 : imageFiles.length - 1));
     const handleNext = () =>
       setPreviewIndex((prev) => (prev < imageFiles.length - 1 ? prev + 1 : 0));
+
+    const BACKEND_URL = "http://localhost:5006"; // Usa .env en producción
 
     useEffect(() => {
       const handleClickOutside = (e) => {
@@ -81,21 +86,36 @@ const MessageBubble = React.forwardRef(
       };
     }, [imageOptionsOpen, setViewerOpen]);
 
-    const handleDownloadZip = async () => {
+    const buildFileUrl = (fileUrl) => {
+      if (!fileUrl) return "";
+      const cleanBase = BACKEND_URL.replace(/\/$/, "");
+      const cleanPath = fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`;
+      return `${cleanBase}${cleanPath}`;
+    };
+
+    const downloadImagesAsZip = async (images) => {
       const zip = new JSZip();
-      for (const file of imageFiles) {
-        const data = file.fileContent
-          ? Uint8Array.from(atob(file.fileContent), (c) => c.charCodeAt(0))
-          : await fetch(file.url).then((res) => res.arrayBuffer());
-        zip.file(file.fileName, data);
+      const folder = zip.folder("imagenes");
+
+      for (const file of images) {
+        try {
+          const url = buildFileUrl(file.fileUrl);
+          console.log("⛔ Intentando descargar:", url); // Agrega esto
+          const response = await fetch(url);
+
+          if (!response.ok) throw new Error(`Error al descargar: ${file.fileName}`);
+
+          const blob = await response.blob();
+          folder.file(file.fileName || "imagen.jpg", blob);
+        } catch (err) {
+          console.error("Falló al descargar archivo:", file.fileUrl, err);
+          alert(`Error al descargar: ${file.fileName}`);
+          return;
+        }
       }
-      const blob = await zip.generateAsync({ type: "blob" });
-      const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob);
-      link.download = "imagenes_chat.zip";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      saveAs(zipBlob, "imagenes.zip");
     };
 
     return (
@@ -189,7 +209,6 @@ const MessageBubble = React.forwardRef(
             ⋮
           </div>
         )}
-
         {imageOptionsOpen && menuPosition && (
           <div
             ref={optionsRef}
@@ -201,11 +220,12 @@ const MessageBubble = React.forwardRef(
               padding: "4px 0",
               boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
               fontSize: "12px",
-              width: "150px",
+              width: "160px",
             }}
           >
             {imageFiles.length > 0 && (
               <>
+                {/* Ver imagen (abre visor) */}
                 <div
                   style={{ padding: "6px 12px", cursor: "pointer" }}
                   onClick={() => {
@@ -215,17 +235,41 @@ const MessageBubble = React.forwardRef(
                 >
                   Ver
                 </div>
-                <div
-                  style={{ padding: "6px 12px", cursor: "pointer" }}
-                  onClick={() => {
-                    handleDownloadZip();
-                    setImageOptionsOpen(false);
-                  }}
-                >
-                  Descargar todo
-                </div>
+
+                {/* Si hay solo una imagen, opción para descargarla */}
+                {imageFiles.length === 1 && (
+                  <div
+                    style={{ padding: "6px 12px", cursor: "pointer" }}
+                    onClick={() => {
+                      const file = imageFiles[0];
+                      const link = document.createElement("a");
+                      link.href = `${BACKEND_URL}${file.fileUrl}`;
+                      link.download = file.fileName || "imagen.jpg";
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      setImageOptionsOpen(false);
+                    }}
+                  >
+                    Descargar
+                  </div>
+                )}
+
+                {/* Si hay más de una imagen, opción para descargar todo como ZIP */}
+                {imageFiles.length > 1 && (
+                  <div
+                    style={{ padding: "6px 12px", cursor: "pointer" }}
+                    onClick={async () => {
+                      await downloadImagesAsZip(imageFiles);
+                      setImageOptionsOpen(false);
+                    }}
+                  >
+                    Descargar todo
+                  </div>
+                )}
               </>
             )}
+
             {text && (
               <div
                 style={{ padding: "6px 12px", cursor: "pointer", color: "Gray" }}
@@ -237,8 +281,9 @@ const MessageBubble = React.forwardRef(
                 Copiar
               </div>
             )}
+
             <div
-              style={{ padding: "6px 12px", cursor: "pointer",color: "Gray" }}
+              style={{ padding: "6px 12px", cursor: "pointer", color: "Gray" }}
               onClick={() => {
                 onReply && onReply(msg);
                 setImageOptionsOpen(false);
@@ -252,9 +297,7 @@ const MessageBubble = React.forwardRef(
         {imageFiles.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
             {imageFiles.slice(0, 4).map((file, idx) => {
-              const source =
-                file.url ||
-                (file.fileContent && `data:${file.fileType};base64,${file.fileContent}`);
+              const source = buildFileUrl(file.fileUrl);
               if (!source) return null;
               const isOverlay = imageFiles.length > 4 && idx === 3;
 
@@ -270,7 +313,7 @@ const MessageBubble = React.forwardRef(
                   onClick={() => setPreviewIndex(idx)}
                 >
                   <img
-                    src={source}
+                    src={`${BACKEND_URL}${file.fileUrl}`}
                     alt={file.fileName}
                     style={{ maxWidth: "180px", borderRadius: "8px", opacity: isOverlay ? 0.5 : 1 }}
                   />
@@ -303,8 +346,7 @@ const MessageBubble = React.forwardRef(
         {files
           .filter((file) => !file.fileType.startsWith("image/"))
           .map((file, idx) => {
-            const source =
-              file.url || (file.fileContent && `data:${file.fileType};base64,${file.fileContent}`);
+            const source = buildFileUrl(file.fileUrl); // ✅ CORRECTO
             if (!source) return null;
             return (
               <div key={idx} style={{ marginTop: "6px" }}>
@@ -368,12 +410,8 @@ const MessageBubble = React.forwardRef(
             >
               ❮
             </button>
-
             <img
-              src={
-                imageFiles[previewIndex].url ||
-                `data:${imageFiles[previewIndex].fileType};base64,${imageFiles[previewIndex].fileContent}`
-              }
+              src={`${BACKEND_URL}${imageFiles[previewIndex].fileUrl}`}
               alt={imageFiles[previewIndex].fileName}
               style={{
                 maxWidth: "75%",
@@ -382,7 +420,6 @@ const MessageBubble = React.forwardRef(
                 boxShadow: "0 0 10px rgba(0,0,0,0.3)",
               }}
             />
-
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -408,29 +445,52 @@ const MessageBubble = React.forwardRef(
             >
               ❯
             </button>
+            {/* Mostrar botón individual solo si es una imagen */}
+            {imageFiles.length === 1 && (
+              <a
+                href={`${BACKEND_URL}${imageFiles[0].fileUrl}`}
+                download={imageFiles[0].fileName}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  position: "absolute",
+                  top: "20px",
+                  right: "20px",
+                  background: "#fff",
+                  color: "#000",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  borderRadius: "6px",
+                  textDecoration: "none",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+                }}
+              >
+                Descargar
+              </a>
+            )}
 
-            <a
-              href={
-                imageFiles[previewIndex].url ||
-                `data:${imageFiles[previewIndex].fileType};base64,${imageFiles[previewIndex].fileContent}`
-              }
-              download={imageFiles[previewIndex].fileName}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                position: "absolute",
-                top: "20px",
-                right: "20px",
-                background: "#fff",
-                color: "#000",
-                padding: "6px 12px",
-                fontSize: "13px",
-                borderRadius: "6px",
-                textDecoration: "none",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
-              }}
-            >
-              Descargar
-            </a>
+            {/* Mostrar botón de "descargar todo" solo si hay más de una imagen */}
+            {imageFiles.length > 1 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  downloadImagesAsZip(imageFiles);
+                }}
+                style={{
+                  position: "absolute",
+                  top: "20px",
+                  right: "20px",
+                  background: "#fff",
+                  color: "#000",
+                  padding: "6px 12px",
+                  fontSize: "13px",
+                  borderRadius: "6px",
+                  textDecoration: "none",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.3)",
+                }}
+              >
+                Descargar todo
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -449,6 +509,14 @@ MessageBubble.propTypes = {
         fileType: PropTypes.string.isRequired,
         fileContent: PropTypes.string,
         url: PropTypes.string,
+        fileUrl: PropTypes.string, // opcional si usas ambos
+      })
+    ),
+    images: PropTypes.arrayOf(
+      PropTypes.shape({
+        fileName: PropTypes.string.isRequired,
+        fileType: PropTypes.string.isRequired,
+        fileUrl: PropTypes.string.isRequired,
       })
     ),
     replyTo: PropTypes.shape({
