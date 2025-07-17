@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import PropTypes from "prop-types";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -10,6 +10,15 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 
 function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick }) {
+  const timeAgo = useMemo(
+    () =>
+      formatDistanceToNow(new Date(updatedAt), {
+        addSuffix: true,
+        locale: es,
+      }),
+    [updatedAt]
+  );
+
   return (
     <Card
       onClick={onClick}
@@ -18,14 +27,13 @@ function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick 
         flexDirection: "column",
         borderLeft: `4px solid ${isActive ? "#1a73e8" : "#ccc"}`,
         boxShadow: "0 1px 6px rgba(0,0,0,0.05)",
-        borderRadius: "12px",
-        mb: 0.6,
+        borderRadius: 2,
+        mb: 0.75,
         cursor: "pointer",
-        transition: "all 0.2s",
+        transition: "box-shadow 0.2s ease-in-out",
         "&:hover": {
           boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
         },
-        overflow: "hidden",
       }}
     >
       <CardContent sx={{ pb: 0.5 }}>
@@ -45,6 +53,7 @@ function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick 
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: 1,
         }}
       >
         <Chip
@@ -53,12 +62,9 @@ function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick 
           size="small"
         />
         <Typography variant="caption" color="text.secondary" noWrap>
-          {formatDistanceToNow(new Date(updatedAt), {
-            addSuffix: true,
-            locale: es,
-          })}
+          {timeAgo}
         </Typography>
-        <ArrowForwardIcon fontSize="small" sx={{ ml: 1 }} />
+        <ArrowForwardIcon fontSize="small" />
       </Box>
     </Card>
   );

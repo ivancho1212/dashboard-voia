@@ -642,7 +642,7 @@ function ChatWidget({
                     color: "#1a1a1a",
                     padding: "10px",
                     borderRadius: "12px",
-                    maxWidth: "75%",
+                    maxWidth: "62%",
                     minWidth: "80px",
                     width: "fit-content", // 👈 que se adapte al contenido
                     wordBreak: "break-word",

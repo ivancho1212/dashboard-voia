@@ -5,6 +5,7 @@ import React, {
   useLayoutEffect,
   useImperativeHandle,
   forwardRef,
+  useMemo,
 } from "react";
 import PropTypes from "prop-types";
 import SoftTypography from "components/SoftTypography";
@@ -53,27 +54,70 @@ const ChatPanel = forwardRef(
     const bottomRef = useRef(null);
     const typingRef = useRef(null);
     const [isUserAtBottom, setIsUserAtBottom] = useState(true);
-    const [isViewerOpen, setIsViewerOpen] = useState(false); // ← nuevo
     const lastMessageIdRef = useRef(null);
     const [hasNewMessageBelow, setHasNewMessageBelow] = useState(false);
-
-    useEffect(() => {
-      if (iaPaused && inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, [iaPaused]);
-
-    useEffect(() => {
-      if (replyTo && inputRef.current) {
-        inputRef.current.focus();
-      }
-    }, [replyTo]);
-
     const inputRef = useRef(null);
-
+    const scrollToBottom = () => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    };
+    
     useImperativeHandle(ref, () => ({
       isInputFocused: () => inputRef.current === document.activeElement,
     }));
+
+    useEffect(() => {
+      if (iaPaused && inputRef.current) inputRef.current.focus();
+    }, [iaPaused]);
+
+    useEffect(() => {
+      if (replyTo && inputRef.current) inputRef.current.focus();
+    }, [replyTo]);
+
+    useLayoutEffect(() => {
+      injectTypingAnimation();
+
+      const container = document.getElementById("chat-container");
+      if (!container) return;
+
+      const lastMessage = messages[messages.length - 1];
+      if (!lastMessage) return;
+
+      const SCROLL_THRESHOLD = 150;
+      const atBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_THRESHOLD;
+      const isNew = lastMessage.id !== lastMessageIdRef.current;
+      if (!isNew) return;
+      
+      lastMessageIdRef.current = lastMessage.id;
+
+      if (lastMessage.from === "admin") {
+        scrollToBottom();
+        setHasNewMessageBelow(false);
+        return;
+      }
+
+      if (atBottom) {
+        scrollToBottom();
+        setHasNewMessageBelow(false);
+      } else {
+        setHasNewMessageBelow(true);
+      }
+    }, [messages]);
+
+    useEffect(() => {
+      if (!highlightedMessageId || !messageRefs.current[highlightedMessageId]) return;
+
+      const el = messageRefs.current[highlightedMessageId];
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+
+      const timeout = setTimeout(() => {
+        if (typeof onJumpToReply === "function") {
+          onJumpToReply(null);
+        }
+      }, 5000);
+
+      return () => clearTimeout(timeout);
+    }, [highlightedMessageId]);
 
     const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
     const handleCloseMenu = () => setAnchorEl(null);
@@ -90,8 +134,7 @@ const ChatPanel = forwardRef(
 
     const handleSendMessage = () => {
       if (inputValue.trim()) {
-        const messageId = Date.now().toString(); // ✅ DECLARADO PRIMERO
-
+        const messageId = crypto.randomUUID();
         const replyInfo = replyTo
           ? {
               id: replyTo.id,
@@ -102,122 +145,74 @@ const ChatPanel = forwardRef(
           : null;
 
         onSendAdminMessage(inputValue.trim(), conversationId, messageId, replyInfo);
-
         setInputValue("");
-
         setTimeout(() => {
-          bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+          scrollToBottom();
         }, 50);
-
         if (onCancelReply) onCancelReply();
       }
     };
 
-    useLayoutEffect(() => {
-      injectTypingAnimation();
-
-      const container = document.getElementById("chat-container");
-      if (!container) return;
-
-      const lastMessage = messages[messages.length - 1];
-      if (!lastMessage) return;
-
-      const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150; // puedes ajustar
-
-      const isNew = lastMessage.id !== lastMessageIdRef.current;
-      if (!isNew) return;
-
-      lastMessageIdRef.current = lastMessage.id;
-
-      const fromOthers = lastMessage.from !== "admin";
-
-      if (lastMessage.from === "admin") {
-        // 👈 Siempre mostrar mensajes del admin
-        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-        setHasNewMessageBelow(false);
-        return;
-      }
-
-      if (atBottom) {
-        bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-        setHasNewMessageBelow(false);
-      } else if (fromOthers) {
-        setHasNewMessageBelow(true);
-      }
-    }, [messages]);
+    const typingTimeout = useRef(null);
 
     const handleInputChange = (text) => {
       setInputValue(text);
+
+      if (typingTimeout.current) clearTimeout(typingTimeout.current);
+
       if (text.trim()) {
-        connection
-          .invoke("Typing", Number(conversationId), "admin")
-          .catch((err) => console.error("❌ Error enviando Typing:", err));
+        typingTimeout.current = setTimeout(() => {
+          connection
+            .invoke("Typing", Number(conversationId), "admin")
+            .catch((err) => console.error("❌ Error enviando Typing:", err));
+        }, 500);
       }
     };
 
-    // ✅ Procesar archivos en mensajes con logs
-    const processedMessages = messages.map((msg, i) => {
-      console.log(`📩 Procesando mensaje[${i}]:`, msg);
+    const processedMessages = useMemo(() => {
+      return messages.map((msg) => {
+        let files = [];
 
-      // Normalizar archivos
-      let files = [];
-
-      // Caso 1: mensaje tiene un archivo individual
-      if (msg.file && msg.file.fileUrl) {
-        files.push({
-          ...msg.file,
-          url: msg.file.fileUrl,
-        });
-      }
-
-      // Caso 2: mensaje tiene múltiples imágenes
-      if (msg.images && Array.isArray(msg.images)) {
-        msg.images.forEach((img) => {
-          if (img.fileUrl) {
-            files.push({
-              ...img,
-              url: img.fileUrl,
-            });
-          }
-        });
-      }
-
-      // Resolver replyTo si solo viene replyToMessageId
-      let resolvedReplyTo = undefined;
-      if (msg.replyToMessageId) {
-        const original = messages.find(
-          (m) => m.id?.toString() === msg.replyToMessageId?.toString()
-        );
-        if (original) {
-          const firstFile = original.file || original.images?.[0];
-          resolvedReplyTo = {
-            id: original.id,
-            text: original.text || (firstFile ? "📎 " + firstFile.fileName : null),
-            fileName: firstFile?.fileName,
-          };
-        } else if (msg.replyToText) {
-          resolvedReplyTo = {
-            id: msg.replyToMessageId,
-            text: msg.replyToText,
-          };
-        } else {
-          console.warn(
-            "⚠️ No se encontró el mensaje original ni texto directo para reply:",
-            msg.replyToMessageId
-          );
+        if (msg.file?.fileUrl) {
+          files.push({ ...msg.file, url: msg.file.fileUrl });
         }
-      }
 
-      return {
-        ...msg,
-        files: files.length > 0 ? files : undefined,
-        replyTo: resolvedReplyTo ?? msg.replyTo ?? null,
-      };
-    });
+        if (Array.isArray(msg.images)) {
+          msg.images.forEach((img) => {
+            if (img.fileUrl) files.push({ ...img, url: img.fileUrl });
+          });
+        }
+
+        let resolvedReplyTo = null;
+        if (msg.replyToMessageId) {
+          const original = messages.find(
+            (m) => m.id?.toString() === msg.replyToMessageId?.toString()
+          );
+          if (original) {
+            const firstFile = original.file || original.images?.[0];
+            resolvedReplyTo = {
+              id: original.id,
+              text: original.text || (firstFile ? "📎 " + firstFile.fileName : null),
+              fileName: firstFile?.fileName,
+            };
+          } else if (msg.replyToText) {
+            resolvedReplyTo = {
+              id: msg.replyToMessageId,
+              text: msg.replyToText,
+            };
+          }
+        }
+
+        return {
+          ...msg,
+          files: files.length > 0 ? files : undefined,
+          replyTo: resolvedReplyTo ?? msg.replyTo ?? null,
+        };
+      });
+    }, [messages]);
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-        {/* ENCABEZADO */}
         <Box sx={{ px: 2, pb: 2, borderBottom: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
           <Box display="flex" justifyContent="space-between" alignItems="center" height={25}>
             <SoftTypography
@@ -242,16 +237,7 @@ const ChatPanel = forwardRef(
                     status === "pendiente" ? "warning" : status === "resuelta" ? "success" : "info"
                   }
                   size="small"
-                  sx={{
-                    fontSize: "0.7rem",
-                    height: 22,
-                    fontWeight: "500",
-                    "& .MuiChip-label": {
-                      color: "white !important",
-                      px: 1,
-                      lineHeight: "18px",
-                    },
-                  }}
+                  sx={{ fontSize: "0.7rem", height: 22, fontWeight: 500 }}
                 />
               </Tooltip>
 
@@ -261,15 +247,7 @@ const ChatPanel = forwardRef(
                     label="BLOQUEADO"
                     color="error"
                     size="small"
-                    sx={{
-                      fontSize: "0.7rem",
-                      height: 22,
-                      fontWeight: 500,
-                      "& .MuiChip-label": {
-                        px: 1,
-                        lineHeight: "18px",
-                      },
-                    }}
+                    sx={{ fontSize: "0.7rem", height: 22 }}
                   />
                 </Tooltip>
               )}
@@ -295,13 +273,11 @@ const ChatPanel = forwardRef(
           </Box>
         </Box>
 
-        {/* CUERPO DEL CHAT */}
         <div
           id="chat-container"
           onScroll={(e) => {
             const el = e.target;
-            const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 150;
-            setIsUserAtBottom(isAtBottom);
+            setIsUserAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 150);
           }}
           style={{
             flex: 1,
@@ -311,46 +287,36 @@ const ChatPanel = forwardRef(
             flexDirection: "column",
             minHeight: 0,
             backgroundColor: "#f9f9f9",
-            position: "relative", // importante para el botón flotante
+            position: "relative",
           }}
         >
-          {processedMessages.map((msg, idx) => {
-            console.log(`💬 Renderizando mensaje[${idx}]`, msg);
-            if (msg.replyTo) {
-              console.log(`🧷 Mensaje[${idx}] tiene replyTo:`, msg.replyTo);
-            }
+          {processedMessages.map((msg, idx) => (
+            <MessageBubble
+              key={idx}
+              msg={msg}
+              onReply={() => onReply(msg)}
+              onJumpToReply={onJumpToReply}
+              ref={(el) => {
+                if (el && msg.id) messageRefs.current[msg.id] = el;
+              }}
+              isHighlighted={highlightedMessageId === msg.id}
+            />
+          ))}
 
-            return (
-              <MessageBubble
-                key={idx}
-                msg={msg}
-                onReply={() => onReply(msg)}
-                onJumpToReply={onJumpToReply}
-                ref={(el) => {
-                  if (el && msg.id) {
-                    messageRefs.current[msg.id] = el;
-                  }
-                }}
-                isHighlighted={highlightedMessageId === msg.id} // ✅ <-- AQUI VA
-              />
-            );
-          })}
-
-          {isTyping &&
-            (typingSender === "bot" || typingSender === "admin" || typingSender === "user") && (
-              <CSSTransition
-                in={true}
-                appear
-                timeout={300}
-                classNames="fade"
-                nodeRef={typingRef}
-                unmountOnExit
-              >
-                <div ref={typingRef}>
-                  <TypingIndicator color="#00bcd4" background="#e0f7fa" variant="bars" />
-                </div>
-              </CSSTransition>
-            )}
+          {isTyping && ["bot", "admin", "user"].includes(typingSender) && (
+            <CSSTransition
+              in
+              appear
+              timeout={300}
+              classNames="fade"
+              nodeRef={typingRef}
+              unmountOnExit
+            >
+              <div ref={typingRef}>
+                <TypingIndicator color="#00bcd4" background="#e0f7fa" variant="bars" />
+              </div>
+            </CSSTransition>
+          )}
 
           <div ref={bottomRef} />
 
@@ -361,18 +327,18 @@ const ChatPanel = forwardRef(
                 setHasNewMessageBelow(false);
               }}
               sx={{
-                position: "fixed", // 👈 CAMBIAR A FIXED
-                bottom: 130, // 👈 ajusta según tu layout (80px si hay input abajo)
+                position: "fixed",
+                bottom: 130,
                 right: 60,
                 backgroundColor: "#00bcd4",
-                color: "white !important",
+                color: "white",
                 px: 2,
                 py: 1,
                 borderRadius: "16px",
                 cursor: "pointer",
                 boxShadow: 3,
                 fontSize: "0.8rem",
-                zIndex: 1300, // encima del contenido
+                zIndex: 1300,
               }}
             >
               ⬇ Nuevo mensaje
@@ -380,7 +346,6 @@ const ChatPanel = forwardRef(
           )}
         </div>
 
-        {/* INPUT */}
         <Box sx={{ pt: 1, pb: 2, borderTop: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
           <Box display="flex" alignItems="center" gap={1}>
             <Controls onToggle={onToggleIA} iaPaused={iaPaused} />

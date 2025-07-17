@@ -54,7 +54,7 @@ function VRInfo() {
                 <SoftAvatar
                   src={team1}
                   alt="Profile Picture"
-                  size="lg"
+                  size="xs"
                   variant="rounded"
                   sx={{ cursor: "pointer" }}
                 />

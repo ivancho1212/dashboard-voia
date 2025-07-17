@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 import PropTypes from "prop-types";
 import SoftTypography from "components/SoftTypography";
 import List from "@mui/material/List";
@@ -28,7 +28,6 @@ function ConversationList({
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
   const [search, setSearch] = React.useState("");
-  const listRef = useRef(null);
 
   const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseMenu = () => setAnchorEl(null);
@@ -37,42 +36,51 @@ function ConversationList({
     handleCloseMenu();
   };
 
-  const filtered = conversations
-  .filter((conv) => {
-    // ✅ Evita mostrar conversaciones sin mensaje visible
-    const hasAnyMessage = conv.lastMessage || (messagesMap[conv.id] || []).length > 0;
-    return hasAnyMessage;
-  })
-  .filter((conv) => {
-    if (filter === "active") return conv.status === "activa";
-    if (filter === "closed") return conv.status === "cerrada";
-    if (filter === "pending") return conv.status === "pendiente";
-    if (filter === "resolved") return conv.status === "resuelta";
-    if (filter === "blocked") return conv.blocked === true;
-    return true;
-  })
-  .filter((conv) => {
-    const convId = `${conv.id}`;
-    const textToSearch = `${conv.alias || ""} ${conv.lastMessage || ""}`;
-    const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
-    return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
-  })
-  .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)); // ← 🔥 Esta línea ordena de más reciente a más antigua
-
+  const filtered = useMemo(() => {
+    return conversations
+      .filter((conv) => {
+        const hasAnyMessage = conv.lastMessage || (messagesMap[conv.id] || []).length > 0;
+        return hasAnyMessage;
+      })
+      .filter((conv) => {
+        if (filter === "active") return conv.status === "activa";
+        if (filter === "closed") return conv.status === "cerrada";
+        if (filter === "pending") return conv.status === "pendiente";
+        if (filter === "resolved") return conv.status === "resuelta";
+        if (filter === "blocked") return conv.blocked === true;
+        return true;
+      })
+      .filter((conv) => {
+        const convId = `${conv.id}`;
+        const textToSearch = `${conv.alias || ""} ${conv.lastMessage || ""}`;
+        const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
+        return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
+      })
+      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  }, [conversations, messagesMap, filter, search]);
 
   useEffect(() => {
-    const styles = `
-      @keyframes flash {
-        0% { background-color: #fffde7; }
-        50% { background-color: #fff176; }
-        100% { background-color: #fffde7; }
-      }
-    `;
     const styleTag = document.createElement("style");
-    styleTag.innerHTML = styles;
+    styleTag.innerHTML = `
+    @keyframes flash {
+      0% { background-color: #fffde7; }
+      50% { background-color: #fff176; }
+      100% { background-color: #fffde7; }
+    }
+  `;
     document.head.appendChild(styleTag);
     return () => document.head.removeChild(styleTag);
   }, []);
+
+  useEffect(() => {
+    if (!highlightedIds.length) return;
+
+    const timeout = setTimeout(() => {
+      highlightedIds.forEach((id) => onClearHighlight(id));
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, [highlightedIds]);
 
   return (
     <Box display="flex" flexDirection="column" sx={{ height: "100%", minHeight: 0 }}>
@@ -118,7 +126,7 @@ function ConversationList({
 
       {/* Lista con scroll */}
       <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-        <List ref={listRef} sx={{ width: "100%", padding: 0 }}>
+        <List sx={{ width: "100%", padding: 0 }}>
           {filtered.map((conv) => (
             <ListItemButton
               key={conv.id}
@@ -200,7 +208,8 @@ function ConversationList({
                     }
                     size="small"
                     sx={{
-                      fontSize: "11px",
+                      fontSize: "10px",
+                      paddingTop: "2px",
                       height: "22px",
                       fontWeight: "bold",
                       "& .MuiChip-label": {

@@ -1,5 +1,6 @@
 // src/layouts/data/conversations/ConversationActions.js
-import React, { useState } from "react";
+
+import React, { useState, useCallback } from "react";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
@@ -10,8 +11,18 @@ function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus }
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
 
-  const handleClick = (event) => setAnchorEl(event.currentTarget);
-  const handleClose = () => setAnchorEl(null);
+  const handleClick = useCallback((event) => {
+    setAnchorEl(event.currentTarget);
+  }, []);
+
+  const handleClose = useCallback(() => {
+    setAnchorEl(null);
+  }, []);
+
+  const statusOptions = [
+    { label: "Marcar como Pendiente", value: "pendiente" },
+    { label: "Marcar como Resuelta", value: "resuelta" },
+  ];
 
   return (
     <>
@@ -20,26 +31,26 @@ function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus }
       </IconButton>
 
       <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-        <MenuItem disabled>Estado actual: {currentStatus}</MenuItem>
-        <MenuItem
-          onClick={() => {
-            onStatusChange("pendiente");
-            handleClose();
-          }}
-        >
-          Marcar como Pendiente
+        <MenuItem disabled>
+          Estado actual: {currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
         </MenuItem>
+
+        {statusOptions.map((option) => (
+          <MenuItem
+            key={option.value}
+            disabled={option.value === currentStatus}
+            onClick={() => {
+              onStatusChange(option.value);
+              handleClose();
+            }}
+          >
+            {option.label}
+          </MenuItem>
+        ))}
+
         <MenuItem
           onClick={() => {
-            onStatusChange("resuelta");
-            handleClose();
-          }}
-        >
-          Marcar como Resuelta
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            onBlock(); // Esto alterna bloqueado/desbloqueado
+            onBlock();
             handleClose();
           }}
         >

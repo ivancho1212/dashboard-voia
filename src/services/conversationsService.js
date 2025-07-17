@@ -1,8 +1,10 @@
 import axios from "axios";
 
+const BASE_URL = "http://localhost:5006"; // ⚠️ Solo para desarrollo
+
 // ✅ Cargar conversaciones del usuario
 export async function getConversationsByUser(userId) {
-  const response = await axios.get(`/api/Conversations/by-user/${userId}`);
+  const response = await axios.get(`${BASE_URL}/api/Conversations/by-user/${userId}`);
   return response.data.map((c) => ({
     id: `${c.id}`,
     alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
@@ -15,7 +17,7 @@ export async function getConversationsByUser(userId) {
 
 // ✅ Cargar mensajes por conversación
 export async function getMessagesByConversationId(conversationId) {
-  const response = await axios.get(`/api/Messages/by-conversation/${conversationId}`);
+  const response = await axios.get(`${BASE_URL}/api/Messages/by-conversation/${conversationId}`);
 
   return response.data.map((msg) => ({
     id: msg.id,
