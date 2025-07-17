@@ -3,12 +3,17 @@ import React, { useState, useEffect, useRef } from "react";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import connection from "services/signalr";
-import { sendChatFile, sendGroupedImages } from "services/chatUploadedFilesService";
+import InputArea from "./chat/InputArea";
+import MessageBubble from "./chat/MessageBubble";
+import MessageList from "./chat/MessageList";
+import TypingDots from "./chat/TypingDots";
+import ImagePreviewModal from "./chat/ImagePreviewModal";
+import voiaLogo from "assets/images/VOIA-LOGO.png";
 
 const voaiGif = "/voai.gif"; // ✅ Ruta relativa al dominio público
 
 function ChatWidget({
-  title = "Voia",
+  title = "VIA",
   theme: initialTheme,
   primaryColor = "#000000",
   secondaryColor = "#ffffff",
@@ -57,57 +62,6 @@ function ChatWidget({
 
     if (connection.state !== "Connected") {
       throw new Error("❌ No se pudo establecer conexión con SignalR.");
-    }
-  };
-
-  const handleUpload = async (event) => {
-    const files = Array.from(event.target.files);
-    event.target.value = null;
-
-    const maxSizeInBytes = 5 * 1024 * 1024;
-    const isImage = (file) => file.type.startsWith("image/");
-
-    const images = files.filter(isImage);
-    const documents = files.filter((file) => !isImage(file));
-
-    // ✅ MULTI-IMAGENES
-    if (images.length > 0) {
-      for (const img of images) {
-        if (img.size > maxSizeInBytes) {
-          alert(`❌ La imagen ${img.name} excede los 5MB.`);
-          return;
-        }
-      }
-
-      if (images.length === 1) {
-        // ✅ Imagen individual
-        await sendChatFile({ connection, conversationId, file: images[0], userId });
-      } else {
-        // ✅ Varias imágenes agrupadas
-        if (images.length > 10) {
-          alert("❌ Máximo 10 imágenes.");
-          return;
-        }
-        await sendGroupedImages({ connection, conversationId, files: images, userId });
-      }
-
-      return;
-    }
-
-    // ✅ DOCUMENTO INDIVIDUAL
-    if (documents.length > 1) {
-      alert("❌ Solo puedes subir un documento a la vez.");
-      return;
-    }
-
-    if (documents.length === 1) {
-      const file = documents[0];
-      if (file.size > maxSizeInBytes) {
-        alert(`❌ El archivo ${file.name} excede los 5MB.`);
-        return;
-      }
-
-      await sendChatFile({ connection, conversationId, file, userId });
     }
   };
 
@@ -391,7 +345,7 @@ function ChatWidget({
     width: "90vw",
     maxWidth: "400px",
     height: "70vh",
-    maxHeight: "650px",
+    maxHeight: "700px",
     boxShadow: "0 2px 15px rgba(0,0,0,0.15)",
     display: "flex",
     flexDirection: "column",
@@ -414,45 +368,6 @@ function ChatWidget({
     ...positionStyles[position],
   };
 
-  const autoResizeTextarea = () => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto"; // reset
-      textarea.style.height = `${textarea.scrollHeight}px`; // set nueva altura
-    }
-  };
-
-  const TypingDots = ({ color = "#000" }) => {
-    return (
-      <div style={{ display: "flex", gap: "4px", alignItems: "flex-end", height: "16px" }}>
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            style={{
-              width: "4px",
-              height: "8px",
-              background: "#00bcd4",
-              animation: "equalizer 0.8s infinite ease-in-out",
-              animationDelay: `${i * 0.15}s`,
-              borderRadius: "2px",
-            }}
-          />
-        ))}
-        <style>
-          {`
-            @keyframes equalizer {
-              0%, 100% { height: 8px; }
-              50% { height: 16px; }
-            }
-          `}
-        </style>
-      </div>
-    );
-  };
-
-  TypingDots.propTypes = {
-    color: PropTypes.string,
-  };
   const openImageModal = (images, clickedImageUrl) => {
     // Limpiar primero
     setImageGroup([]);
@@ -629,411 +544,36 @@ function ChatWidget({
               respuestas precisas y seguras.
             </div>
 
-            <TransitionGroup style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              {messages
-                .filter((msg) => !msg?.meta?.internalOnly)
-                .map((msg, index) => {
-                  const isUser = msg.from === "user";
-                  const nodeRef = messageRefs.current[index];
-
-                  const containerStyle = {
-                    alignSelf: isUser ? "flex-end" : "flex-start",
-                    backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
-                    color: "#1a1a1a",
-                    padding: "10px",
-                    borderRadius: "12px",
-                    maxWidth: "62%",
-                    minWidth: "80px",
-                    width: "fit-content", // 👈 que se adapte al contenido
-                    wordBreak: "break-word",
-                    fontSize: "14px",
-                    fontFamily,
-                    display: "flex",
-                    flexDirection: "column",
-                    boxSizing: "border-box",
-                  };
-
-                  return (
-                    <CSSTransition
-                      key={index}
-                      timeout={300}
-                      classNames="fade"
-                      nodeRef={nodeRef}
-                      unmountOnExit
-                    >
-                      <div ref={nodeRef} style={containerStyle}>
-                        {/* Archivos múltiples */}
-                        {msg.multipleFiles?.length > 0 && (
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "repeat(2, 1fr)", // 2 columnas
-                              gap: "6px",
-                              marginBottom: "6px",
-                              width: "100%", // ✅ para que se alinee con la burbuja
-                              boxSizing: "border-box",
-                            }}
-                          >
-                            {msg.multipleFiles.slice(0, 4).map((file, i) => {
-                              const isLastVisible = i === 3 && msg.multipleFiles.length > 4;
-
-                              return (
-                                <div
-                                  key={i}
-                                  style={{
-                                    position: "relative",
-                                    width: "100%",
-                                    aspectRatio: "1 / 1",
-                                    borderRadius: "8px",
-                                    overflow: "hidden",
-                                  }}
-                                >
-                                  <img
-                                    src={`data:${file.fileType};base64,${file.fileContent}`}
-                                    alt={file.fileName}
-                                    onClick={() => {
-                                      if (!isLastVisible) {
-                                        setPreviewImageUrl(
-                                          `data:${file.fileType};base64,${file.fileContent}`
-                                        );
-                                        setIsImageModalOpen(true);
-                                      }
-                                    }}
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      objectFit: "cover",
-                                      display: "block",
-                                      filter: isLastVisible ? "brightness(0.5)" : "none",
-                                      cursor: isLastVisible ? "default" : "pointer", // 👈 sólo si no es la imagen 4+
-                                    }}
-                                  />
-
-                                  {isLastVisible && (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        top: 0,
-                                        left: 0,
-                                        width: "100%",
-                                        height: "100%",
-                                        backgroundColor: "rgba(0, 0, 0, 0.6)",
-                                        color: "white",
-                                        display: "flex",
-                                        justifyContent: "center",
-                                        alignItems: "center",
-                                        fontSize: "18px",
-                                        fontWeight: "bold",
-                                        borderRadius: "8px",
-                                      }}
-                                    >
-                                      +{msg.multipleFiles.length - 4}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Archivo único */}
-                        {msg.file ? (
-                          msg.file.fileType?.startsWith("image/") ? (
-                            <img
-                              src={
-                                msg.file.fileUrl.startsWith("http")
-                                  ? msg.file.fileUrl
-                                  : `http://localhost:5006${msg.file.fileUrl}`
-                              }
-                              alt={msg.file.fileName}
-                              onClick={() => {
-                                const fullUrl = msg.file.fileUrl.startsWith("http")
-                                  ? msg.file.fileUrl
-                                  : `http://localhost:5006${msg.file.fileUrl}`;
-
-                                // Agrupar todas las imágenes del chat (msg.file e imágenes múltiples)
-                                const allImages = messages
-                                  .flatMap((m) => {
-                                    const imgs = [];
-                                    if (m.file && m.file.fileType?.startsWith("image/")) {
-                                      imgs.push({
-                                        fileUrl: m.file.fileUrl,
-                                        fileName: m.file.fileName,
-                                      });
-                                    }
-                                    if (Array.isArray(m.images)) {
-                                      imgs.push(...m.images);
-                                    }
-                                    return imgs;
-                                  })
-                                  .filter((img) => img.fileUrl); // Limpiar nulls
-
-                                openImageModal(allImages, fullUrl);
-                              }}
-                              style={{
-                                maxWidth: "100%",
-                                borderRadius: "8px",
-                                marginBottom: "4px",
-                                cursor: "pointer", // 👈 importante para UX
-                              }}
-                            />
-                          ) : (
-                            <a
-                              href={
-                                msg.file.fileUrl.startsWith("http")
-                                  ? msg.file.fileUrl
-                                  : `http://localhost:5006${msg.file.fileUrl}`
-                              }
-                              download={msg.file.fileName}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                color: "#007bff",
-                                textDecoration: "underline",
-                                marginBottom: "4px",
-                                display: "inline-block",
-                              }}
-                            >
-                              📎 {msg.file.fileName}
-                            </a>
-                          )
-                        ) : null}
-
-                        {/* Imágenes agrupadas recibidas */}
-                        {msg.images?.length > 0 && (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "8px",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            {msg.images.slice(0, 4).map((img, i) => {
-                              const isLastVisible = i === 3 && msg.images.length > 4;
-                              const fullUrl = img.fileUrl.startsWith("http")
-                                ? img.fileUrl
-                                : `http://localhost:5006${img.fileUrl}`;
-
-                              return (
-                                <div
-                                  key={i}
-                                  style={{
-                                    position: "relative",
-                                    width: "100px",
-                                    height: "100px",
-                                    borderRadius: "8px",
-                                    overflow: "hidden",
-                                  }}
-                                  onClick={() => {
-                                    openImageModal(msg.images, fullUrl);
-                                  }}
-                                >
-                                  <img
-                                    src={fullUrl}
-                                    alt={img.fileName}
-                                    style={{
-                                      width: "100%",
-                                      height: "100%",
-                                      objectFit: "cover",
-                                      filter: isLastVisible ? "brightness(0.5)" : "none",
-                                      cursor: "pointer",
-                                    }}
-                                  />
-                                  {isLastVisible && (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        top: 0,
-                                        left: 0,
-                                        width: "100%",
-                                        height: "100%",
-                                        backgroundColor: "rgba(0, 0, 0, 0.6)",
-                                        color: "white",
-                                        display: "flex",
-                                        justifyContent: "center",
-                                        alignItems: "center",
-                                        fontSize: "16px",
-                                        fontWeight: "bold",
-                                        borderRadius: "8px",
-                                      }}
-                                    >
-                                      +{msg.images.length - 4}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {msg.text && <span>{msg.text}</span>}
-
-                        {/* Timestamp */}
-                        {msg.timestamp && (
-                          <span
-                            style={{
-                              fontSize: "9px",
-                              color: "#555",
-                              alignSelf: "flex-end",
-                              opacity: 0.7,
-                            }}
-                          >
-                            {new Date(msg.timestamp).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                        )}
-                      </div>
-                    </CSSTransition>
-                  );
-                })}
-
-              {isTyping && (typingSender === "bot" || typingSender === "admin") && (
-                <CSSTransition key="typing" timeout={300} classNames="fade" nodeRef={typingRef}>
-                  <div
-                    ref={typingRef}
-                    style={{
-                      alignSelf: "flex-start",
-                      backgroundColor: typingSender === "admin" ? "#ccc" : secondaryColor,
-                      color: typingSender === "admin" ? "#000" : primaryColor,
-
-                      padding: "8px 12px",
-                      borderRadius: "12px",
-                      maxWidth: "60%",
-                      fontFamily,
-                      fontSize: "14px",
-                      fontStyle: "italic",
-                      opacity: 0.7,
-                      border: "none",
-                      boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
-                    }}
-                  >
-                    <TypingDots color={primaryColor} />
-                  </div>
-                </CSSTransition>
-              )}
-            </TransitionGroup>
+            <MessageList
+              messages={messages}
+              messageRefs={messageRefs}
+              fontFamily={fontFamily}
+              openImageModal={openImageModal}
+              isTyping={isTyping}
+              typingSender={typingSender}
+              typingRef={typingRef}
+              primaryColor={primaryColor}
+              secondaryColor={secondaryColor}
+            />
 
             <div ref={messagesEndRef} />
           </div>
 
           {/* 📝 Input + Adjuntar + Enviar */}
-          <div
-            style={{
-              position: "relative",
-              padding: "10px 10px", // Margen externo (opcional, puedes ajustar)
-            }}
-          >
-            {/* 📎 Adjuntar documentos (solo uno, no imágenes) */}
-            <label
-              style={{
-                position: "absolute",
-                left: "20px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                cursor: "pointer",
-              }}
-            >
-              <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
-              <input
-                type="file"
-                name="document"
-                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.xlsx,.csv,.zip"
-                style={{ display: "none" }}
-                onChange={handleUpload}
-              />
-            </label>
+          <InputArea
+            inputText={inputText}
+            inputBg={inputBg}
+            inputBorder={inputBorder}
+            fontFamily={fontFamily}
+            message={message}
+            setMessage={setMessage}
+            textareaRef={textareaRef}
+            sendMessage={sendMessage}
+            connection={connection}
+            conversationId={conversationId}
+            userId={userId}
+          />
 
-            {/* 🖼️ Subir imágenes múltiples */}
-            <label
-              style={{
-                position: "absolute",
-                left: "50px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                cursor: "pointer",
-              }}
-            >
-              <FaImage style={{ color: inputText, fontSize: "18px" }} />
-              <input
-                type="file"
-                name="image"
-                accept="image/*"
-                multiple
-                style={{ display: "none" }}
-                onChange={handleUpload}
-              />
-            </label>
-
-            {/* 📝 Textarea adaptativa */}
-            <textarea
-              ref={textareaRef}
-              placeholder="Escribe un mensaje..."
-              value={message}
-              onChange={async (e) => {
-                const text = e.target.value;
-                setMessage(text);
-                autoResizeTextarea();
-
-                if (text.trim()) {
-                  try {
-                    console.log("✍️ Enviando Typing del usuario", conversationId);
-
-                    await connection.invoke("Typing", conversationId, "user");
-                  } catch (err) {
-                    console.error("❌ Error enviando Typing del usuario:", err);
-                  }
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMessage();
-                  setMessage(""); // 🧹 Limpiar input
-
-                  requestAnimationFrame(() => {
-                    if (textareaRef.current) {
-                      textareaRef.current.style.height = "auto";
-                    }
-                  });
-                }
-              }}
-              rows={1}
-              style={{
-                width: "100%",
-                minHeight: "42px",
-                maxHeight: "160px",
-                padding: "10px 42px 10px 70px",
-                borderRadius: "12px",
-                border: `1.5px solid ${inputBorder}`,
-                fontFamily,
-                fontSize: "14px",
-                outline: "none",
-                color: inputText,
-                backgroundColor: inputBg,
-                resize: "none",
-                overflow: "",
-                boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-                lineHeight: "1.5",
-              }}
-            />
-
-            {/* 🚀 Icono de enviar */}
-            <FaPaperPlane
-              onClick={sendMessage}
-              style={{
-                position: "absolute",
-                right: "20px",
-                top: "50%",
-                transform: "translateY(-50%)",
-                color: inputText,
-                fontSize: "18px",
-                cursor: "pointer",
-              }}
-            />
-          </div>
           <div
             style={{
               textAlign: "right",
@@ -1042,81 +582,31 @@ function ChatWidget({
               paddingBottom: "8px",
               marginRight: "15px",
               fontFamily: fontFamily || "Arial",
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: "4px",
             }}
           >
-            © {new Date().getFullYear()} <b style={{ color: primaryColor }}>VoIA</b>. Todos los
-            derechos reservados.
-          </div>
-          {/* 🖼️ Modal de vista previa de imagen */}
-          {isImageModalOpen && (
-            <div
-              onClick={() => setIsImageModalOpen(false)}
-              style={{
-                position: "fixed",
-                top: 0,
-                left: 0,
-                width: "100vw",
-                height: "100vh",
-                backgroundColor: "rgba(0, 0, 0, 0.85)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                zIndex: 9999,
-                flexDirection: "row",
-              }}
-            >
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveImageIndex((prev) => (prev - 1 + imageGroup.length) % imageGroup.length);
-                }}
-                style={{
-                  position: "absolute",
-                  left: "20px",
-                  backgroundColor: "transparent",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "32px",
-                  cursor: "pointer",
-                }}
-              >
-                ‹
-              </button>
-
+            © {new Date().getFullYear()}{" "}
+            <b style={{ color: primaryColor, display: "flex", alignItems: "center", gap: "4px" }}>
+              VIA
               <img
-                src={
-                  imageGroup[activeImageIndex]?.fileUrl.startsWith("http")
-                    ? imageGroup[activeImageIndex]?.fileUrl
-                    : `http://localhost:5006${imageGroup[activeImageIndex]?.fileUrl}`
-                }
-                alt="Vista previa"
-                style={{
-                  maxWidth: "90%",
-                  maxHeight: "90%",
-                  borderRadius: "10px",
-                  boxShadow: "0 0 10px #000",
-                }}
+                src={voiaLogo}
+                alt="Logo VIA"
+                style={{ width: "20px", height: "20px", objectFit: "contain" }}
               />
+            </b>
+            . Todos los derechos reservados.
+          </div>
 
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setActiveImageIndex((prev) => (prev + 1) % imageGroup.length);
-                }}
-                style={{
-                  position: "absolute",
-                  right: "20px",
-                  backgroundColor: "transparent",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "32px",
-                  cursor: "pointer",
-                }}
-              >
-                ›
-              </button>
-            </div>
-          )}
+          <ImagePreviewModal
+            isOpen={isImageModalOpen}
+            onClose={() => setIsImageModalOpen(false)}
+            imageGroup={imageGroup}
+            activeImageIndex={activeImageIndex}
+            setActiveImageIndex={setActiveImageIndex}
+          />
         </div> // 👈 Este cierra el widget abierto
       )}
     </div> // 👈 Este cierra el contenedor principal

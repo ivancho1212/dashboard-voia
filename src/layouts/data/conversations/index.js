@@ -15,7 +15,7 @@ import SoftTypography from "components/SoftTypography";
 import Tooltip from "@mui/material/Tooltip";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-
+import { getFilesByConversation } from "services/chatUploadedFilesService";
 // 👇 Drag and Drop
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
@@ -70,7 +70,22 @@ function Conversations() {
           data.map((c) => ({
             id: `${c.id}`, // 👈 Fuerza a string
             alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
-            lastMessage: c.userMessage || "",
+            lastMessage: (() => {
+              if (c.files?.length > 0) {
+                const fileNames = c.files.map((f) => f.name || "archivo").join(", ");
+                return `📎 ${fileNames}`;
+              }
+
+              if (
+                c.userMessage === "Se envió un archivo con un clic" ||
+                c.userMessage?.toLowerCase().includes("se envió un archivo")
+              ) {
+                return "📎 Archivo adjunto";
+              }
+
+              return c.userMessage || "";
+            })(),
+
             updatedAt: c.createdAt || new Date().toISOString(),
             status: "activa",
             blocked: false,
@@ -249,13 +264,33 @@ function Conversations() {
 
     if (!messages[idStr]) {
       try {
-        const fetchedMessages = await getMessagesByConversationId(conv.id);
+        const [fetchedMessages, fetchedFiles] = await Promise.all([
+          getMessagesByConversationId(conv.id),
+          getFilesByConversation(conv.id),
+        ]);
+
+        // Mapea archivos a formato mensaje
+        const fileMessages = fetchedFiles.map((file) => ({
+          id: `file-${file.id}`,
+          from: "user",
+          text: `📎 ${file.fileName}`,
+          timestamp: file.createdAt,
+          fileContent: file.fileContent,
+          fileType: file.fileType,
+          fileName: file.fileName,
+          replyTo: null,
+        }));
+
+        const combined = [...fetchedMessages, ...fileMessages].sort(
+          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
+        );
+
         setMessages((prev) => ({
           ...prev,
-          [idStr]: fetchedMessages,
+          [idStr]: combined,
         }));
       } catch (err) {
-        console.error("❌ Error cargando mensajes de la conversación:", err);
+        console.error("❌ Error cargando mensajes y archivos de la conversación:", err);
       }
     }
   };

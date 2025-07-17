@@ -170,7 +170,22 @@ function ConversationList({
                       msg.text?.toLowerCase().includes(lowerSearch)
                     );
 
-                    if (!search || !matchMessage) return conv.lastMessage;
+                    if (!search || !matchMessage) {
+                      const messages = messagesMap[conv.id] || [];
+                      const last = messages[messages.length - 1];
+
+                      if (!last) return "Sin mensajes aún";
+
+                      if (last?.files?.length > 0) {
+                        return `📎 ${last.files.map((f) => f.name || "archivo").join(", ")}`;
+                      }
+
+                      if (last?.text) {
+                        return last.text;
+                      }
+
+                      return "📎 Archivo adjunto";
+                    }
 
                     const index = matchMessage.text.toLowerCase().indexOf(lowerSearch);
                     const start = Math.max(index - 20, 0);

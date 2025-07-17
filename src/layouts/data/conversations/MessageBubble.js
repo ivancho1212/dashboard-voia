@@ -20,6 +20,7 @@ const MessageBubble = React.forwardRef(
     const optionsRef = useRef(null);
     const iconRef = useRef(null);
     const bubbleRef = useRef(null);
+
     const imageFiles = (files || msg.images || []).filter((file) =>
       file.fileType?.startsWith("image/")
     );
@@ -53,7 +54,6 @@ const MessageBubble = React.forwardRef(
 
     useEffect(() => {
       const chatContainer = document.getElementById("chat-container");
-
       if (typeof setViewerOpen === "function") setViewerOpen(imageOptionsOpen);
 
       if (imageOptionsOpen) {
@@ -89,7 +89,8 @@ const MessageBubble = React.forwardRef(
           color: "#1a1a1a",
           padding: "10px 14px",
           borderRadius: "16px",
-          maxWidth: "75%",
+          maxWidth: "70%",
+          width: imageFiles.length === 1 ? "auto" : "fit-content",
           minWidth: "120px",
           fontSize: "14px",
           fontFamily: "Arial",
@@ -132,6 +133,7 @@ const MessageBubble = React.forwardRef(
           </div>
         )}
 
+        {/* Icono de opciones */}
         {showOptionsIcon && (
           <div
             ref={iconRef}
@@ -166,6 +168,7 @@ const MessageBubble = React.forwardRef(
           </div>
         )}
 
+        {/* Menú de opciones */}
         {imageOptionsOpen && menuPosition && (
           <div
             ref={optionsRef}
@@ -182,7 +185,15 @@ const MessageBubble = React.forwardRef(
           >
             {imageFiles.length > 0 && (
               <>
-                <div style={menuItemStyle} onClick={() => { setPreviewIndex(0); setImageOptionsOpen(false); }}>Ver</div>
+                <div
+                  style={menuItemStyle}
+                  onClick={() => {
+                    setPreviewIndex(0);
+                    setImageOptionsOpen(false);
+                  }}
+                >
+                  Ver
+                </div>
                 {imageFiles.length === 1 && (
                   <div
                     style={menuItemStyle}
@@ -201,7 +212,13 @@ const MessageBubble = React.forwardRef(
                   </div>
                 )}
                 {imageFiles.length > 1 && (
-                  <div style={menuItemStyle} onClick={async () => { await downloadImagesAsZip(imageFiles); setImageOptionsOpen(false); }}>
+                  <div
+                    style={menuItemStyle}
+                    onClick={async () => {
+                      await downloadImagesAsZip(imageFiles);
+                      setImageOptionsOpen(false);
+                    }}
+                  >
                     Descargar todo
                   </div>
                 )}
@@ -232,10 +249,19 @@ const MessageBubble = React.forwardRef(
 
         {/* Imágenes */}
         {imageFiles.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: imageFiles.length === 1 ? "1fr" : "repeat(2, 1fr)",
+              gridAutoRows: "auto",
+              gap: "6px",
+              marginTop: "6px",
+              width: "100%",
+              maxWidth: imageFiles.length === 1 ? "240px" : "100%",
+            }}
+          >
             {imageFiles.slice(0, 4).map((file, idx) => {
               const source = buildFileUrl(file.fileUrl);
-              if (!source) return null;
               const isOverlay = imageFiles.length > 4 && idx === 3;
 
               return (
@@ -243,8 +269,11 @@ const MessageBubble = React.forwardRef(
                   key={idx}
                   style={{
                     position: "relative",
+                    width: "100%",
+                    height: "100%",
                     borderRadius: "8px",
                     overflow: "hidden",
+                    aspectRatio: "1 / 1",
                     cursor: "pointer",
                   }}
                   onClick={() => setPreviewIndex(idx)}
@@ -252,7 +281,13 @@ const MessageBubble = React.forwardRef(
                   <img
                     src={source}
                     alt={file.fileName}
-                    style={{ maxWidth: "180px", borderRadius: "8px", opacity: isOverlay ? 0.5 : 1 }}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      borderRadius: "8px",
+                      filter: isOverlay ? "brightness(0.6)" : "none",
+                    }}
                   />
                   {isOverlay && (
                     <div
@@ -260,18 +295,19 @@ const MessageBubble = React.forwardRef(
                         position: "absolute",
                         top: 0,
                         left: 0,
-                        right: 0,
-                        bottom: 0,
+                        width: "100%",
+                        height: "100%",
+                        backgroundColor: "rgba(0, 0, 0, 0.5)",
+                        color: "#fff",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        fontSize: "20px",
-                        color: "white",
+                        fontSize: "1.5rem",
                         fontWeight: "bold",
-                        backgroundColor: "rgba(0,0,0,0.4)",
+                        borderRadius: "8px",
                       }}
                     >
-                      +{imageFiles.length - 3}
+                      +{imageFiles.length - 4}
                     </div>
                   )}
                 </div>
@@ -307,7 +343,7 @@ const MessageBubble = React.forwardRef(
           {formattedTime}
         </div>
 
-        {/* Visor Modal */}
+        {/* Visor modal */}
         {previewIndex !== null && (
           <div
             style={{
@@ -324,9 +360,15 @@ const MessageBubble = React.forwardRef(
             }}
             onClick={() => setPreviewIndex(null)}
           >
-            {/* Botón prev */}
-            <button onClick={(e) => { e.stopPropagation(); handlePrev(); }} style={navBtnStyle}>❮</button>
-            {/* Imagen */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePrev();
+              }}
+              style={{ ...navBtnStyle, left: "20px" }}
+            >
+              ❮
+            </button>
             <img
               src={buildFileUrl(imageFiles[previewIndex].fileUrl)}
               alt={imageFiles[previewIndex].fileName}
@@ -337,11 +379,16 @@ const MessageBubble = React.forwardRef(
                 boxShadow: "0 0 10px rgba(0,0,0,0.3)",
               }}
             />
-            {/* Botón next */}
-            <button onClick={(e) => { e.stopPropagation(); handleNext(); }} style={navBtnStyle}>❯</button>
-
-            {/* Botón descargar */}
-            {imageFiles.length === 1 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleNext();
+              }}
+              style={{ ...navBtnStyle, right: "20px" }}
+            >
+              ❯
+            </button>
+            {imageFiles.length === 1 ? (
               <a
                 href={buildFileUrl(imageFiles[0].fileUrl)}
                 download={imageFiles[0].fileName}
@@ -350,8 +397,7 @@ const MessageBubble = React.forwardRef(
               >
                 Descargar
               </a>
-            )}
-            {imageFiles.length > 1 && (
+            ) : (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -369,7 +415,6 @@ const MessageBubble = React.forwardRef(
   }
 );
 
-// Reutiliza estilos
 const menuItemStyle = { padding: "6px 12px", cursor: "pointer" };
 const navBtnStyle = {
   position: "absolute",
