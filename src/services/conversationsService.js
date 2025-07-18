@@ -63,3 +63,13 @@ export async function getMessagesByConversationId(conversationId) {
     return [];
   }
 }
+// ✅ Nuevo: historial completo (mensajes + archivos ordenados)
+export async function getConversationHistory(conversationId) {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/Conversations/history/${conversationId}`);
+    return response.data;
+  } catch (error) {
+    console.error("❌ [getConversationHistory] Error al obtener historial:", error);
+    return [];
+  }
+}

@@ -19,7 +19,7 @@ import { getFilesByConversation } from "services/chatUploadedFilesService";
 // 👇 Drag and Drop
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-import { getConversationsByUser, getMessagesByConversationId } from "services/conversationsService";
+import { getConversationsByUser, getMessagesByConversationId, getConversationHistory } from "services/conversationsService";
 
 function Conversations() {
   const tabContainerRef = useRef(null);
@@ -133,9 +133,9 @@ function Conversations() {
                 images: msg.images || [],
                 replyTo: msg.replyToMessageId
                   ? {
-                      id: msg.replyToMessageId,
-                      text: msg.replyToText || "mensaje anterior",
-                    }
+                    id: msg.replyToMessageId,
+                    text: msg.replyToText || "mensaje anterior",
+                  }
                   : null,
               },
             ],
@@ -171,10 +171,10 @@ function Conversations() {
             return prev.map((conv) =>
               conv.id === id
                 ? {
-                    ...conv,
-                    lastMessage: msg.text,
-                    updatedAt: msg.timestamp || new Date().toISOString(),
-                  }
+                  ...conv,
+                  lastMessage: msg.text,
+                  updatedAt: msg.timestamp || new Date().toISOString(),
+                }
                 : conv
             );
           });
@@ -214,6 +214,12 @@ function Conversations() {
       connection.stop();
     };
   }, []);
+  
+  useEffect(() => {
+    if (conversationList.length > 0 && !activeTab) {
+      handleSelectConversation(conversationList[0]);
+    }
+  }, [conversationList]);
 
   useEffect(() => {
     if (!activeTab) return;
@@ -258,48 +264,29 @@ function Conversations() {
     const idStr = `${conv.id}`;
     const exists = openTabs.find((t) => t.id === idStr);
     if (!exists) {
-      setOpenTabs((prev) => [...prev, { ...conv, id: idStr, unreadCount: 0 }]); // 👈 fuerza ID string aquí también
+      setOpenTabs((prev) => [...prev, { ...conv, id: idStr, unreadCount: 0 }]);
     }
-    setActiveTab(idStr); // 👈 fuerza string aquí también
 
-    setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
+    setActiveTab(idStr);
+    setOpenTabs((prev) =>
+      prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab))
+    );
 
     if (!messages[idStr]) {
       try {
-        const [fetchedMessages, fetchedFiles] = await Promise.all([
-          getMessagesByConversationId(conv.id),
-          getFilesByConversation(conv.id),
-        ]);
-        console.log("📥 Mensajes cargados:", fetchedMessages);
-        console.log("📥 Archivos cargados:", fetchedFiles);
-        
-        // Mapea archivos a formato mensaje
-        const fileMessages = fetchedFiles.map((file) => ({
-          id: `file-${file.id}`,
-          from: "user",
-          text: `📎 ${file.fileName}`,
-          timestamp: file.createdAt,
-          fileContent: file.fileContent,
-          fileType: file.fileType,
-          fileName: file.fileName,
-          replyTo: null,
-        }));
-
-        const combined = [...fetchedMessages, ...fileMessages].sort(
-          (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
-        );
+        const fetchedHistory = await getConversationHistory(conv.id);
+        console.log("📜 Historial cargado:", fetchedHistory);
 
         setMessages((prev) => ({
           ...prev,
-          [idStr]: combined,
+          [idStr]: fetchedHistory, // ✅ ya viene ordenado desde el backend
         }));
       } catch (err) {
-        console.error("❌ Error cargando mensajes y archivos de la conversación:", err);
+        console.error("❌ Error cargando historial de la conversación:", err);
       }
-      console.log("📦 Mensajes combinados (ordenados):", combined);
-
     }
   };
+
 
   const handleReply = (message) => {
     setReplyToMessage(message);
@@ -375,7 +362,7 @@ function Conversations() {
                 borderRadius: 0,
               }}
             >
-              
+
               <SoftBox
                 p={2}
                 sx={{
@@ -385,7 +372,7 @@ function Conversations() {
                   minHeight: 0,
                 }}
               >
-                
+
                 <ConversationList
                   conversations={conversationList}
                   messagesMap={messages}
