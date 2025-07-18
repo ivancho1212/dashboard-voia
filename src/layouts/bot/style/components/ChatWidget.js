@@ -10,10 +10,10 @@ import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
 import voiaLogo from "assets/images/VOIA-LOGO.png";
 
-const voaiGif = "/voai.gif"; // ✅ Ruta relativa al dominio público
+const voaiGif = "/VIA.png"; // ✅ Ruta relativa al dominio público
 
 function ChatWidget({
-  title = "VIA",
+  title = "",
   theme: initialTheme,
   primaryColor = "#000000",
   secondaryColor = "#ffffff",

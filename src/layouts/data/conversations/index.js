@@ -66,6 +66,8 @@ function Conversations() {
     const loadInitialConversations = async () => {
       try {
         const data = await getConversationsByUser(userId);
+        console.log("📥 Conversaciones cargadas para el usuario:", data);
+
         setConversationList(
           data.map((c) => ({
             id: `${c.id}`, // 👈 Fuerza a string
@@ -268,7 +270,9 @@ function Conversations() {
           getMessagesByConversationId(conv.id),
           getFilesByConversation(conv.id),
         ]);
-
+        console.log("📥 Mensajes cargados:", fetchedMessages);
+        console.log("📥 Archivos cargados:", fetchedFiles);
+        
         // Mapea archivos a formato mensaje
         const fileMessages = fetchedFiles.map((file) => ({
           id: `file-${file.id}`,
@@ -292,6 +296,8 @@ function Conversations() {
       } catch (err) {
         console.error("❌ Error cargando mensajes y archivos de la conversación:", err);
       }
+      console.log("📦 Mensajes combinados (ordenados):", combined);
+
     }
   };
 
@@ -352,7 +358,8 @@ function Conversations() {
 
   const selectedConversation = conversationList.find((conv) => conv.id === activeTab);
   const selectedMessages = messages[activeTab] || [];
-
+  console.log("📨 Conversaciones que le paso al componente:", conversationList);
+  console.log("📩 Mensajes asociados a cada conversación:", messages);
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -368,6 +375,7 @@ function Conversations() {
                 borderRadius: 0,
               }}
             >
+              
               <SoftBox
                 p={2}
                 sx={{
@@ -377,6 +385,7 @@ function Conversations() {
                   minHeight: 0,
                 }}
               >
+                
                 <ConversationList
                   conversations={conversationList}
                   messagesMap={messages}
