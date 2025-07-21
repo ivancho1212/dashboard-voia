@@ -7,7 +7,6 @@ export async function getConversationsByUser(userId) {
   try {
     const response = await axios.get(`${BASE_URL}/api/Conversations/by-user/${userId}`);
 
-    console.log("✅ [getConversationsByUser] Respuesta cruda:", response.data);
 
     const conversations = Array.isArray(response.data.conversations)
       ? response.data.conversations
@@ -15,7 +14,6 @@ export async function getConversationsByUser(userId) {
       ? response.data
       : [];
 
-    console.log(`✅ [getConversationsByUser] ${conversations.length} conversaciones procesadas`);
 
     return conversations.map((c) => ({
       id: `${c.id}`,
@@ -36,11 +34,9 @@ export async function getMessagesByConversationId(conversationId) {
   try {
     const response = await axios.get(`${BASE_URL}/api/Messages/by-conversation/${conversationId}`);
 
-    console.log("✅ [getMessagesByConversationId] Respuesta cruda:", response.data);
 
     const messages = Array.isArray(response.data) ? response.data : [];
 
-    console.log(`✅ [getMessagesByConversationId] ${messages.length} mensajes procesados`);
 
     return messages.map((msg) => ({
       id: msg.id,

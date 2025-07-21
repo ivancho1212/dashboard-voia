@@ -5,7 +5,6 @@ import ChatWidget from "./ChatWidget";
 const DEFAULT_AVATAR = "/VIA.png";
 
 export default function StylePreview({ style }) {
-  console.log("[DEBUG] Datos recibidos en StylePreview:", style);
 
   return (
     <div>

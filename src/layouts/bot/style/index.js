@@ -70,11 +70,6 @@ function BotStylePage() {
       const combined = [...(currentBotStyle ? [currentBotStyle] : []), ...userStyles];
       const uniqueStyles = Array.from(new Map(combined.map((s) => [s.id, s])).values());
 
-      console.log("[DEBUG] Lista de estilos cargados:", userStyles);
-      console.log("[DEBUG] Estilo actual del bot (botStyleId):", botStyleId);
-      console.log("[DEBUG] currentBotStyle:", currentBotStyle);
-      console.log("[DEBUG] styles combinados:", uniqueStyles);
-
       setStyles(uniqueStyles);
     } catch (error) {
       console.error("Error al cargar estilos o datos del bot:", error);
@@ -101,7 +96,6 @@ function BotStylePage() {
   };
 
   const onViewStyle = (style) => {
-    console.log("[DEBUG] Ver estilo seleccionado en onViewStyle:", style);
     setSelectedStyle(style);
     setViewMode("view");
     setActiveTab(0);

@@ -4,9 +4,15 @@ import { buildFileUrl, downloadImagesAsZip } from "utils/fileHelpers";
 
 const MessageBubble = React.forwardRef(
   ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen }, ref) => {
-    const { from, text, timestamp, files = [], replyTo } = msg;
-    const isRight = from === "admin" || from === "bot";
-    const backgroundColor = from === "user" ? "#e0f7fa" : from === "admin" ? "#d0f0c0" : "#f1f1f1";
+    const { fromRole, fromName, text, timestamp, files = [], replyTo } = msg;
+    const isRight = ["admin", "bot"].includes(fromRole);
+
+    const backgroundColor =
+      fromRole === "admin"
+        ? "#d0f0c0" // verde claro para admin
+        : fromRole === "bot"
+        ? "#cce5ff" // azul claro para bot
+        : "#f1f1f1"; // gris claro para user
 
     const formattedTime = timestamp
       ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -106,7 +112,7 @@ const MessageBubble = React.forwardRef(
       >
         {!isRight && (
           <div style={{ fontSize: "11px", fontWeight: "bold", marginBottom: "4px", color: "#555" }}>
-            {from === "user" ? "Usuario" : from === "bot" ? "Bot" : "Admin"}
+            {fromName || (fromRole === "user" ? "Usuario" : fromRole === "bot" ? "Bot" : "Admin")}
           </div>
         )}
 
@@ -114,22 +120,32 @@ const MessageBubble = React.forwardRef(
           <div
             onClick={() => onJumpToReply?.(replyTo.id)}
             style={{
-              background: "#f0f0f0",
-              borderLeft: "3px solid #2196f3",
+              background: "#f5f5f5",
+              borderLeft: "3px solid #1976d2",
               padding: "6px 10px",
-              marginBottom: "6px",
+              marginBottom: "8px",
               borderRadius: "6px",
               fontSize: "13px",
-              color: "#2196f3",
-              fontStyle: "italic",
-              maxWidth: "90%",
+              color: "#333",
+              maxWidth: "95%",
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
               cursor: "pointer",
             }}
+            title={replyTo.text || replyTo.fileName || ""}
           >
-            {replyTo.text || replyTo.fileName || "mensaje anterior"}
+            <span style={{ fontWeight: "bold", color: "#1976d2" }}>
+              {replyTo.fromName || (replyTo.fromRole === "user" ? "Usuario" : "Mensaje")}
+            </span>
+            {": "}
+            <span style={{ fontStyle: "italic" }}>
+              {replyTo?.text
+                ? replyTo.text.length > 80
+                  ? replyTo.text.slice(0, 80) + "..."
+                  : replyTo.text
+                : replyTo?.fileName || "[sin contenido]"}
+            </span>
           </div>
         )}
 
@@ -339,7 +355,7 @@ const MessageBubble = React.forwardRef(
 
         {text && files.length === 0 && <div>{text}</div>}
 
-        <div style={{ fontSize: "10px", color: "#555", marginTop: "4px", textAlign: "right" }}>
+        <div style={{ fontSize: "10px", color: "#555", marginTop: "0.2px", textAlign: "right" }}>
           {formattedTime}
         </div>
 

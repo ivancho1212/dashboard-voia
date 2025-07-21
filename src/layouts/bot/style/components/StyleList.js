@@ -46,7 +46,6 @@ function StyleList({ styles, botStyleId, onViewStyle, onApplyStyle, onEditStyle,
                 variant="gradient"
                 size="medium"
                 onClick={() => {
-                  console.log("[DEBUG] Ver estilo:", style);
                   onViewStyle(style);
                 }}
               >

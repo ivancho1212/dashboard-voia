@@ -14,7 +14,6 @@ export const createCapturedField = (fieldData) => {
     isRequired: fieldData.triggerByIntent || false,
   };
 
-  console.log("📤 Payload capturado:", payload);
 
   return axios.post(API_URL, payload);
 };

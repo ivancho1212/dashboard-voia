@@ -10,11 +10,29 @@ import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+
 import InputAdornment from "@mui/material/InputAdornment";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import ConversationActions from "./ConversationActions";
+import CheckIcon from "@mui/icons-material/Check";
+import DoneAllIcon from "@mui/icons-material/DoneAll";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import BlockIcon from "@mui/icons-material/Block";
+
+const getStatusIcon = (status) => {
+  switch (status) {
+    case "pendiente":
+      return <AccessTimeIcon />;
+    case "resuelta":
+      return <DoneAllIcon />;
+    case "activa":
+    default:
+      return <CheckIcon />;
+  }
+};
 
 function ConversationList({
   conversations,
@@ -207,49 +225,68 @@ function ConversationList({
                 </Typography>
               </Box>
 
-              {/* Estado + acciones */}
-              <Box display="flex" alignItems="center" justifyContent="flex-end">
-                <Box display="flex" flexDirection="column" alignItems="flex-end">
-                  <Chip
-                    label={conv.status.toUpperCase()}
-                    color={
-                      conv.status === "pendiente"
-                        ? "warning"
-                        : conv.status === "resuelta"
-                        ? "success"
-                        : conv.status === "cerrada"
-                        ? "default"
-                        : "info"
-                    }
-                    size="small"
-                    sx={{
-                      fontSize: "10px",
-                      paddingTop: "2px",
-                      height: "22px",
-                      fontWeight: "bold",
-                      "& .MuiChip-label": {
-                        color: "white !important",
-                      },
-                    }}
+              <Box
+                display="flex"
+                flexDirection="column"
+                alignItems="flex-end"
+                justifyContent="center"
+              >
+                <Box display="flex" alignItems="center" gap={0.5}>
+                  <Tooltip title={`Estado: ${conv.status}`}>
+                    <Chip
+                      icon={getStatusIcon(conv.status)}
+                      color="default"
+                      size="small"
+                      sx={{
+                        height: 24,
+                        width: 24,
+                        minWidth: 0,
+                        borderRadius: "50%",
+                        backgroundColor:
+                          conv.status === "pendiente"
+                            ? "#ff9800"
+                            : conv.status === "resuelta"
+                            ? "#4caf50"
+                            : "#29b6f6",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        "& .MuiChip-icon": {
+                          color: "#fff !important",
+                          fontSize: "16px !important",
+                          width: "16px !important",
+                          height: "16px !important",
+                          margin: 0,
+                          padding: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        },
+                        "& .MuiChip-label": {
+                          display: "none",
+                        },
+                      }}
+                    />
+                  </Tooltip>
+
+                  <ConversationActions
+                    onBlock={() => onBlock(conv.id)}
+                    onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
+                    blocked={conv.blocked}
+                    currentStatus={conv.status}
                   />
-                  <Typography
-                    variant="caption"
-                    color="text.secondary"
-                    sx={{ fontSize: "9.5px", mt: 0.6 }}
-                  >
-                    {formatDistanceToNow(new Date(conv.updatedAt), {
-                      addSuffix: true,
-                      locale: es,
-                    })}
-                  </Typography>
                 </Box>
 
-                <ConversationActions
-                  onBlock={() => onBlock(conv.id)}
-                  onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
-                  blocked={conv.blocked}
-                  currentStatus={conv.status}
-                />
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ fontSize: "9.5px", mt: 0.2 }}
+                >
+                  {formatDistanceToNow(new Date(conv.updatedAt), {
+                    addSuffix: true,
+                    locale: es,
+                  })}
+                </Typography>
               </Box>
             </ListItemButton>
           ))}

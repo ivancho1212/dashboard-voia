@@ -19,7 +19,11 @@ import { getFilesByConversation } from "services/chatUploadedFilesService";
 // 👇 Drag and Drop
 import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
 
-import { getConversationsByUser, getMessagesByConversationId, getConversationHistory } from "services/conversationsService";
+import {
+  getConversationsByUser,
+  getMessagesByConversationId,
+  getConversationHistory,
+} from "services/conversationsService";
 
 function Conversations() {
   const tabContainerRef = useRef(null);
@@ -56,7 +60,6 @@ function Conversations() {
     // Llama a SignalR para notificar al backend
     try {
       await connection.invoke("SetIAPaused", Number(conversationId), newState);
-      console.log(`🟢 IA ${newState ? "pausada" : "activada"} para conversación ${conversationId}`);
     } catch (err) {
       console.error("❌ Error al cambiar el estado de la IA:", err);
     }
@@ -66,7 +69,6 @@ function Conversations() {
     const loadInitialConversations = async () => {
       try {
         const data = await getConversationsByUser(userId);
-        console.log("📥 Conversaciones cargadas para el usuario:", data);
 
         setConversationList(
           data.map((c) => ({
@@ -113,6 +115,8 @@ function Conversations() {
 
         // 👇 ESTE BLOQUE ES EL NUEVO QUE DEBES AGREGAR
         connection.on("NewConversationOrMessage", (msg) => {
+          console.log("📬 Nuevo mensaje recibido vía SignalR:", msg); // <-- 📌 AGREGA ESTO
+
           const id = `${msg.conversationId}`; // 👈 Fuerza a string
 
           if (msg.from === "user" && id !== `${activeTab}`) {
@@ -133,9 +137,9 @@ function Conversations() {
                 images: msg.images || [],
                 replyTo: msg.replyToMessageId
                   ? {
-                    id: msg.replyToMessageId,
-                    text: msg.replyToText || "mensaje anterior",
-                  }
+                      id: msg.replyToMessageId,
+                      text: msg.replyToText || "mensaje anterior",
+                    }
                   : null,
               },
             ],
@@ -171,10 +175,10 @@ function Conversations() {
             return prev.map((conv) =>
               conv.id === id
                 ? {
-                  ...conv,
-                  lastMessage: msg.text,
-                  updatedAt: msg.timestamp || new Date().toISOString(),
-                }
+                    ...conv,
+                    lastMessage: msg.text,
+                    updatedAt: msg.timestamp || new Date().toISOString(),
+                  }
                 : conv
             );
           });
@@ -214,7 +218,7 @@ function Conversations() {
       connection.stop();
     };
   }, []);
-  
+
   useEffect(() => {
     if (conversationList.length > 0 && !activeTab) {
       handleSelectConversation(conversationList[0]);
@@ -268,14 +272,11 @@ function Conversations() {
     }
 
     setActiveTab(idStr);
-    setOpenTabs((prev) =>
-      prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab))
-    );
+    setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
 
     if (!messages[idStr]) {
       try {
         const fetchedHistory = await getConversationHistory(conv.id);
-        console.log("📜 Historial cargado:", fetchedHistory);
 
         setMessages((prev) => ({
           ...prev,
@@ -287,14 +288,11 @@ function Conversations() {
     }
   };
 
-
   const handleReply = (message) => {
     setReplyToMessage(message);
   };
 
   const handleJumpToReply = (messageId) => {
-    console.log("🔍 Buscando mensaje ID:", messageId, messageRefs.current);
-
     const target = messageRefs.current[messageId];
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -308,24 +306,21 @@ function Conversations() {
     }
   };
 
-  const handleSendAdminMessage = async (text, conversationId) => {
+  const handleSendAdminMessage = async (text, conversationId, messageId, replyInfo = null) => {
     if (!connection || connection.state !== "Connected") {
       console.warn("SignalR connection not ready yet");
       return;
     }
 
     try {
-      // 👇 Envía mensaje al servidor con solo el ID del mensaje que se responde
       await connection.invoke(
         "AdminMessage",
         Number(conversationId),
         text,
-        replyToMessage?.id ? Number(replyToMessage.id) : null
+        replyInfo?.replyToMessageId || null
       );
 
-      // ❌ Ya no agregar el mensaje manualmente, lo enviará SignalR
-
-      setReplyToMessage(null); // limpia si se estaba respondiendo a algo
+      setReplyToMessage(null);
     } catch (err) {
       console.error("❌ Error sending message:", err);
     }
@@ -344,9 +339,23 @@ function Conversations() {
   };
 
   const selectedConversation = conversationList.find((conv) => conv.id === activeTab);
-  const selectedMessages = messages[activeTab] || [];
-  console.log("📨 Conversaciones que le paso al componente:", conversationList);
-  console.log("📩 Mensajes asociados a cada conversación:", messages);
+  const selectedMessages = (messages[activeTab] || []).map((msg) => ({
+    id: msg.id || `${activeTab}-${Date.now()}`,
+    type: msg.type || "message",
+    fromName: msg.fromName || msg.from || "Admin",
+    fromId: msg.fromId ?? 0,
+    fromRole: msg.fromRole || (msg.from === "user" ? "user" : "admin"),
+    text: msg.text || "",
+    timestamp: msg.timestamp,
+    fileName: msg.fileName ?? null,
+    fileType: msg.fileType ?? null,
+    fileUrl: msg.fileUrl ?? null,
+    files: msg.files ?? [],
+    images: msg.images ?? [],
+    replyTo: msg.replyTo ?? null,
+    ...msg, // mantiene cualquier campo adicional
+  }));
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -362,7 +371,6 @@ function Conversations() {
                 borderRadius: 0,
               }}
             >
-
               <SoftBox
                 p={2}
                 sx={{
@@ -372,7 +380,6 @@ function Conversations() {
                   minHeight: 0,
                 }}
               >
-
                 <ConversationList
                   conversations={conversationList}
                   messagesMap={messages}

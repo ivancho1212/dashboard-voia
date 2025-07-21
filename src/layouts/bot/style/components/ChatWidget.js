@@ -41,8 +41,6 @@ function ChatWidget({
 
   const messagesEndRef = useRef(null);
 
-  console.log("📌 conversationId en el widget:", conversationId);
-
   const [iaWarning, setIaWarning] = useState(null);
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
@@ -55,7 +53,6 @@ function ChatWidget({
 
   const waitForConnection = async (retries = 5) => {
     while (connection.state !== "Connected" && retries > 0) {
-      console.log("⌛ Esperando conexión SignalR...");
       await new Promise((res) => setTimeout(res, 300));
       retries--;
     }
@@ -73,7 +70,6 @@ function ChatWidget({
       try {
         if (connection.state === "Disconnected") {
           await connection.start();
-          console.log("✅ Conectado a SignalR");
         } else {
           console.log("🔄 SignalR ya está conectado o en proceso:", connection.state);
         }
@@ -93,10 +89,8 @@ function ChatWidget({
       // 🆕 Captura el conversationId si viene en el mensaje y aún no está definido
       if (msg.conversationId && !conversationId) {
         setConversationId(msg.conversationId);
-        console.log("🎯 conversationId recibido y establecido desde SignalR:", msg.conversationId);
       }
 
-      console.log("📩 Mensaje recibido del backend:", msg);
       const isFromBot = msg.from === "bot";
 
       if (isFromBot) {
@@ -191,8 +185,6 @@ function ChatWidget({
         });
         setConversationId(createdConversationId);
         await connection.invoke("JoinRoom", createdConversationId);
-        console.log("📡 Contexto inicial enviado al bot, ID:", createdConversationId);
-        console.log("📡 Contexto inicial enviado al bot");
       } catch (error) {
         console.error("❌ Error enviando contexto inicial:", error);
       }
@@ -220,9 +212,6 @@ function ChatWidget({
     let activeConversationId = conversationId;
 
     if (!activeConversationId) {
-      console.log(
-        "⌛ conversationId aún no disponible. Esperando que InitializeContext lo cree..."
-      );
       return; // Esperamos a que el backend cree y lo envíe por ReceiveMessage
     }
 
@@ -248,14 +237,7 @@ function ChatWidget({
         setTypingSender("bot");
       }, 500);
 
-      console.log(
-        "📤 Enviando mensaje con payload:",
-        payload,
-        "a conversación:",
-        activeConversationId
-      );
       await connection.invoke("SendMessage", activeConversationId, payload);
-      console.log("✅ Mensaje enviado por SignalR");
     } catch (err) {
       console.error("❌ Error enviando mensaje:", err);
     }

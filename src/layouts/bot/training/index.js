@@ -208,7 +208,6 @@ function BotTraining() {
 
     try {
       const response = await createTemplateTrainingSessionWithPrompts(sessionData);
-      console.log("✅ Sesión creada con ID:", response.id);
 
       setPromptSaved(true);
       setSessionId(response.id); // ← ESTA línea es CLAVE
@@ -227,7 +226,6 @@ function BotTraining() {
   };
 
   const handleSaveAttachments = async () => {
-    console.log("🚀 [handleSaveAttachments] sessionId actual:", sessionId);
 
     if (!hasValidInputs()) {
       alert("⚠️ Debes adjuntar al menos un archivo, un enlace o un texto válido.");
@@ -244,12 +242,6 @@ function BotTraining() {
         if (exists) {
           alert("⚠️ Este archivo ya fue subido.");
         } else {
-          console.log("📤 Subiendo archivo con datos:", {
-            fileName: file.name,
-            botTemplateId: parseInt(id),
-            userId: 45,
-            templateTrainingSessionId: sessionId,
-          });
 
           try {
             await uploadFile(file, parseInt(id), 45, sessionId); // <-- incluir sessionId
@@ -277,12 +269,6 @@ function BotTraining() {
         if (exists) {
           alert("⚠️ Este enlace ya fue agregado.");
         } else {
-          console.log("🔗 Agregando enlace con datos:", {
-            url: link,
-            botTemplateId: parseInt(id),
-            userId: 45,
-            templateTrainingSessionId: sessionId,
-          });
 
           await createTrainingUrl({
             botTemplateId: parseInt(id),
@@ -301,12 +287,6 @@ function BotTraining() {
         if (exists) {
           alert("⚠️ Este texto ya fue agregado.");
         } else {
-          console.log("📝 Agregando texto con datos:", {
-            content: text.trim(),
-            botTemplateId: parseInt(id),
-            userId: 45,
-            templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
-          });
 
           await createTrainingCustomText({
             botTemplateId: parseInt(id),
@@ -348,8 +328,6 @@ function BotTraining() {
       isActive: true,
       templateTrainingSessionId: sessionId,
     };
-
-    console.log("🟢 Datos enviados al backend:", botData);
 
     try {
       setCreatingBot(true);

@@ -45,7 +45,6 @@ function BotEdit({ bot, onBack }) {
       })),
     };
 
-    console.log("Payload enviado:", payload);
 
     try {
       await updateBotTemplate(bot.id, payload);

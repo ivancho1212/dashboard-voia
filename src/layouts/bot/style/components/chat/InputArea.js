@@ -130,7 +130,6 @@ const InputArea = ({
 
           if (text.trim()) {
             try {
-              console.log("✍️ Enviando Typing del usuario", conversationId);
               await connection.invoke("Typing", conversationId, "user");
             } catch (err) {
               console.error("❌ Error enviando Typing del usuario:", err);

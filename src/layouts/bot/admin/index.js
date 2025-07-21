@@ -34,7 +34,6 @@ function BotTemplatesContainer() {
   const loadBots = async () => {
     try {
       const data = await getBotTemplates();
-      console.log("Bots cargados de API:", data);
       setBots(data);
     } catch (error) {
       console.error("Error cargando bots:", error);

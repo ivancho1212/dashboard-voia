@@ -24,6 +24,10 @@ import connection from "../../../services/signalr";
 import TypingIndicator from "./TypingIndicator";
 import { CSSTransition } from "react-transition-group";
 import { injectTypingAnimation } from "./typingAnimation";
+import CheckIcon from "@mui/icons-material/Check";
+import DoneAllIcon from "@mui/icons-material/DoneAll";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import BlockIcon from "@mui/icons-material/Block";
 
 const ChatPanel = forwardRef(
   (
@@ -60,7 +64,20 @@ const ChatPanel = forwardRef(
     const scrollToBottom = () => {
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     };
-    
+    const [hasMounted, setHasMounted] = useState(false);
+    useEffect(() => {
+      const container = document.getElementById("chat-container");
+      if (!container) return;
+
+      // Esperamos un poco antes de hacer scroll y luego marcamos como montado
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+        setIsUserAtBottom(true);
+        setHasNewMessageBelow(false);
+        setHasMounted(true); // <- Evita mostrar botón prematuramente
+      }, 100);
+    }, []);
+
     useImperativeHandle(ref, () => ({
       isInputFocused: () => inputRef.current === document.activeElement,
     }));
@@ -74,6 +91,8 @@ const ChatPanel = forwardRef(
     }, [replyTo]);
 
     useLayoutEffect(() => {
+      if (!hasMounted) return; // ⛔ NO HACER NADA HASTA QUE MONTADO
+
       injectTypingAnimation();
 
       const container = document.getElementById("chat-container");
@@ -87,7 +106,7 @@ const ChatPanel = forwardRef(
         container.scrollHeight - container.scrollTop - container.clientHeight < SCROLL_THRESHOLD;
       const isNew = lastMessage.id !== lastMessageIdRef.current;
       if (!isNew) return;
-      
+
       lastMessageIdRef.current = lastMessage.id;
 
       if (lastMessage.from === "admin") {
@@ -102,7 +121,7 @@ const ChatPanel = forwardRef(
       } else {
         setHasNewMessageBelow(true);
       }
-    }, [messages]);
+    }, [messages, hasMounted]);
 
     useEffect(() => {
       if (!highlightedMessageId || !messageRefs.current[highlightedMessageId]) return;
@@ -122,6 +141,17 @@ const ChatPanel = forwardRef(
     const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
     const handleCloseMenu = () => setAnchorEl(null);
 
+    useEffect(() => {
+      const container = document.getElementById("chat-container");
+      if (!container) return;
+
+      container.style.overflow = anchorEl ? "hidden" : "auto";
+
+      return () => {
+        if (container) container.style.overflow = "auto";
+      };
+    }, [anchorEl]);
+
     const handleChangeStatus = (newStatus) => {
       onStatusChange(newStatus);
       handleCloseMenu();
@@ -133,22 +163,27 @@ const ChatPanel = forwardRef(
     };
 
     const handleSendMessage = () => {
+      console.log("📝 Mensaje enviado:", inputValue);
+      console.log("📎 Respondiendo a:", replyTo);
+
       if (inputValue.trim()) {
         const messageId = crypto.randomUUID();
+
         const replyInfo = replyTo
           ? {
-              id: replyTo.id,
-              text: replyTo.text,
-              fileName:
-                replyTo.multipleFiles?.[0]?.fileName || replyTo.files?.[0]?.fileName || undefined,
+              replyToMessageId: replyTo.id,
+              replyToText: replyTo.text || replyTo.fileName || "mensaje",
             }
           : null;
 
         onSendAdminMessage(inputValue.trim(), conversationId, messageId, replyInfo);
+
         setInputValue("");
+
         setTimeout(() => {
           scrollToBottom();
         }, 50);
+
         if (onCancelReply) onCancelReply();
       }
     };
@@ -168,6 +203,20 @@ const ChatPanel = forwardRef(
         }, 500);
       }
     };
+
+    const getStatusIcon = (status) => {
+      switch (status) {
+        case "pendiente":
+          return <AccessTimeIcon />;
+        case "resuelta":
+          return <DoneAllIcon />;
+        case "activo":
+        default:
+          return <CheckIcon />;
+      }
+    };
+
+    const getBlockedIcon = () => <BlockIcon />;
 
     const processedMessages = useMemo(() => {
       return messages.map((msg) => {
@@ -205,11 +254,24 @@ const ChatPanel = forwardRef(
 
         return {
           ...msg,
+          fromRole: msg.fromRole || msg.from || "user",
           files: files.length > 0 ? files : undefined,
           replyTo: resolvedReplyTo ?? msg.replyTo ?? null,
         };
       });
     }, [messages]);
+    useEffect(() => {
+
+      processedMessages.forEach((msg) => {
+        if (msg.replyTo) {
+          console.log("🔁 Mensaje con replyTo:", {
+            id: msg.id,
+            text: msg.text,
+            replyTo: msg.replyTo,
+          });
+        }
+      });
+    }, [processedMessages]);
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -232,22 +294,73 @@ const ChatPanel = forwardRef(
             <Box display="flex" alignItems="center" gap={1}>
               <Tooltip title={`Estado: ${status}`}>
                 <Chip
-                  label={status.toUpperCase()}
-                  color={
-                    status === "pendiente" ? "warning" : status === "resuelta" ? "success" : "info"
-                  }
+                  icon={getStatusIcon(status)}
+                  color="default"
                   size="small"
-                  sx={{ fontSize: "0.7rem", height: 22, fontWeight: 500 }}
+                  sx={{
+                    height: 32,
+                    width: 32,
+                    borderRadius: "50%",
+                    padding: 0,
+                    minWidth: 0,
+                    backgroundColor:
+                      status === "pendiente"
+                        ? "#ff9800"
+                        : status === "resuelta"
+                        ? "#4caf50"
+                        : "#29b6f6",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    "& .MuiChip-icon": {
+                      color: "#fff !important",
+                      fontSize: "20px !important", // Tamaño del ícono
+                      width: "20px !important", // Evita que se estire y descuadre
+                      height: "20px !important",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      margin: 0,
+                      padding: 0,
+                    },
+                    "& .MuiChip-label": {
+                      display: "none",
+                    },
+                  }}
                 />
               </Tooltip>
 
               {blocked && (
                 <Tooltip title="Usuario bloqueado">
                   <Chip
-                    label="BLOQUEADO"
+                    icon={getBlockedIcon()}
                     color="error"
                     size="small"
-                    sx={{ fontSize: "0.7rem", height: 22 }}
+                    sx={{
+                      height: 32,
+                      width: 32,
+                      borderRadius: "50%",
+                      padding: 0,
+                      minWidth: 0,
+                      backgroundColor: "#ef9a9a", // rojo pastel
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      "& .MuiChip-icon": {
+                        color: "#fff !important",
+                        fontSize: "10px !important", // <-- Más pequeño
+                        margin: 0,
+                        padding: 0,
+                        width: "100%",
+                        height: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      },
+                      "& .MuiChip-label": {
+                        display: "none",
+                      },
+                    }}
                   />
                 </Tooltip>
               )}
@@ -320,7 +433,7 @@ const ChatPanel = forwardRef(
 
           <div ref={bottomRef} />
 
-          {hasNewMessageBelow && (
+          {hasMounted && hasNewMessageBelow && (
             <Box
               onClick={() => {
                 bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -331,7 +444,7 @@ const ChatPanel = forwardRef(
                 bottom: 130,
                 right: 60,
                 backgroundColor: "#00bcd4",
-                color: "white",
+                color: "white !important",
                 px: 2,
                 py: 1,
                 borderRadius: "16px",

@@ -25,7 +25,6 @@ export async function getBotsByUserId(userId) {
 
 export async function createBot(botData) {
   try {
-    console.log("Datos que se enviarán:", botData);
     const response = await axios.post(API_URL, botData);
     return response.data;
   } catch (error) {
