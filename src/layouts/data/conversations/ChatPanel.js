@@ -18,8 +18,7 @@ import IconButton from "@mui/material/IconButton";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
-import Box from "@mui/material/Box";
-import Tooltip from "@mui/material/Tooltip";
+
 import connection from "../../../services/signalr";
 import TypingIndicator from "./TypingIndicator";
 import { CSSTransition } from "react-transition-group";
@@ -28,6 +27,17 @@ import CheckIcon from "@mui/icons-material/Check";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import BlockIcon from "@mui/icons-material/Block";
+import TextField from "@mui/material/TextField";
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import { Box, Tooltip, Typography } from "@mui/material";
+import Button from "@mui/material/Button";
+import TagChip from "components/TagChip";
+import {
+  getTagsByConversationId,
+  createConversationTag,
+  updateConversationTag,
+  deleteConversationTag,
+} from "services/conversationTagsService";
 
 const ChatPanel = forwardRef(
   (
@@ -60,6 +70,10 @@ const ChatPanel = forwardRef(
     const [isUserAtBottom, setIsUserAtBottom] = useState(true);
     const lastMessageIdRef = useRef(null);
     const [hasNewMessageBelow, setHasNewMessageBelow] = useState(false);
+    const [pendingTag, setPendingTag] = useState(null); // { title, description }
+    const [showPendingEditor, setShowPendingEditor] = useState(false);
+    const [conversationTag, setConversationTag] = useState(null);
+
     const inputRef = useRef(null);
     const scrollToBottom = () => {
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -154,6 +168,15 @@ const ChatPanel = forwardRef(
 
     const handleChangeStatus = (newStatus) => {
       onStatusChange(newStatus);
+
+      if (newStatus === "pendiente") {
+        setShowPendingEditor(true);
+        setPendingTag({ title: "", description: "" });
+      } else {
+        setShowPendingEditor(false);
+        setPendingTag(null);
+      }
+
       handleCloseMenu();
     };
 
@@ -171,9 +194,9 @@ const ChatPanel = forwardRef(
 
         const replyInfo = replyTo
           ? {
-              replyToMessageId: replyTo.id,
-              replyToText: replyTo.text || replyTo.fileName || "mensaje",
-            }
+            replyToMessageId: replyTo.id,
+            replyToText: replyTo.text || replyTo.fileName || "mensaje",
+          }
           : null;
 
         onSendAdminMessage(inputValue.trim(), conversationId, messageId, replyInfo);
@@ -273,9 +296,27 @@ const ChatPanel = forwardRef(
       });
     }, [processedMessages]);
 
+    useEffect(() => {
+      const fetchTag = async () => {
+        if (!conversationId) return;
+        try {
+          const tags = await getTagsByConversationId(conversationId);
+          if (tags?.length > 0) {
+            setConversationTag(tags[0]); // puedes manejar múltiples si lo deseas
+          }
+        } catch (error) {
+          console.error("❌ Error obteniendo la etiqueta:", error);
+        }
+      };
+
+      fetchTag();
+    }, [conversationId]);
+    console.log("conversationTag:", conversationTag);
+
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-        <Box sx={{ px: 2, pb: 2, borderBottom: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
+        <Box sx={{ position: "relative", px: 2, pb: 2, borderBottom: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
+
           <Box display="flex" justifyContent="space-between" alignItems="center" height={25}>
             <SoftTypography
               variant="caption"
@@ -292,43 +333,52 @@ const ChatPanel = forwardRef(
             </SoftTypography>
 
             <Box display="flex" alignItems="center" gap={1}>
-              <Tooltip title={`Estado: ${status}`}>
-                <Chip
-                  icon={getStatusIcon(status)}
-                  color="default"
-                  size="small"
-                  sx={{
-                    height: 32,
-                    width: 32,
-                    borderRadius: "50%",
-                    padding: 0,
-                    minWidth: 0,
-                    backgroundColor:
-                      status === "pendiente"
-                        ? "#ff9800"
-                        : status === "resuelta"
-                        ? "#4caf50"
-                        : "#29b6f6",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    "& .MuiChip-icon": {
-                      color: "#fff !important",
-                      fontSize: "20px !important", // Tamaño del ícono
-                      width: "20px !important", // Evita que se estire y descuadre
-                      height: "20px !important",
+              {conversationTag?.title ? (
+                <TagChip
+                  tag={conversationTag}
+                  onClick={() => {
+                    alert(`Etiqueta: ${conversationTag.label}`);
+                  }}
+                />
+              ) : (
+                <Tooltip title={`Estado: ${status}`}>
+                  <Chip
+                    icon={getStatusIcon(status)}
+                    color="default"
+                    size="small"
+                    sx={{
+                      height: 32,
+                      width: 32,
+                      borderRadius: "50%",
+                      padding: 0,
+                      minWidth: 0,
+                      backgroundColor:
+                        status === "pendiente"
+                          ? "#ff9800"
+                          : status === "resuelta"
+                            ? "#4caf50"
+                            : "#29b6f6",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      margin: 0,
-                      padding: 0,
-                    },
-                    "& .MuiChip-label": {
-                      display: "none",
-                    },
-                  }}
-                />
-              </Tooltip>
+                      "& .MuiChip-icon": {
+                        color: "#fff !important",
+                        fontSize: "20px !important",
+                        width: "20px !important",
+                        height: "20px !important",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        margin: 0,
+                        padding: 0,
+                      },
+                      "& .MuiChip-label": {
+                        display: "none",
+                      },
+                    }}
+                  />
+                </Tooltip>
+              )}
 
               {blocked && (
                 <Tooltip title="Usuario bloqueado">
@@ -342,13 +392,13 @@ const ChatPanel = forwardRef(
                       borderRadius: "50%",
                       padding: 0,
                       minWidth: 0,
-                      backgroundColor: "#ef9a9a", // rojo pastel
+                      backgroundColor: "#ef9a9a",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
                       "& .MuiChip-icon": {
                         color: "#fff !important",
-                        fontSize: "10px !important", // <-- Más pequeño
+                        fontSize: "10px !important",
                         margin: 0,
                         padding: 0,
                         width: "100%",
@@ -385,6 +435,104 @@ const ChatPanel = forwardRef(
             </Box>
           </Box>
         </Box>
+        {showPendingEditor && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 92,
+              right: 20,
+              width: 300,
+              zIndex: 10,
+              p: 2,
+              backgroundColor: "#ffffff",
+              borderRadius: 2,
+              boxShadow: "0px 4px 12px rgba(0, 0, 0, 0.15)",
+            }}
+          >
+            <Typography
+              variant="subtitle2"
+              sx={{
+                color: "#ff9800",
+                mb: 0.5,
+                fontWeight: "bold",
+                textTransform: "uppercase",
+                fontSize: "12px",
+              }}
+            >
+              Crear Etiqueta
+            </Typography>
+
+            {/* Etiqueta / Label */}
+            <TextField
+              placeholder="Nombre de la etiqueta"
+              size="small"
+              fullWidth
+              value={pendingTag?.label || ""}
+              inputProps={{ maxLength: 100 }}
+              onChange={(e) =>
+                setPendingTag((prev) => ({ ...prev, label: e.target.value }))
+              }
+              InputProps={{
+                sx: {
+                  width: "100% !important",
+                  fontSize: "12px",
+                  color: "#333",
+                  px: 1,
+                },
+              }}
+              sx={{
+                mb: 1,
+                backgroundColor: "#fafafa",
+                borderRadius: 1,
+                "& .MuiOutlinedInput-root": {
+                  "& fieldset": { borderColor: "#ccc" },
+                  "&:hover fieldset": { borderColor: "#aaa" },
+                },
+                "& input::placeholder": {
+                  color: "#999",
+                },
+              }}
+            />
+
+            {/* Botones */}
+            <Box display="flex" justifyContent="flex-end" gap={1}>
+              <IconButton
+                size="small"
+                color="error"
+                onClick={() => {
+                  setShowPendingEditor(false);
+                  setPendingTag(null);
+                }}
+                sx={{ fontSize: "16px", p: "2px" }}
+              >
+                ❌
+              </IconButton>
+              <IconButton
+                size="small"
+                color="success"
+                onClick={async () => {
+                  if (!pendingTag.label?.trim()) return;
+
+                  try {
+                    await createConversationTag({
+                      conversationId, // este viene del contexto
+                      label: pendingTag.label.trim(),
+                      highlightedMessageId: null, // o elimínalo si no se usa
+                    });
+
+                    setShowPendingEditor(false);
+                    setPendingTag(null);
+                  } catch (error) {
+                    console.error("❌ Error guardando etiqueta:", error);
+                  }
+                }}
+                sx={{ fontSize: "16px", p: "2px" }}
+              >
+                ✔️
+              </IconButton>
+            </Box>
+          </Box>
+        )}
 
         <div
           id="chat-container"
