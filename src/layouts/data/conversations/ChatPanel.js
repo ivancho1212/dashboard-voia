@@ -72,7 +72,10 @@ const ChatPanel = forwardRef(
     const [hasNewMessageBelow, setHasNewMessageBelow] = useState(false);
     const [pendingTag, setPendingTag] = useState(null); // { title, description }
     const [showPendingEditor, setShowPendingEditor] = useState(false);
-    const [conversationTag, setConversationTag] = useState(null);
+    const [conversationTags, setConversationTags] = useState([]);
+    const [expandedTagIndex, setExpandedTagIndex] = useState(null);
+    const isTagLimitReached = conversationTags.length >= 6;
+
 
     const inputRef = useRef(null);
     const scrollToBottom = () => {
@@ -229,8 +232,6 @@ const ChatPanel = forwardRef(
 
     const getStatusIcon = (status) => {
       switch (status) {
-        case "pendiente":
-          return <AccessTimeIcon />;
         case "resuelta":
           return <DoneAllIcon />;
         case "activo":
@@ -297,21 +298,19 @@ const ChatPanel = forwardRef(
     }, [processedMessages]);
 
     useEffect(() => {
-      const fetchTag = async () => {
+      const fetchTags = async () => {
         if (!conversationId) return;
         try {
           const tags = await getTagsByConversationId(conversationId);
-          if (tags?.length > 0) {
-            setConversationTag(tags[0]); // puedes manejar múltiples si lo deseas
-          }
+          setConversationTags(tags || []);
         } catch (error) {
-          console.error("❌ Error obteniendo la etiqueta:", error);
+          console.error("❌ Error obteniendo las etiquetas:", error);
+          setConversationTags([]);
         }
       };
 
-      fetchTag();
+      fetchTags();
     }, [conversationId]);
-    console.log("conversationTag:", conversationTag);
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
@@ -332,14 +331,35 @@ const ChatPanel = forwardRef(
               Chat con {userName}
             </SoftTypography>
 
-            <Box display="flex" alignItems="center" gap={1}>
-              {conversationTag?.title ? (
-                <TagChip
-                  tag={conversationTag}
-                  onClick={() => {
-                    alert(`Etiqueta: ${conversationTag.label}`);
-                  }}
-                />
+            <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+              {conversationTags && conversationTags.length > 0 ? (
+                conversationTags.map((tag, index) => (
+                  <TagChip
+                    key={index}
+                    tag={tag}
+                    index={index}
+                    isExpanded={expandedTagIndex === index}
+                    onToggle={() =>
+                      setExpandedTagIndex((prev) => (prev === index ? null : index))
+                    }
+                  />
+                ))
+              ) : status === "pendiente" ? (
+                <Tooltip title="Pendiente">
+                  <Chip
+                    icon={getStatusIcon("pendiente")}
+                    color="warning"
+                    size="small"
+                    label="Pendiente"
+                    sx={{
+                      height: 24,
+                      fontSize: "0.75rem",
+                      "& .MuiChip-icon": {
+                        color: "#fff",
+                      },
+                    }}
+                  />
+                </Tooltip>
               ) : (
                 <Tooltip title={`Estado: ${status}`}>
                   <Chip
@@ -353,11 +373,7 @@ const ChatPanel = forwardRef(
                       padding: 0,
                       minWidth: 0,
                       backgroundColor:
-                        status === "pendiente"
-                          ? "#ff9800"
-                          : status === "resuelta"
-                            ? "#4caf50"
-                            : "#29b6f6",
+                        status === "resuelta" ? "#4caf50" : "#29b6f6",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -421,9 +437,24 @@ const ChatPanel = forwardRef(
 
               <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
                 <MenuItem disabled>Estado actual: {status}</MenuItem>
-                <MenuItem onClick={() => handleChangeStatus("pendiente")}>
-                  Marcar como Pendiente
-                </MenuItem>
+                <Tooltip
+                  title={
+                    isTagLimitReached
+                      ? "Límite de 6 etiquetas alcanzado"
+                      : "Añadir etiqueta de Pendiente"
+                  }
+                >
+                  <span>
+                    <MenuItem
+                      onClick={() => handleChangeStatus("pendiente")}
+                      disabled={isTagLimitReached}
+                    >
+                      Añadir etiqueta de Pendiente
+                    </MenuItem>
+                  </span>
+                </Tooltip>
+
+
                 <MenuItem onClick={() => handleChangeStatus("resuelta")}>
                   Marcar como Resuelta
                 </MenuItem>
@@ -452,7 +483,7 @@ const ChatPanel = forwardRef(
             <Typography
               variant="subtitle2"
               sx={{
-                color: "#ff9800",
+                color: "#0bbbb8",
                 mb: 0.5,
                 fontWeight: "bold",
                 textTransform: "uppercase",
