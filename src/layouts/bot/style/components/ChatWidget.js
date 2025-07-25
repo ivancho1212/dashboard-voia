@@ -2,7 +2,7 @@ import { TransitionGroup, CSSTransition } from "react-transition-group";
 import React, { useState, useEffect, useRef } from "react";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
-import connection from "services/signalr";
+import { createHubConnection } from "services/signalr";
 import InputArea from "./chat/InputArea";
 import MessageBubble from "./chat/MessageBubble";
 import MessageList from "./chat/MessageList";
@@ -10,7 +10,7 @@ import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
 import voiaLogo from "assets/images/VOIA-LOGO.png";
 
-const voaiGif = "/VIA.png"; // ✅ Ruta relativa al dominio público
+const voaiGif = "/VIA.png";
 
 function ChatWidget({
   title = "",
@@ -24,6 +24,7 @@ function ChatWidget({
   botId: propBotId,
   userId: propUserId,
 }) {
+  const connectionRef = useRef(null);
   const botId = propBotId ?? 1;
   const userId = propUserId ?? 45;
 
@@ -51,193 +52,168 @@ function ChatWidget({
   messageRefs.current = messages.map((_, i) => messageRefs.current[i] ?? React.createRef());
   const typingRef = useRef(null);
 
-  const waitForConnection = async (retries = 5) => {
-    while (connection.state !== "Connected" && retries > 0) {
-      await new Promise((res) => setTimeout(res, 300));
-      retries--;
-    }
-
-    if (connection.state !== "Connected") {
-      throw new Error("❌ No se pudo establecer conexión con SignalR.");
-    }
-  };
-
-  // ✅ SignalR Setup
+  // ✅ USEEFFECT PRINCIPAL CORREGIDO
   useEffect(() => {
-    let isMounted = true;
+    if (!isOpen) {
+      if (connectionRef.current) {
+        connectionRef.current.stop();
+        connectionRef.current = null;
+      }
+      return;
+    }
 
-    const startConnection = async () => {
+    if (!connectionRef.current) {
+      connectionRef.current = createHubConnection();
+    }
+    
+    const connection = connectionRef.current; // ✅ Definir connection aquí
+
+    // --- Definición de Handlers (ahora con acceso a connection) ---
+    const handleReceiveMessage = (msg) => {
+      console.log("📩 Mensaje recibido:", msg);
+      setMessages(prev => [...prev, msg]);
+      setIsTyping(false);
+    };
+
+    const handleTyping = (sender) => {
+      console.log("⌨️ Usuario escribiendo:", sender);
+      setTypingSender(sender);
+      setIsTyping(true);
+      
+      // Limpiar timeout anterior
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Ocultar typing después de 3 segundos
+      typingTimeoutRef.current = setTimeout(() => {
+        setIsTyping(false);
+        setTypingSender(null);
+      }, 3000);
+    };
+
+    // --- Lógica de Conexión y Listeners ---
+    const setupConnection = async () => {
       try {
         if (connection.state === "Disconnected") {
           await connection.start();
-        } else {
-          console.log("🔄 SignalR ya está conectado o en proceso:", connection.state);
+          console.log("🟢 Conexión SignalR establecida");
         }
 
-        await waitForConnection();
-
-        // 🔒 Asegura que solo se cree una conversación
-        if (conversationId) {
-          await connection.invoke("JoinRoom", conversationId);
+        const convId = await connection.invoke("InitializeContext", { botId, userId });
+        if (convId) {
+          setConversationId(convId);
+          await connection.invoke("JoinRoom", convId);
+          console.log(`🏠 Unido a la sala: ${convId}`);
         }
+
+        connection.on("ReceiveMessage", handleReceiveMessage);
+        connection.on("Typing", handleTyping);
+
       } catch (err) {
-        console.error("❌ Error conectando a SignalR:", err);
+        console.error("❌ Error conectando a SignalR en Widget:", err);
       }
     };
 
-    const handleReceiveMessage = async (msg) => {
-      // 🆕 Captura el conversationId si viene en el mensaje y aún no está definido
-      if (msg.conversationId && !conversationId) {
-        setConversationId(msg.conversationId);
-      }
-
-      const isFromBot = msg.from === "bot";
-
-      if (isFromBot) {
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-          typingTimeoutRef.current = null;
-        }
-
-        setIsTyping(false);
-        setTypingSender(null);
-        await new Promise((resolve) => setTimeout(resolve, 300));
-      }
-
-      const hasText = !!msg.text?.trim();
-      const hasMultipleFiles = msg.multipleFiles?.length > 0;
-      const hasFile = !!msg.file;
-      const hasImages = Array.isArray(msg.images) && msg.images.length > 0;
-
-      if (!hasText && !hasMultipleFiles && !hasFile && !hasImages) {
-        console.warn("🚫 Mensaje ignorado por estar vacío.");
-        return;
-      }
-
-      const newMessage = {
-        from: msg.from,
-        text: hasMultipleFiles ? null : msg.text || null,
-        multipleFiles: msg.multipleFiles || null,
-        file: msg.file || null,
-        images: hasImages ? msg.images : null,
-        timestamp: msg.timestamp || new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, newMessage]);
-
-      if (msg.text?.includes("aún no está conectado")) {
-        setIaWarning("Este bot aún no está conectado a una IA. Pronto estará disponible.");
-      }
-    };
-
-    const handleClose = (error) => {
-      console.warn("🔌 Conexión cerrada:", error);
-    };
-
-    const handleTyping = (sender = "admin") => {
-      if (sender === "admin") {
-        setIsTyping(true);
-        setTypingSender("admin");
-
-        if (typingTimeoutRef.current) {
-          clearTimeout(typingTimeoutRef.current);
-        }
-
-        typingTimeoutRef.current = setTimeout(() => {
-          setIsTyping(false);
-          setTypingSender(null);
-        }, 1500);
-      }
-    };
-
-    // 🔁 Limpia eventos anteriores antes de registrar nuevos
-    connection.off("ReceiveMessage");
-    connection.off("Typing");
-    connection.off("onclose");
-
-    connection.on("ReceiveMessage", handleReceiveMessage);
-    connection.on("Typing", handleTyping);
-    connection.onclose(handleClose);
-
-    startConnection();
+    setupConnection();
 
     return () => {
-      isMounted = false;
-      connection.off("ReceiveMessage", handleReceiveMessage);
-      connection.off("Typing", handleTyping);
-      connection.off("onclose", handleClose);
-    };
-  }, [conversationId]);
-
-  useEffect(() => {
-    if (isOpen && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [isOpen]);
-
-  useEffect(() => {
-    const iniciarConversacionConContexto = async () => {
-      try {
-        await waitForConnection();
-        const createdConversationId = await connection.invoke("InitializeContext", {
-          botId,
-          userId,
-        });
-        setConversationId(createdConversationId);
-        await connection.invoke("JoinRoom", createdConversationId);
-      } catch (error) {
-        console.error("❌ Error enviando contexto inicial:", error);
+      if (connectionRef.current) {
+        console.log("🧹 Limpiando conexión del widget al cerrar.");
+        connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
+        connectionRef.current.off("Typing", handleTyping);
+      }
+      
+      // Limpiar timeout de typing
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
       }
     };
+  }, [isOpen, botId, userId]);
 
-    if (isOpen && messages.length === 0) {
-      iniciarConversacionConContexto();
-    }
-  }, [isOpen]);
-
+  // useEffect para hacer scroll hacia abajo con nuevos mensajes
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages, isTyping]);
 
-  const sendMessage = async () => {
-    if (!message.trim()) return;
-
-    const msg = message.trim();
-    setMessage("");
-
-    const payload = { botId, userId, question: msg };
-
-    let activeConversationId = conversationId;
-
-    if (!activeConversationId) {
-      return; // Esperamos a que el backend cree y lo envíe por ReceiveMessage
-    }
-
-    if (connection.state !== "Connected") {
-      try {
-        await connection.start();
-        await waitForConnection();
-        await connection.invoke("JoinRoom", activeConversationId);
-      } catch (error) {
-        console.error("❌ Error reconectando SignalR:", error);
+  // ✅ USEEFFECT HEARTBEAT CORREGIDO
+  useEffect(() => {
+    // Solo ejecutar si el widget está abierto y ya tenemos un ID de conversación
+    if (isOpen && conversationId) {
+      const connection = connectionRef.current; // ✅ Definir connection localmente
+      
+      if (!connection || connection.state !== "Connected") {
+        console.warn("No SignalR connection active for heartbeat.");
         return;
       }
+
+      console.log(`❤️ Iniciando heartbeat para conversación ${conversationId}`);
+      
+      // 1. Envía una señal inicial inmediata para marcar como activo
+      connection.invoke("UserIsActive", conversationId).catch(err => 
+        console.error("Error en heartbeat inicial:", err)
+      );
+      
+      // 2. Configura el heartbeat para que se ejecute cada 30 segundos
+      const intervalId = setInterval(() => {
+        // Nos aseguramos de que la conexión siga activa antes de enviar
+        const currentConnection = connectionRef.current; // ✅ Usar ref actual
+        if (currentConnection && currentConnection.state === "Connected") {
+          currentConnection.invoke("UserIsActive", conversationId).catch(err => 
+            console.error("Error en heartbeat periódico:", err)
+          );
+        }
+      }, 30000); // 30 segundos
+      
+      // 3. La función de limpieza es crucial: se ejecuta si el widget se cierra o cambia el ID
+      return () => {
+        console.log(`💔 Deteniendo heartbeat para ${conversationId}`);
+        clearInterval(intervalId);
+      };
+    }
+  }, [isOpen, conversationId]);
+
+  // ✅ USEEFFECT PARA SEÑAL DE DESCONEXIÓN
+  useEffect(() => {
+    const handlePageClose = () => {
+      // Solo enviar si tenemos un ID de conversación
+      if (conversationId) {
+        const url = `http://localhost:5006/api/conversations/${conversationId}/disconnect`;
+
+        // navigator.sendBeacon es la forma más fiable de enviar una
+        // petición final mientras la página se está cerrando.
+        if (navigator.sendBeacon) {
+          navigator.sendBeacon(url);
+          console.log(`🚪 Enviando señal de desconexión beacon para ${conversationId}`);
+        }
+      }
+    };
+    
+    // El evento 'beforeunload' se dispara justo antes de que el usuario deje la página
+    window.addEventListener("beforeunload", handlePageClose);
+
+    // Limpiamos el evento cuando el componente se desmonte
+    return () => {
+      window.removeEventListener("beforeunload", handlePageClose);
+    };
+  }, [conversationId]); // Se actualiza si cambia el ID de la conversación
+
+  const sendMessage = async () => {
+    if (!message.trim() || !conversationId) return;
+
+    const connection = connectionRef.current; // ✅ Usa la referencia
+    if (!connection || connection.state !== "Connected") {
+      console.error("Error: La conexión de SignalR no está activa.");
+      return;
     }
 
+    const payload = { botId, userId, question: message.trim() };
+
     try {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = null;
-      }
-
-      typingTimeoutRef.current = setTimeout(() => {
-        setIsTyping(true);
-        setTypingSender("bot");
-      }, 500);
-
-      await connection.invoke("SendMessage", activeConversationId, payload);
+      await connection.invoke("SendMessage", conversationId, payload);
+      setMessage(""); // Limpia el input después de enviar
     } catch (err) {
       console.error("❌ Error enviando mensaje:", err);
     }
@@ -551,7 +527,7 @@ function ChatWidget({
             setMessage={setMessage}
             textareaRef={textareaRef}
             sendMessage={sendMessage}
-            connection={connection}
+            connectionRef={connectionRef}
             conversationId={conversationId}
             userId={userId}
           />
@@ -589,13 +565,13 @@ function ChatWidget({
             activeImageIndex={activeImageIndex}
             setActiveImageIndex={setActiveImageIndex}
           />
-        </div> // 👈 Este cierra el widget abierto
+        </div>
       )}
-    </div> // 👈 Este cierra el contenedor principal
+    </div>
   );
 }
 
-// ✅ Esto va después de la función
+// ✅ PropTypes
 ChatWidget.propTypes = {
   botId: PropTypes.number.isRequired,
   userId: PropTypes.number.isRequired,

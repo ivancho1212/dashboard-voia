@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
 import { Box, Typography } from "@mui/material";
 
-const TagChip = ({ tag, index, isExpanded, onToggle }) => {
+const TagChip = ({ tag, index, isExpanded, onToggle, backgroundColor }) => {
     const [expandDirection, setExpandDirection] = useState("down");
     const tagRef = useRef();
 
@@ -31,7 +31,7 @@ const TagChip = ({ tag, index, isExpanded, onToggle }) => {
         >
             <Box
                 sx={{
-                    bgcolor: "rgb(252, 166, 55)",
+                    bgcolor: backgroundColor,
                     color: "white !important",
                     px: 0.5,
                     py: 0.5,
@@ -126,6 +126,7 @@ TagChip.propTypes = {
     index: PropTypes.number.isRequired,
     isExpanded: PropTypes.bool.isRequired,
     onToggle: PropTypes.func.isRequired,
+    backgroundColor: PropTypes.string.isRequired,
 };
 
 export default TagChip;

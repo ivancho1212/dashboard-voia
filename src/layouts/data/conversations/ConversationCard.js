@@ -31,16 +31,35 @@ function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick 
         mb: 0.75,
         cursor: "pointer",
         transition: "box-shadow 0.2s ease-in-out",
+        maxWidth: "100%", // 👈 impide que se desborde del contenedor padre
+        overflow: "hidden", // 👈 oculta contenido desbordado
         "&:hover": {
           boxShadow: "0 2px 10px rgba(0,0,0,0.1)",
         },
       }}
     >
-      <CardContent sx={{ pb: 0.5 }}>
-        <Typography variant="subtitle1" fontWeight="bold" noWrap title={userName}>
+      <CardContent
+        sx={{
+          pb: 0.5,
+          overflow: "hidden", // 👈 previene que los textos internos desborden
+        }}
+      >
+        <Typography
+          variant="subtitle1"
+          fontWeight="bold"
+          noWrap
+          title={userName}
+          sx={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
+        >
           {userName}
         </Typography>
-        <Typography variant="body2" color="text.secondary" noWrap title={lastMessage}>
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          noWrap
+          title={lastMessage}
+          sx={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
+        >
           {lastMessage}
         </Typography>
       </CardContent>
@@ -54,19 +73,28 @@ function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick 
           alignItems: "center",
           justifyContent: "space-between",
           gap: 1,
+          flexWrap: "nowrap", // 👈 asegura que los elementos no se vayan hacia abajo
+          overflow: "hidden", // 👈 oculta el desbordamiento horizontal
         }}
       >
         <Chip
           label={isActive ? "Activa" : "Cerrada"}
           color={isActive ? "primary" : "default"}
           size="small"
+          sx={{ flexShrink: 0 }} // 👈 evita que el chip se comprima
         />
-        <Typography variant="caption" color="text.secondary" noWrap>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          noWrap
+          sx={{ maxWidth: "100%", flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis" }}
+        >
           {timeAgo}
         </Typography>
-        <ArrowForwardIcon fontSize="small" />
+        <ArrowForwardIcon fontSize="small" sx={{ flexShrink: 0 }} />
       </Box>
     </Card>
+
   );
 }
 

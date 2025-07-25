@@ -41,7 +41,7 @@ function ConversationList({
   onStatusChange,
   onBlock,
   highlightedIds = [],
-  onClearHighlight = () => {},
+  onClearHighlight = () => { },
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
@@ -143,7 +143,7 @@ function ConversationList({
       </Box>
 
       {/* Lista con scroll */}
-      <Box sx={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+      <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0, maxWidth: "100%" }}>
         <List sx={{ width: "100%", padding: 0 }}>
           {filtered.map((conv) => (
             <ListItemButton
@@ -168,10 +168,14 @@ function ConversationList({
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                maxWidth: "100%",       // 👈 asegura que no exceda el ancho del padre
+                overflow: "hidden",     // 👈 oculta cualquier contenido que se desborde
+                whiteSpace: "nowrap",   // 👈 impide que los textos se expandan en múltiples líneas
+
               }}
             >
               {/* Info principal */}
-              <Box sx={{ flex: 1, pr: 1 }}>
+              <Box sx={{ flex: 1, pr: 1, minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
                 <Typography
                   variant="subtitle2"
                   fontWeight="600"
@@ -181,8 +185,8 @@ function ConversationList({
                   {conv.alias || `Usuario ${conv.id.slice(-4)}`}
                 </Typography>
 
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: "13px" }}>
-                  {(() => {
+                <Tooltip
+                  title={(() => {
                     const lowerSearch = search.toLowerCase();
                     const matchMessage = (messagesMap[conv.id] || []).find((msg) =>
                       msg.text?.toLowerCase().includes(lowerSearch)
@@ -198,31 +202,69 @@ function ConversationList({
                         return `📎 ${last.files.map((f) => f.name || "archivo").join(", ")}`;
                       }
 
-                      if (last?.text) {
-                        return last.text;
-                      }
+                      if (last?.text) return last.text;
 
                       return "📎 Archivo adjunto";
                     }
 
-                    const index = matchMessage.text.toLowerCase().indexOf(lowerSearch);
-                    const start = Math.max(index - 20, 0);
-                    const end = Math.min(index + lowerSearch.length + 20, matchMessage.text.length);
-                    const fragment = matchMessage.text.slice(start, end);
-
-                    const before = fragment.slice(0, index - start);
-                    const match = fragment.slice(index - start, index - start + lowerSearch.length);
-                    const after = fragment.slice(index - start + lowerSearch.length);
-
-                    return (
-                      <>
-                        ...{before}
-                        <strong style={{ backgroundColor: "#ffff00" }}>{match}</strong>
-                        {after}...
-                      </>
-                    );
+                    return matchMessage.text;
                   })()}
-                </Typography>
+                  arrow
+                >
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{
+                      fontSize: "13px",
+                      overflow: "hidden",
+                      whiteSpace: "nowrap",
+                      minWidth: 0,
+                      textOverflow: "ellipsis",
+                      maxWidth: "100%",
+                      display: "block",
+                    }}
+                  >
+                    {(() => {
+                      const lowerSearch = search.toLowerCase();
+                      const matchMessage = (messagesMap[conv.id] || []).find((msg) =>
+                        msg.text?.toLowerCase().includes(lowerSearch)
+                      );
+
+                      if (!search || !matchMessage) {
+                        const messages = messagesMap[conv.id] || [];
+                        const last = messages[messages.length - 1];
+
+                        if (!last) return "Sin mensajes aún";
+
+                        if (last?.files?.length > 0) {
+                          return `📎 ${last.files.map((f) => f.name || "archivo").join(", ")}`;
+                        }
+
+                        if (last?.text) return last.text;
+
+                        return "📎 Archivo adjunto";
+                      }
+
+                      const index = matchMessage.text.toLowerCase().indexOf(lowerSearch);
+                      const start = Math.max(index - 20, 0);
+                      const end = Math.min(index + lowerSearch.length + 20, matchMessage.text.length);
+                      const fragment = matchMessage.text.slice(start, end);
+
+                      const before = fragment.slice(0, index - start);
+                      const match = fragment.slice(index - start, index - start + lowerSearch.length);
+                      const after = fragment.slice(index - start + lowerSearch.length);
+
+                      return (
+                        <>
+                          ...{before}
+                          <strong style={{ backgroundColor: "#ffff00" }}>{match}</strong>
+                          {after}...
+                        </>
+                      );
+                    })()}
+                  </Typography>
+                </Tooltip>
+
               </Box>
 
               <Box
@@ -230,7 +272,9 @@ function ConversationList({
                 flexDirection="column"
                 alignItems="flex-end"
                 justifyContent="center"
+                sx={{ flexShrink: 0, maxWidth: "30%" }}
               >
+
                 <Box display="flex" alignItems="center" gap={0.5}>
                   <Tooltip title={`Estado: ${conv.status}`}>
                     <Chip
@@ -246,8 +290,8 @@ function ConversationList({
                           conv.status === "pendiente"
                             ? "#ff9800"
                             : conv.status === "resuelta"
-                            ? "#4caf50"
-                            : "#29b6f6",
+                              ? "#4caf50"
+                              : "#29b6f6",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",

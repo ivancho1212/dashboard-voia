@@ -19,7 +19,6 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 
-import connection from "../../../services/signalr";
 import TypingIndicator from "./TypingIndicator";
 import { CSSTransition } from "react-transition-group";
 import { injectTypingAnimation } from "./typingAnimation";
@@ -60,6 +59,7 @@ const ChatPanel = forwardRef(
       messageRefs,
       onJumpToReply,
       highlightedMessageId,
+      onAdminTyping
     },
     ref
   ) => {
@@ -196,9 +196,9 @@ const ChatPanel = forwardRef(
 
         const replyInfo = replyTo
           ? {
-              replyToMessageId: replyTo.id,
-              replyToText: replyTo.text || replyTo.fileName || "mensaje",
-            }
+            replyToMessageId: replyTo.id,
+            replyToText: replyTo.text || replyTo.fileName || "mensaje",
+          }
           : null;
 
         onSendAdminMessage(inputValue.trim(), conversationId, messageId, replyInfo);
@@ -222,9 +222,8 @@ const ChatPanel = forwardRef(
 
       if (text.trim()) {
         typingTimeout.current = setTimeout(() => {
-          connection
-            .invoke("Typing", Number(conversationId), "admin")
-            .catch((err) => console.error("❌ Error enviando Typing:", err));
+          // ✅ USA LA PROP EN LUGAR DE 'connection.invoke'
+          onAdminTyping(conversationId);
         }, 500);
       }
     };
@@ -236,6 +235,17 @@ const ChatPanel = forwardRef(
         case "activo":
         default:
           return <CheckIcon />;
+      }
+    };
+
+    const getBackgroundColor = (status) => {
+      switch (status?.toLowerCase()) {
+        case "pendiente":
+          return "rgb(252, 166, 55)"; // naranja
+        case "resuelta":
+          return "rgb(70, 181, 94)"; // verde
+        default:
+          return "rgb(100, 100, 100)"; // gris
       }
     };
 
@@ -340,16 +350,16 @@ const ChatPanel = forwardRef(
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
               {conversationTags.length > 0
                 ? conversationTags.map((tag, index) => (
-                    <TagChip
-                      key={index}
-                      tag={tag}
-                      index={index}
-                      isExpanded={expandedTagIndex === index}
-                      onToggle={() =>
-                        setExpandedTagIndex((prev) => (prev === index ? null : index))
-                      }
-                    />
-                  ))
+                  <TagChip
+                    key={index}
+                    tag={tag}
+                    index={index}
+                    isExpanded={expandedTagIndex === index}
+                    onToggle={() =>
+                      setExpandedTagIndex((prev) => (prev === index ? null : index))
+                    }
+                    backgroundColor={getBackgroundColor(status)} />
+                ))
                 : null}
               {blocked && (
                 <Tooltip title="Usuario bloqueado">
@@ -636,6 +646,7 @@ ChatPanel.propTypes = {
   messageRefs: PropTypes.object,
   onJumpToReply: PropTypes.func,
   highlightedMessageId: PropTypes.string,
+  onAdminTyping: PropTypes.func.isRequired,
 };
 
 export default ChatPanel;

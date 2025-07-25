@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
-import connection from "services/signalr";
+import { createHubConnection } from "services/signalr"; // ✅ AÑADE ESTA LÍNEA
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import SoftBox from "components/SoftBox";
@@ -23,6 +23,7 @@ import {
   getConversationsByUser,
   getMessagesByConversationId,
   getConversationHistory,
+  updateConversationStatus,
 } from "services/conversationsService";
 
 function Conversations() {
@@ -30,7 +31,7 @@ function Conversations() {
   const tabRefs = useRef({});
   const messageRefs = useRef({}); // ✅ Añade esto
   const chatPanelRef = useRef(null); // ✅ NECESARIO para limpiar parpadeo automáticamente
-
+  const connectionRef = useRef(null);
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [conversationList, setConversationList] = useState([]);
   const [openTabs, setOpenTabs] = useState([]);
@@ -51,50 +52,56 @@ function Conversations() {
   const handleToggleIA = async (conversationId) => {
     const newState = !iaPausedMap[conversationId];
 
-    // Actualiza el estado local
     setIaPausedMap((prev) => ({
       ...prev,
       [conversationId]: newState,
     }));
 
-    // Llama a SignalR para notificar al backend
-    try {
-      await connection.invoke("SetIAPaused", Number(conversationId), newState);
-    } catch (err) {
-      console.error("❌ Error al cambiar el estado de la IA:", err);
+    // ✅ Usa connectionRef.current y comprueba que exista
+    if (connectionRef.current) {
+      try {
+        await connectionRef.current.invoke("SetIAPaused", Number(conversationId), newState);
+      } catch (err) {
+        console.error("❌ Error al cambiar el estado de la IA:", err);
+      }
+    }
+  };
+
+  const handleUpdateConversationStatus = async (conversationId, newStatus) => {
+    const result = await updateConversationStatus(conversationId, newStatus);
+
+    if (result) {
+      // ✅ Se pasa una función de callback directamente a cada setter.
+      // Esto es más seguro y garantiza que el estado siga siendo un array.
+
+      setConversationList((prevList) =>
+        prevList.map((item) =>
+          item.id === conversationId ? { ...item, status: newStatus } : item
+        )
+      );
+
+      setOpenTabs((prevTabs) =>
+        prevTabs.map((item) =>
+          item.id === conversationId ? { ...item, status: newStatus } : item
+        )
+      );
+
+      console.log(`✅ Estado del chat ${conversationId} actualizado a ${newStatus} en el frontend.`);
     }
   };
 
   useEffect(() => {
+    // 1. Si no hay una conexión en nuestra referencia, la creamos
+    if (!connectionRef.current) {
+      connectionRef.current = createHubConnection();
+    }
+    // 2. Usamos una variable local para facilitar el acceso
+    const connection = connectionRef.current;
+
     const loadInitialConversations = async () => {
       try {
         const data = await getConversationsByUser(userId);
-
-        setConversationList(
-          data.map((c) => ({
-            id: `${c.id}`, // 👈 Fuerza a string
-            alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
-            lastMessage: (() => {
-              if (c.files?.length > 0) {
-                const fileNames = c.files.map((f) => f.name || "archivo").join(", ");
-                return `📎 ${fileNames}`;
-              }
-
-              if (
-                c.userMessage === "Se envió un archivo con un clic" ||
-                c.userMessage?.toLowerCase().includes("se envió un archivo")
-              ) {
-                return "📎 Archivo adjunto";
-              }
-
-              return c.userMessage || "";
-            })(),
-
-            updatedAt: c.createdAt || new Date().toISOString(),
-            status: "activa",
-            blocked: false,
-          }))
-        );
+        setConversationList(data);
       } catch (error) {
         console.error("Error al cargar conversaciones iniciales:", error);
       }
@@ -105,119 +112,128 @@ function Conversations() {
         if (connection.state !== "Connected") {
           await connection.start();
         }
-
         if (connection.state === "Connected") {
           await connection.invoke("JoinAdmin");
           setIsConnected(true);
-        } else {
-          console.warn("❌ No se pudo conectar con SignalR.");
         }
 
-        // 👇 ESTE BLOQUE ES EL NUEVO QUE DEBES AGREGAR
+        connection.on("initialconversations", (conversations) => {
+          console.log("📢 Recibida lista inicial de conversaciones vía SignalR:", conversations);
+          setConversationList(conversations);
+        });
+
+        connection.on("conversationStatusChanged", (conversationId, newStatus) => {
+          console.log(`🟢 Estado actualizado para ${conversationId}: ${newStatus}`);
+          const updateStatusInList = (list) =>
+            list.map((item) =>
+              item.id == conversationId ? { ...item, status: newStatus } : item
+            );
+          setConversationList(updateStatusInList);
+          setOpenTabs(updateStatusInList);
+        });
+
         connection.on("NewConversationOrMessage", (msg) => {
-          console.log("📬 Nuevo mensaje recibido vía SignalR:", msg); // <-- 📌 AGREGA ESTO
+          console.log("📨 Nuevo mensaje recibido:", msg);
 
-          const id = `${msg.conversationId}`; // 👈 Fuerza a string
+          const convId = String(msg.conversationId);
 
-          if (msg.from === "user" && id !== `${activeTab}`) {
-            setHighlightedIds((prev) => [...new Set([...prev, id])]);
-          }
+          setMessages((prev) => {
+            const existingMessages = prev[convId] || [];
 
-          // ✅ ya funciona bien con id como string
-          setMessages((prev) => ({
-            ...prev,
-            [id]: [
-              ...(prev[id] || []),
-              {
-                id: msg.id || `${id}-${Date.now()}`,
-                from: msg.from,
-                text: msg.text,
-                timestamp: msg.timestamp || new Date().toISOString(),
-                file: msg.file || null,
-                images: msg.images || [],
-                replyTo: msg.replyToMessageId
-                  ? {
-                      id: msg.replyToMessageId,
-                      text: msg.replyToText || "mensaje anterior",
+            return {
+              ...prev,
+              [convId]: [
+                ...existingMessages,
+                {
+                  id: msg.messageId || `${convId}-${Date.now()}`,
+                  from: msg.from,
+                  text: msg.text,
+                  timestamp: msg.timestamp,
+                  images: msg.images || [],
+                  file: msg.file || null,
+                  replyTo: msg.replyToMessageId
+                    ? {
+                      messageId: msg.replyToMessageId,
+                      text: msg.replyToText,
                     }
-                  : null,
-              },
-            ],
-          }));
+                    : null,
+                },
+              ],
+            };
+          });
 
-          if (id !== activeTab) {
-            setOpenTabs((prev) =>
-              prev.map((tab) =>
-                tab.id === id ? { ...tab, unreadCount: (tab.unreadCount || 0) + 1 } : tab
+          // Si el tab no está activo, marca como no leído
+          if (convId !== activeTab) {
+            setOpenTabs((prevTabs) =>
+              prevTabs.map((tab) =>
+                tab.id === convId
+                  ? { ...tab, unreadCount: (tab.unreadCount || 0) + 1 }
+                  : tab
               )
             );
+            setHighlightedIds((prev) => [...new Set([...prev, convId])]);
           }
-
-          setConversationList((prev) => {
-            const exists = prev.find((c) => c.id === `${id}`);
-            if (!exists) {
-              // Evita agregar conversaciones sin mensaje
-              if (!msg.text) return prev;
-
-              return [
-                {
-                  id,
-                  alias: msg.alias || `Usuario ${String(id).slice(-4)}`,
-                  lastMessage: msg.text,
-                  updatedAt: msg.timestamp || new Date().toISOString(),
-                  status: "activa",
-                  blocked: false,
-                },
-                ...prev,
-              ];
-            }
-
-            return prev.map((conv) =>
-              conv.id === id
-                ? {
-                    ...conv,
-                    lastMessage: msg.text,
-                    updatedAt: msg.timestamp || new Date().toISOString(),
-                  }
-                : conv
-            );
-          });
         });
+
 
         connection.on("NewConversation", (newConv) => {
-          setConversationList((prev) => {
-            const exists = prev.find((c) => c.id === newConv.id);
-            if (exists) return prev;
-            return [newConv, ...prev];
-          });
+          if (newConv && newConv.id) {
+            console.log("🆕 Nueva conversación recibida:", newConv);
+            setConversationList((prev) => [newConv, ...prev]);
+          } else {
+            console.warn("⚠️ Conversación inválida:", newConv);
+          }
         });
+
 
         connection.on("Typing", (conversationId, sender) => {
-          if (!["user", "admin"].includes(sender)) return;
-
-          setTypingState((prev) => ({
-            ...prev,
-            [conversationId]: true,
-          }));
-
-          setTimeout(() => {
+          if (conversationId && sender) {
+            console.log(`💬 ${sender} está escribiendo en la conversación ${conversationId}`);
             setTypingState((prev) => ({
               ...prev,
-              [conversationId]: false,
+              [conversationId]: {
+                isTyping: true,
+                sender,
+                timestamp: Date.now(),
+              },
             }));
-          }, 2000);
+
+            // Elimina el estado de typing después de 3 segundos
+            setTimeout(() => {
+              setTypingState((prev) => ({
+                ...prev,
+                [conversationId]: {
+                  ...(prev[conversationId] || {}),
+                  isTyping: false,
+                },
+              }));
+            }, 3000);
+          }
         });
+
+
       } catch (error) {
         console.error("❌ Error al conectar con SignalR:", error);
       }
     };
+
     loadInitialConversations();
     setupSignalR();
 
+    // 3. Función de limpieza que se ejecuta cuando el componente se desmonta
     return () => {
+      console.log("🧹 Limpiando y deteniendo la conexión de SignalR.");
+      // Removemos los listeners para evitar duplicados
+      connection.off("initialConversations");
+      connection.off("conversationStatusChanged");
+      connection.off("NewConversationOrMessage");
+      connection.off("NewConversation");
+      connection.off("Typing");
+
+      // Detenemos la conexión
       connection.stop();
     };
-  }, []);
+  }, []); // El array vacío asegura que esto se ejecute solo una vez
 
   useEffect(() => {
     if (conversationList.length > 0 && !activeTab) {
@@ -274,16 +290,22 @@ function Conversations() {
     setActiveTab(idStr);
     setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
 
-    if (!messages[idStr]) {
+    if (messages[idStr] === undefined) {
       try {
         const fetchedHistory = await getConversationHistory(conv.id);
 
-        setMessages((prev) => ({
-          ...prev,
-          [idStr]: fetchedHistory, // ✅ ya viene ordenado desde el backend
-        }));
+        // ✅ CORRECCIÓN: Usar 'fetchedHistory.history' con 'h' minúscula
+        if (fetchedHistory && Array.isArray(fetchedHistory.history)) {
+          setMessages((prev) => ({
+            ...prev,
+            [idStr]: fetchedHistory.history,
+          }));
+        } else {
+          setMessages((prev) => ({ ...prev, [idStr]: [] }));
+        }
       } catch (err) {
         console.error("❌ Error cargando historial de la conversación:", err);
+        setMessages((prev) => ({ ...prev, [idStr]: [] }));
       }
     }
   };
@@ -307,6 +329,7 @@ function Conversations() {
   };
 
   const handleSendAdminMessage = async (text, conversationId, messageId, replyInfo = null) => {
+    const connection = connectionRef.current; // ✅ Usa la referencia
     if (!connection || connection.state !== "Connected") {
       console.warn("SignalR connection not ready yet");
       return;
@@ -326,10 +349,11 @@ function Conversations() {
     }
   };
 
-  const handleChangeStatus = (id, newStatus) => {
-    setConversationList((prev) =>
-      prev.map((conv) => (conv.id === id ? { ...conv, status: newStatus } : conv))
-    );
+  const handleAdminTyping = (conversationId) => {
+    if (connectionRef.current && connectionRef.current.state === "Connected") {
+      connectionRef.current.invoke("Typing", Number(conversationId), "admin")
+        .catch(err => console.error("Error enviando Typing:", err));
+    }
   };
 
   const handleBlockUser = (id) => {
@@ -392,7 +416,7 @@ function Conversations() {
                     if (conv) handleSelectConversation(conv);
                     setHighlightedIds((prev) => prev.filter((cid) => cid !== id)); // ✅ Limpiar parpadeo al abrir
                   }}
-                  onStatusChange={handleChangeStatus}
+                  onStatusChange={handleUpdateConversationStatus}
                   onBlock={(id) => handleBlockUser(id)}
                 />
               </SoftBox>
@@ -430,7 +454,13 @@ function Conversations() {
                     setOpenTabs(reordered);
                   }}
                 >
-                  <Droppable droppableId="tabs" direction="horizontal">
+                  <Droppable
+                    droppableId="tabs"
+                    direction="horizontal"
+                    isDropDisabled={false}
+                    isCombineEnabled={false}
+                    ignoreContainerClipping={false} // ✅ esta línea soluciona el error actual
+                  >
                     {(provided) => (
                       <Box
                         sx={{
@@ -615,7 +645,7 @@ function Conversations() {
                     onToggleIA={() => handleToggleIA(activeTab)}
                     iaPaused={!!iaPausedMap[activeTab]}
                     onSendAdminMessage={handleSendAdminMessage}
-                    onStatusChange={(newStatus) => handleChangeStatus(activeTab, newStatus)}
+                    onStatusChange={(newStatus) => handleUpdateConversationStatus(activeTab, newStatus)}
                     onBlock={() => handleBlockUser(activeTab)}
                     status={selectedConversation?.status || "activa"}
                     blocked={selectedConversation?.blocked || false}
@@ -625,6 +655,7 @@ function Conversations() {
                     messageRefs={messageRefs}
                     onJumpToReply={handleJumpToReply}
                     highlightedMessageId={highlightedMessageId}
+                    onAdminTyping={() => handleAdminTyping(activeTab)}
                   />
                 ) : (
                   <SoftBox display="flex" justifyContent="center" alignItems="center" height="100%">

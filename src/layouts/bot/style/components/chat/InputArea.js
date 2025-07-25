@@ -12,7 +12,7 @@ const InputArea = ({
   setMessage,
   textareaRef,
   sendMessage,
-  connection,
+  connectionRef, // ✅ CAMBIÉ: connection -> connectionRef
   conversationId,
   userId,
 }) => {
@@ -33,6 +33,13 @@ const InputArea = ({
 
     const images = files.filter(isImage);
     const documents = files.filter((file) => !isImage(file));
+
+    // ✅ AGREGUÉ: Obtener connection de la referencia
+    const connection = connectionRef.current;
+    if (!connection || connection.state !== "Connected") {
+      console.error("❌ No hay conexión SignalR activa para subir archivos");
+      return;
+    }
 
     if (images.length > 0) {
       for (const img of images) {
@@ -129,10 +136,14 @@ const InputArea = ({
           autoResizeTextarea();
 
           if (text.trim()) {
-            try {
-              await connection.invoke("Typing", conversationId, "user");
-            } catch (err) {
-              console.error("❌ Error enviando Typing del usuario:", err);
+            // ✅ CORREGÍ: Usar connectionRef.current
+            const connection = connectionRef.current;
+            if (connection && connection.state === "Connected") {
+              try {
+                await connection.invoke("Typing", conversationId, "user");
+              } catch (err) {
+                console.error("❌ Error enviando Typing del usuario:", err);
+              }
             }
           }
         }}
@@ -194,7 +205,7 @@ InputArea.propTypes = {
   setMessage: PropTypes.func.isRequired,
   textareaRef: PropTypes.object.isRequired,
   sendMessage: PropTypes.func.isRequired,
-  connection: PropTypes.object,
+  connectionRef: PropTypes.object, // ✅ CAMBIÉ: connection -> connectionRef
   conversationId: PropTypes.string,
   userId: PropTypes.string,
 };
