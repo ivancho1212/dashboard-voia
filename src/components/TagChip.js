@@ -29,7 +29,6 @@ const TagChip = ({ tag, index, isExpanded, onToggle }) => {
                 marginBottom: 1,
             }}
         >
-
             <Box
                 sx={{
                     bgcolor: "rgb(252, 166, 55)",
@@ -57,7 +56,6 @@ const TagChip = ({ tag, index, isExpanded, onToggle }) => {
                     },
                 }}
             >
-
                 {!isExpanded && (
                     <Box
                         sx={{
@@ -76,13 +74,12 @@ const TagChip = ({ tag, index, isExpanded, onToggle }) => {
                             variant="caption"
                             sx={{
                                 fontWeight: "bold",
-                                fontSize: "0.8rem", // aún legible, más compacto
+                                fontSize: "0.8rem",
                                 color: "white",
-                                px: 1, // padding lateral muy pequeño
-                                py: 0,   // sin padding vertical
+                                px: 1,
+                                py: 0,
                                 textTransform: "uppercase",
                             }}
-
                         >
                             {tag.label}
                         </Typography>
@@ -90,25 +87,35 @@ const TagChip = ({ tag, index, isExpanded, onToggle }) => {
                 )}
 
                 {isExpanded && (
-                    <Typography
-                        variant="caption"
+                    <Box
                         sx={{
-                            whiteSpace: "pre-line",
-                            lineHeight: 1.2,
-                            fontSize: "0.7rem",
-                            textAlign: "center",
-                            fontWeight: 500,
                             px: 0.5,
-                            textTransform: "uppercase",
+                            py: 0.5,
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            textAlign: "center",
+                            height: "100%",
+                            width: "100%",
                         }}
                     >
-                        {tag.label}
-                    </Typography>
+                        <Typography
+                            variant="caption"
+                            sx={{
+                                whiteSpace: "normal",
+                                wordWrap: "break-word",
+                                lineHeight: 1.2,
+                                fontSize: "0.7rem",
+                                fontWeight: 500,
+                                textTransform: "uppercase",
+                            }}
+                        >
+                            {tag.label}
+                        </Typography>
+                    </Box>
                 )}
             </Box>
-
         </Box>
-
     );
 };
 

@@ -28,7 +28,7 @@ import DoneAllIcon from "@mui/icons-material/DoneAll";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import BlockIcon from "@mui/icons-material/Block";
 import TextField from "@mui/material/TextField";
-import MenuBookIcon from '@mui/icons-material/MenuBook';
+import MenuBookIcon from "@mui/icons-material/MenuBook";
 import { Box, Tooltip, Typography } from "@mui/material";
 import Button from "@mui/material/Button";
 import TagChip from "components/TagChip";
@@ -75,7 +75,6 @@ const ChatPanel = forwardRef(
     const [conversationTags, setConversationTags] = useState([]);
     const [expandedTagIndex, setExpandedTagIndex] = useState(null);
     const isTagLimitReached = conversationTags.length >= 6;
-
 
     const inputRef = useRef(null);
     const scrollToBottom = () => {
@@ -197,9 +196,9 @@ const ChatPanel = forwardRef(
 
         const replyInfo = replyTo
           ? {
-            replyToMessageId: replyTo.id,
-            replyToText: replyTo.text || replyTo.fileName || "mensaje",
-          }
+              replyToMessageId: replyTo.id,
+              replyToText: replyTo.text || replyTo.fileName || "mensaje",
+            }
           : null;
 
         onSendAdminMessage(inputValue.trim(), conversationId, messageId, replyInfo);
@@ -285,7 +284,6 @@ const ChatPanel = forwardRef(
       });
     }, [messages]);
     useEffect(() => {
-
       processedMessages.forEach((msg) => {
         if (msg.replyTo) {
           console.log("🔁 Mensaje con replyTo:", {
@@ -314,8 +312,16 @@ const ChatPanel = forwardRef(
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-        <Box sx={{ position: "relative", px: 2, pb: 2, borderBottom: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
-
+        <Box
+          sx={{
+            position: "relative",
+            px: 2,
+            pb: 2,
+            borderBottom: "1px solid #eee",
+            bgcolor: "white",
+            zIndex: 1,
+          }}
+        >
           <Box display="flex" justifyContent="space-between" alignItems="center" height={25}>
             <SoftTypography
               variant="caption"
@@ -332,70 +338,19 @@ const ChatPanel = forwardRef(
             </SoftTypography>
 
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-              {conversationTags && conversationTags.length > 0 ? (
-                conversationTags.map((tag, index) => (
-                  <TagChip
-                    key={index}
-                    tag={tag}
-                    index={index}
-                    isExpanded={expandedTagIndex === index}
-                    onToggle={() =>
-                      setExpandedTagIndex((prev) => (prev === index ? null : index))
-                    }
-                  />
-                ))
-              ) : status === "pendiente" ? (
-                <Tooltip title="Pendiente">
-                  <Chip
-                    icon={getStatusIcon("pendiente")}
-                    color="warning"
-                    size="small"
-                    label="Pendiente"
-                    sx={{
-                      height: 24,
-                      fontSize: "0.75rem",
-                      "& .MuiChip-icon": {
-                        color: "#fff",
-                      },
-                    }}
-                  />
-                </Tooltip>
-              ) : (
-                <Tooltip title={`Estado: ${status}`}>
-                  <Chip
-                    icon={getStatusIcon(status)}
-                    color="default"
-                    size="small"
-                    sx={{
-                      height: 32,
-                      width: 32,
-                      borderRadius: "50%",
-                      padding: 0,
-                      minWidth: 0,
-                      backgroundColor:
-                        status === "resuelta" ? "#4caf50" : "#29b6f6",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      "& .MuiChip-icon": {
-                        color: "#fff !important",
-                        fontSize: "20px !important",
-                        width: "20px !important",
-                        height: "20px !important",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        margin: 0,
-                        padding: 0,
-                      },
-                      "& .MuiChip-label": {
-                        display: "none",
-                      },
-                    }}
-                  />
-                </Tooltip>
-              )}
-
+              {conversationTags.length > 0
+                ? conversationTags.map((tag, index) => (
+                    <TagChip
+                      key={index}
+                      tag={tag}
+                      index={index}
+                      isExpanded={expandedTagIndex === index}
+                      onToggle={() =>
+                        setExpandedTagIndex((prev) => (prev === index ? null : index))
+                      }
+                    />
+                  ))
+                : null}
               {blocked && (
                 <Tooltip title="Usuario bloqueado">
                   <Chip
@@ -454,7 +409,6 @@ const ChatPanel = forwardRef(
                   </span>
                 </Tooltip>
 
-
                 <MenuItem onClick={() => handleChangeStatus("resuelta")}>
                   Marcar como Resuelta
                 </MenuItem>
@@ -500,9 +454,7 @@ const ChatPanel = forwardRef(
               fullWidth
               value={pendingTag?.label || ""}
               inputProps={{ maxLength: 100 }}
-              onChange={(e) =>
-                setPendingTag((prev) => ({ ...prev, label: e.target.value }))
-              }
+              onChange={(e) => setPendingTag((prev) => ({ ...prev, label: e.target.value }))}
               InputProps={{
                 sx: {
                   width: "100% !important",
@@ -546,10 +498,14 @@ const ChatPanel = forwardRef(
 
                   try {
                     await createConversationTag({
-                      conversationId, // este viene del contexto
+                      conversationId,
                       label: pendingTag.label.trim(),
-                      highlightedMessageId: null, // o elimínalo si no se usa
+                      highlightedMessageId: null,
                     });
+
+                    // ✅ Recargar las etiquetas después de crear una
+                    const updatedTags = await getTagsByConversationId(conversationId);
+                    setConversationTags(updatedTags || []);
 
                     setShowPendingEditor(false);
                     setPendingTag(null);
