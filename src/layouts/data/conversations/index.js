@@ -46,6 +46,7 @@ function Conversations() {
   const [highlightedIds, setHighlightedIds] = useState([]);
 
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [loadingConversationId, setLoadingConversationId] = useState(null);
 
   const userId = 45; // Simulado
 
@@ -75,18 +76,16 @@ function Conversations() {
       // Esto es más seguro y garantiza que el estado siga siendo un array.
 
       setConversationList((prevList) =>
-        prevList.map((item) =>
-          item.id === conversationId ? { ...item, status: newStatus } : item
-        )
+        prevList.map((item) => (item.id === conversationId ? { ...item, status: newStatus } : item))
       );
 
       setOpenTabs((prevTabs) =>
-        prevTabs.map((item) =>
-          item.id === conversationId ? { ...item, status: newStatus } : item
-        )
+        prevTabs.map((item) => (item.id === conversationId ? { ...item, status: newStatus } : item))
       );
 
-      console.log(`✅ Estado del chat ${conversationId} actualizado a ${newStatus} en el frontend.`);
+      console.log(
+        `✅ Estado del chat ${conversationId} actualizado a ${newStatus} en el frontend.`
+      );
     }
   };
 
@@ -125,9 +124,7 @@ function Conversations() {
         connection.on("conversationStatusChanged", (conversationId, newStatus) => {
           console.log(`🟢 Estado actualizado para ${conversationId}: ${newStatus}`);
           const updateStatusInList = (list) =>
-            list.map((item) =>
-              item.id == conversationId ? { ...item, status: newStatus } : item
-            );
+            list.map((item) => (item.id == conversationId ? { ...item, status: newStatus } : item));
           setConversationList(updateStatusInList);
           setOpenTabs(updateStatusInList);
         });
@@ -153,9 +150,9 @@ function Conversations() {
                   file: msg.file || null,
                   replyTo: msg.replyToMessageId
                     ? {
-                      messageId: msg.replyToMessageId,
-                      text: msg.replyToText,
-                    }
+                        messageId: msg.replyToMessageId,
+                        text: msg.replyToText,
+                      }
                     : null,
                 },
               ],
@@ -166,15 +163,12 @@ function Conversations() {
           if (convId !== activeTab) {
             setOpenTabs((prevTabs) =>
               prevTabs.map((tab) =>
-                tab.id === convId
-                  ? { ...tab, unreadCount: (tab.unreadCount || 0) + 1 }
-                  : tab
+                tab.id === convId ? { ...tab, unreadCount: (tab.unreadCount || 0) + 1 } : tab
               )
             );
             setHighlightedIds((prev) => [...new Set([...prev, convId])]);
           }
         });
-
 
         connection.on("NewConversation", (newConv) => {
           if (newConv && newConv.id) {
@@ -184,7 +178,6 @@ function Conversations() {
             console.warn("⚠️ Conversación inválida:", newConv);
           }
         });
-
 
         connection.on("Typing", (conversationId, sender) => {
           if (conversationId && sender) {
@@ -210,8 +203,6 @@ function Conversations() {
             }, 3000);
           }
         });
-
-
       } catch (error) {
         console.error("❌ Error al conectar con SignalR:", error);
       }
@@ -291,14 +282,32 @@ function Conversations() {
     setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
 
     if (messages[idStr] === undefined) {
+      setLoadingConversationId(idStr); // 👈 empieza carga
+
       try {
         const fetchedHistory = await getConversationHistory(conv.id);
 
-        // ✅ CORRECCIÓN: Usar 'fetchedHistory.history' con 'h' minúscula
         if (fetchedHistory && Array.isArray(fetchedHistory.history)) {
+          const normalized = fetchedHistory.history.map((msg) => ({
+            id: msg.id || `${idStr}-${Date.now()}`,
+            type: msg.fileType?.startsWith("image/") ? "image" : msg.fileUrl ? "file" : "message",
+            fromName: msg.fromName || msg.from || "Admin",
+            fromId: msg.fromId ?? 0,
+            fromRole: msg.fromRole || (msg.from === "user" ? "user" : "admin"),
+            text: msg.text || "",
+            timestamp: msg.timestamp,
+            fileName: msg.fileName ?? null,
+            fileType: msg.fileType ?? null,
+            fileUrl: msg.fileUrl ?? null,
+            files: msg.files ?? [],
+            images: msg.images ?? [],
+            replyTo: msg.replyTo ?? null,
+            ...msg,
+          }));
+
           setMessages((prev) => ({
             ...prev,
-            [idStr]: fetchedHistory.history,
+            [idStr]: normalized,
           }));
         } else {
           setMessages((prev) => ({ ...prev, [idStr]: [] }));
@@ -306,6 +315,8 @@ function Conversations() {
       } catch (err) {
         console.error("❌ Error cargando historial de la conversación:", err);
         setMessages((prev) => ({ ...prev, [idStr]: [] }));
+      } finally {
+        setLoadingConversationId(null); // 👈 termina carga
       }
     }
   };
@@ -351,8 +362,9 @@ function Conversations() {
 
   const handleAdminTyping = (conversationId) => {
     if (connectionRef.current && connectionRef.current.state === "Connected") {
-      connectionRef.current.invoke("Typing", Number(conversationId), "admin")
-        .catch(err => console.error("Error enviando Typing:", err));
+      connectionRef.current
+        .invoke("Typing", Number(conversationId), "admin")
+        .catch((err) => console.error("Error enviando Typing:", err));
     }
   };
 
@@ -639,13 +651,17 @@ function Conversations() {
                     ref={chatPanelRef} // ✅ Aquí le pasas el ref
                     conversationId={activeTab}
                     messages={selectedMessages}
+                    loadingConversationId={loadingConversationId}
+
                     userName={selectedConversation?.alias || ""}
                     isTyping={typingState[activeTab] || false}
                     typingSender={"user"}
                     onToggleIA={() => handleToggleIA(activeTab)}
                     iaPaused={!!iaPausedMap[activeTab]}
                     onSendAdminMessage={handleSendAdminMessage}
-                    onStatusChange={(newStatus) => handleUpdateConversationStatus(activeTab, newStatus)}
+                    onStatusChange={(newStatus) =>
+                      handleUpdateConversationStatus(activeTab, newStatus)
+                    }
                     onBlock={() => handleBlockUser(activeTab)}
                     status={selectedConversation?.status || "activa"}
                     blocked={selectedConversation?.blocked || false}

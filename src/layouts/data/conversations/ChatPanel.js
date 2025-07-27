@@ -30,6 +30,8 @@ import TextField from "@mui/material/TextField";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
 import { Box, Tooltip, Typography } from "@mui/material";
 import Button from "@mui/material/Button";
+import Loader from "../../../components/Loader";
+
 import TagChip from "components/TagChip";
 import {
   getTagsByConversationId,
@@ -59,7 +61,7 @@ const ChatPanel = forwardRef(
       messageRefs,
       onJumpToReply,
       highlightedMessageId,
-      onAdminTyping
+      onAdminTyping,
     },
     ref
   ) => {
@@ -75,6 +77,7 @@ const ChatPanel = forwardRef(
     const [conversationTags, setConversationTags] = useState([]);
     const [expandedTagIndex, setExpandedTagIndex] = useState(null);
     const isTagLimitReached = conversationTags.length >= 6;
+    const [loadingConversationId, setLoadingConversationId] = useState(null);
 
     const inputRef = useRef(null);
     const scrollToBottom = () => {
@@ -196,12 +199,17 @@ const ChatPanel = forwardRef(
 
         const replyInfo = replyTo
           ? {
-            replyToMessageId: replyTo.id,
-            replyToText: replyTo.text || replyTo.fileName || "mensaje",
-          }
+              replyToMessageId: replyTo.id,
+              replyToText: replyTo.text || replyTo.fileName || "mensaje",
+            }
           : null;
 
-        onSendAdminMessage(inputValue.trim(), conversationId, messageId, replyInfo);
+        onSendAdminMessage(
+          inputValue.trim(),
+          conversationId,
+          messageId,
+          replyTo ? replyTo.id : null
+        );
 
         setInputValue("");
 
@@ -250,21 +258,33 @@ const ChatPanel = forwardRef(
     };
 
     const getBlockedIcon = () => <BlockIcon />;
-
     const processedMessages = useMemo(() => {
       return messages.map((msg) => {
         let files = [];
 
+        // ✅ Soporte para msg.file (cuando es objeto)
         if (msg.file?.fileUrl) {
           files.push({ ...msg.file, url: msg.file.fileUrl });
         }
 
+        // ✅ Soporte para msg.images[]
         if (Array.isArray(msg.images)) {
           msg.images.forEach((img) => {
             if (img.fileUrl) files.push({ ...img, url: img.fileUrl });
           });
         }
 
+        // ✅ Soporte para mensajes que traen fileUrl y fileName directamente
+        if (!files.length && msg.fileUrl && msg.fileName) {
+          files.push({
+            fileUrl: msg.fileUrl,
+            fileName: msg.fileName,
+            fileType: msg.fileType || "application/octet-stream",
+            url: msg.fileUrl,
+          });
+        }
+
+        // ✅ Resolver replyTo
         let resolvedReplyTo = null;
         if (msg.replyToMessageId) {
           const original = messages.find(
@@ -293,6 +313,7 @@ const ChatPanel = forwardRef(
         };
       });
     }, [messages]);
+
     useEffect(() => {
       processedMessages.forEach((msg) => {
         if (msg.replyTo) {
@@ -318,6 +339,20 @@ const ChatPanel = forwardRef(
       };
 
       fetchTags();
+    }, [conversationId]);
+
+    useEffect(() => {
+      if (!conversationId) return;
+
+      // ✅ Simulamos carga del historial
+      setLoadingConversationId(conversationId);
+
+      // ⏳ Aquí simularías el fetch real de historial de chat
+      const timeout = setTimeout(() => {
+        setLoadingConversationId(null);
+      }, 1000); // simula 1 segundo de carga
+
+      return () => clearTimeout(timeout);
     }, [conversationId]);
 
     return (
@@ -350,16 +385,17 @@ const ChatPanel = forwardRef(
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
               {conversationTags.length > 0
                 ? conversationTags.map((tag, index) => (
-                  <TagChip
-                    key={index}
-                    tag={tag}
-                    index={index}
-                    isExpanded={expandedTagIndex === index}
-                    onToggle={() =>
-                      setExpandedTagIndex((prev) => (prev === index ? null : index))
-                    }
-                    backgroundColor={getBackgroundColor(status)} />
-                ))
+                    <TagChip
+                      key={index}
+                      tag={tag}
+                      index={index}
+                      isExpanded={expandedTagIndex === index}
+                      onToggle={() =>
+                        setExpandedTagIndex((prev) => (prev === index ? null : index))
+                      }
+                      backgroundColor={getBackgroundColor(status)}
+                    />
+                  ))
                 : null}
               {blocked && (
                 <Tooltip title="Usuario bloqueado">
@@ -402,6 +438,7 @@ const ChatPanel = forwardRef(
 
               <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
                 <MenuItem disabled>Estado actual: {status}</MenuItem>
+
                 <Tooltip
                   title={
                     isTagLimitReached
@@ -419,9 +456,13 @@ const ChatPanel = forwardRef(
                   </span>
                 </Tooltip>
 
-                <MenuItem onClick={() => handleChangeStatus("resuelta")}>
+                <MenuItem
+                  onClick={() => handleChangeStatus("resuelta")}
+                  disabled={status?.toLowerCase() === "resuelta"}
+                >
                   Marcar como Resuelta
                 </MenuItem>
+
                 <Divider />
                 <MenuItem onClick={handleToggleBlock}>
                   {blocked ? "Desbloquear Usuario" : "Bloquear Usuario"}
@@ -548,18 +589,25 @@ const ChatPanel = forwardRef(
             position: "relative",
           }}
         >
-          {processedMessages.map((msg, idx) => (
-            <MessageBubble
-              key={idx}
-              msg={msg}
-              onReply={() => onReply(msg)}
-              onJumpToReply={onJumpToReply}
-              ref={(el) => {
-                if (el && msg.id) messageRefs.current[msg.id] = el;
-              }}
-              isHighlighted={highlightedMessageId === msg.id}
-            />
-          ))}
+          {loadingConversationId === `${conversationId}` ? (
+            <>
+              <div style={{ marginBottom: 10, color: "#888" }}></div>
+              <Loader message="Cargando..." />
+            </>
+          ) : (
+            processedMessages.map((msg, idx) => (
+              <MessageBubble
+                key={idx}
+                msg={msg}
+                onReply={() => onReply(msg)}
+                onJumpToReply={onJumpToReply}
+                ref={(el) => {
+                  if (el && msg.id) messageRefs.current[msg.id] = el;
+                }}
+                isHighlighted={highlightedMessageId === msg.id}
+              />
+            ))
+          )}
 
           {isTyping && ["bot", "admin", "user"].includes(typingSender) && (
             <CSSTransition
