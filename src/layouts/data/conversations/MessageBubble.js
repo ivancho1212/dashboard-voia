@@ -3,7 +3,7 @@ import PropTypes from "prop-types";
 import { buildFileUrl, downloadImagesAsZip } from "utils/fileHelpers";
 
 const MessageBubble = React.forwardRef(
-  ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen }, ref) => {
+  ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen, isAIActive }, ref) => {
     const { fromRole, fromName, text, timestamp, files = [], replyTo } = msg;
     const isRight = ["admin", "bot"].includes(fromRole);
 
@@ -30,7 +30,7 @@ const MessageBubble = React.forwardRef(
     const imageFiles = (files || msg.images || []).filter((file) =>
       file.fileType?.startsWith("image/")
     );
-    const showOptionsIcon = isHovered && (text || imageFiles.length > 0);
+    const showOptionsIcon = isHovered && !isAIActive && (text || imageFiles.length > 0);
 
     const handlePrev = () =>
       setPreviewIndex((prev) => (prev > 0 ? prev - 1 : imageFiles.length - 1));
@@ -202,8 +202,9 @@ const MessageBubble = React.forwardRef(
             {imageFiles.length > 0 && (
               <>
                 <div
-                  style={menuItemStyle}
+                  style={{ ...menuItemStyle, color: "Gray" }}
                   onClick={() => {
+                    if (isAIActive) return;
                     setPreviewIndex(0);
                     setImageOptionsOpen(false);
                   }}
@@ -212,8 +213,9 @@ const MessageBubble = React.forwardRef(
                 </div>
                 {imageFiles.length === 1 && (
                   <div
-                    style={menuItemStyle}
+                    style={{ ...menuItemStyle, color: "Gray" }}
                     onClick={() => {
+                      if (isAIActive) return;
                       const file = imageFiles[0];
                       const link = document.createElement("a");
                       link.href = buildFileUrl(file.fileUrl);
@@ -231,6 +233,7 @@ const MessageBubble = React.forwardRef(
                   <div
                     style={menuItemStyle}
                     onClick={async () => {
+                      if (isAIActive) return;
                       await downloadImagesAsZip(imageFiles);
                       setImageOptionsOpen(false);
                     }}
@@ -244,6 +247,7 @@ const MessageBubble = React.forwardRef(
               <div
                 style={{ ...menuItemStyle, color: "Gray" }}
                 onClick={() => {
+                  if (isAIActive) return;
                   navigator.clipboard.writeText(text);
                   setImageOptionsOpen(false);
                 }}
@@ -254,6 +258,7 @@ const MessageBubble = React.forwardRef(
             <div
               style={{ ...menuItemStyle, color: "Gray" }}
               onClick={() => {
+                if (isAIActive) return;
                 onReply && onReply(msg);
                 setImageOptionsOpen(false);
               }}
@@ -466,6 +471,7 @@ MessageBubble.propTypes = {
   onJumpToReply: PropTypes.func,
   isHighlighted: PropTypes.bool,
   setViewerOpen: PropTypes.func,
+  isAIActive: PropTypes.bool.isRequired,
 };
 
 export default React.memo(MessageBubble);

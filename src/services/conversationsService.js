@@ -18,8 +18,9 @@ export async function getConversationsByUser(userId) {
       alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
       lastMessage: c.userMessage || "",
       updatedAt: c.createdAt || new Date().toISOString(),
-      status: c.status, // ✨ AJUSTADO: Se lee el estado real de la API
+      status: c.status,
       blocked: false,
+      isWithAI: c.isWithAI ?? true, // ← añadido aquí
     }));
   } catch (error) {
     console.error("❌ [getConversationsByUser] Error al obtener conversaciones:", error);
@@ -36,8 +37,7 @@ export async function updateConversationStatus(conversationId, newStatus) {
     );
     console.log("✅ [updateConversationStatus] Estado actualizado:", response.data);
     return response.data;
-  } catch (error)
-  {
+  } catch (error) {
     console.error("❌ [updateConversationStatus] Error al actualizar el estado:", error);
     return null;
   }
@@ -52,6 +52,17 @@ export async function getConversationHistory(conversationId) {
   } catch (error) {
     console.error("❌ [getConversationHistory] Error al obtener historial:", error);
     return null; // Devolver null para manejar el error en el componente
+  }
+}
+// ✅ Nuevo: Marcar mensajes como leídos en una conversación
+export async function markMessagesAsRead(conversationId) {
+  try {
+    const response = await axios.post(`${BASE_URL}/api/Messages/mark-read/${conversationId}`);
+    console.log("✅ [markMessagesAsRead] Mensajes marcados como leídos:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("❌ [markMessagesAsRead] Error al marcar mensajes como leídos:", error);
+    return null;
   }
 }
 
@@ -82,5 +93,20 @@ export async function getMessagesByConversationId(conversationId) {
   } catch (error) {
     console.error("❌ [getMessagesByConversationId] Error al obtener mensajes:", error);
     return [];
+  }
+}
+
+// ✅ Nuevo: Actualizar si la conversación es con IA
+export async function updateConversationIsWithAI(conversationId, isWithAI) {
+  try {
+    const response = await axios.patch(
+      `${BASE_URL}/api/Conversations/${conversationId}/with-ai`,
+      { isWithAI } // Suponiendo que el backend espera un body con { isWithAI: true/false }
+    );
+    console.log("✅ [updateConversationIsWithAI] Estado IA actualizado:", response.data);
+    return response.data;
+  } catch (error) {
+    console.error("❌ [updateConversationIsWithAI] Error al actualizar IA:", error);
+    return null;
   }
 }

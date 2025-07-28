@@ -41,7 +41,7 @@ function ConversationList({
   onStatusChange,
   onBlock,
   highlightedIds = [],
-  onClearHighlight = () => { },
+  onClearHighlight = () => {},
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
@@ -168,10 +168,10 @@ function ConversationList({
                 justifyContent: "space-between",
                 alignItems: "flex-start",
                 boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                maxWidth: "100%",       // 👈 asegura que no exceda el ancho del padre
-                overflow: "hidden",     // 👈 oculta cualquier contenido que se desborde
-                whiteSpace: "nowrap",   // 👈 impide que los textos se expandan en múltiples líneas
-
+                maxWidth: "100%", // 👈 asegura que no exceda el ancho del padre
+                overflow: "hidden", // 👈 oculta cualquier contenido que se desborde
+                whiteSpace: "nowrap", // 👈 impide que los textos se expandan en múltiples líneas
+                opacity: conv.isWithAI ? 1 : 0.5,
               }}
             >
               {/* Info principal */}
@@ -247,11 +247,17 @@ function ConversationList({
 
                       const index = matchMessage.text.toLowerCase().indexOf(lowerSearch);
                       const start = Math.max(index - 20, 0);
-                      const end = Math.min(index + lowerSearch.length + 20, matchMessage.text.length);
+                      const end = Math.min(
+                        index + lowerSearch.length + 20,
+                        matchMessage.text.length
+                      );
                       const fragment = matchMessage.text.slice(start, end);
 
                       const before = fragment.slice(0, index - start);
-                      const match = fragment.slice(index - start, index - start + lowerSearch.length);
+                      const match = fragment.slice(
+                        index - start,
+                        index - start + lowerSearch.length
+                      );
                       const after = fragment.slice(index - start + lowerSearch.length);
 
                       return (
@@ -264,7 +270,6 @@ function ConversationList({
                     })()}
                   </Typography>
                 </Tooltip>
-
               </Box>
 
               <Box
@@ -274,7 +279,6 @@ function ConversationList({
                 justifyContent="center"
                 sx={{ flexShrink: 0, maxWidth: "30%" }}
               >
-
                 <Box display="flex" alignItems="center" gap={0.5}>
                   <Tooltip title={`Estado: ${conv.status}`}>
                     <Chip
@@ -282,24 +286,22 @@ function ConversationList({
                       color="default"
                       size="small"
                       sx={{
-                        height: 24,
-                        width: 24,
+                        height: 18,
+                        width: 18,
                         minWidth: 0,
                         borderRadius: "50%",
                         backgroundColor:
                           conv.status === "pendiente"
                             ? "#ff9800"
                             : conv.status === "resuelta"
-                              ? "#4caf50"
-                              : "#29b6f6",
+                            ? "#4caf50"
+                            : "#29b6f6",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         "& .MuiChip-icon": {
                           color: "#fff !important",
-                          fontSize: "16px !important",
-                          width: "16px !important",
-                          height: "16px !important",
+                          fontSize: "12px !important",
                           margin: 0,
                           padding: 0,
                           display: "flex",
@@ -312,6 +314,55 @@ function ConversationList({
                       }}
                     />
                   </Tooltip>
+                  {conv.isWithAI && conv.unreadCount > 0 && (
+                    <Chip
+                      label={conv.unreadCount}
+                      size="small"
+                      color="error"
+                      sx={{
+                        height: 18,
+                        width: 18,
+                        minWidth: 0,
+                        borderRadius: "50%",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        backgroundColor: "#ff7043",
+                        color: "#fff",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        "& .MuiChip-icon": {
+                          display: "none",
+                        },
+                        "& .MuiChip-label": {
+                          padding: 0,
+                          margin: 0,
+                          lineHeight: 1,
+                          width: "100%",
+                          textAlign: "center",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        },
+                      }}
+                    />
+                  )}
+
+                  {!conv.isWithAI && (
+                    <Tooltip title="IA pausada">
+                      <Chip
+                        label="IA pausada"
+                        size="small"
+                        sx={{
+                          backgroundColor: "#9e9e9e",
+                          color: "#fff",
+                          fontSize: "10px",
+                          height: 18,
+                          borderRadius: "8px",
+                        }}
+                      />
+                    </Tooltip>
+                  )}
 
                   <ConversationActions
                     onBlock={() => onBlock(conv.id)}
@@ -349,6 +400,8 @@ ConversationList.propTypes = {
       updatedAt: PropTypes.string.isRequired,
       status: PropTypes.string.isRequired,
       blocked: PropTypes.bool.isRequired,
+      unreadCount: PropTypes.number,
+      isWithAI: PropTypes.bool,
     })
   ).isRequired,
   messagesMap: PropTypes.objectOf(

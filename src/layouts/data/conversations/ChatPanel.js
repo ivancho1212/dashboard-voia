@@ -190,7 +190,7 @@ const ChatPanel = forwardRef(
       handleCloseMenu();
     };
 
-    const handleSendMessage = () => {
+    const handleSendMessage = async () => {
       console.log("📝 Mensaje enviado:", inputValue);
       console.log("📎 Respondiendo a:", replyTo);
 
@@ -204,20 +204,27 @@ const ChatPanel = forwardRef(
             }
           : null;
 
-        onSendAdminMessage(
-          inputValue.trim(),
-          conversationId,
-          messageId,
-          replyTo ? replyTo.id : null
-        );
+        try {
+          // 1. Pausar IA en backend
+          await updateConversationIsWithAI(conversationId, false); // 👈 función que debes implementar
 
-        setInputValue("");
+          // 2. Enviar mensaje
+          onSendAdminMessage(
+            inputValue.trim(),
+            conversationId,
+            messageId,
+            replyTo ? replyTo.id : null
+          );
 
-        setTimeout(() => {
-          scrollToBottom();
-        }, 50);
+          setInputValue("");
+          if (onCancelReply) onCancelReply();
 
-        if (onCancelReply) onCancelReply();
+          setTimeout(() => {
+            scrollToBottom();
+          }, 50);
+        } catch (error) {
+          console.error("❌ Error al pausar IA:", error);
+        }
       }
     };
 
@@ -605,6 +612,7 @@ const ChatPanel = forwardRef(
                   if (el && msg.id) messageRefs.current[msg.id] = el;
                 }}
                 isHighlighted={highlightedMessageId === msg.id}
+                isAIActive={!iaPaused} // 👈 ESTA ES LA LÍNEA CLAVE
               />
             ))
           )}

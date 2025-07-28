@@ -24,6 +24,8 @@ import {
   getMessagesByConversationId,
   getConversationHistory,
   updateConversationStatus,
+  markMessagesAsRead,
+  updateConversationIsWithAI,
 } from "services/conversationsService";
 
 function Conversations() {
@@ -52,13 +54,16 @@ function Conversations() {
 
   const handleToggleIA = async (conversationId) => {
     const newState = !iaPausedMap[conversationId];
-
+  
     setIaPausedMap((prev) => ({
       ...prev,
       [conversationId]: newState,
     }));
-
-    // ✅ Usa connectionRef.current y comprueba que exista
+  
+    // 🔄 1. Actualizar en BD
+    await updateConversationIsWithAI(conversationId, !newState); // OJO: isWithAI = !pausado
+  
+    // 🔄 2. Actualizar en tiempo real vía SignalR
     if (connectionRef.current) {
       try {
         await connectionRef.current.invoke("SetIAPaused", Number(conversationId), newState);
@@ -100,7 +105,12 @@ function Conversations() {
     const loadInitialConversations = async () => {
       try {
         const data = await getConversationsByUser(userId);
-        setConversationList(data);
+        setConversationList(
+          data.map((c) => ({
+            ...c,
+            unreadCount: c.unreadCount || 0, // 👈 por si no viene del backend
+          }))
+        );
       } catch (error) {
         console.error("Error al cargar conversaciones iniciales:", error);
       }
@@ -160,12 +170,23 @@ function Conversations() {
           });
 
           // Si el tab no está activo, marca como no leído
-          if (convId !== activeTab) {
+          if (String(convId) !== String(activeTab)) {
+            // 🔁 1. Actualiza la lista de conversaciones principal
+            setConversationList((prevList) =>
+              prevList.map((conv) =>
+                `${conv.id}` === convId
+                  ? { ...conv, unreadCount: (conv.unreadCount || 0) + 1 }
+                  : conv
+              )
+            );
+
+            // 🔁 2. También actualiza las pestañas si ya está abierta
             setOpenTabs((prevTabs) =>
               prevTabs.map((tab) =>
                 tab.id === convId ? { ...tab, unreadCount: (tab.unreadCount || 0) + 1 } : tab
               )
             );
+
             setHighlightedIds((prev) => [...new Set([...prev, convId])]);
           }
         });
@@ -274,6 +295,7 @@ function Conversations() {
   const handleSelectConversation = async (conv) => {
     const idStr = `${conv.id}`;
     const exists = openTabs.find((t) => t.id === idStr);
+
     if (!exists) {
       setOpenTabs((prev) => [...prev, { ...conv, id: idStr, unreadCount: 0 }]);
     }
@@ -281,8 +303,10 @@ function Conversations() {
     setActiveTab(idStr);
     setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
 
-    if (messages[idStr] === undefined) {
-      setLoadingConversationId(idStr); // 👈 empieza carga
+    const shouldFetchMessages = messages[idStr] === undefined;
+
+    if (shouldFetchMessages) {
+      setLoadingConversationId(idStr);
 
       try {
         const fetchedHistory = await getConversationHistory(conv.id);
@@ -309,6 +333,17 @@ function Conversations() {
             ...prev,
             [idStr]: normalized,
           }));
+
+          // ✅ Marca como leídos si hay mensajes sin leer
+          const hasUnread = conv.unreadCount > 0;
+          if (hasUnread) {
+            try {
+              await markMessagesAsRead(conv.id);
+              console.log(`📩 Mensajes marcados como leídos en conversación ${conv.id}`);
+            } catch (error) {
+              console.warn("❌ Error marcando mensajes como leídos:", error);
+            }
+          }
         } else {
           setMessages((prev) => ({ ...prev, [idStr]: [] }));
         }
@@ -316,7 +351,7 @@ function Conversations() {
         console.error("❌ Error cargando historial de la conversación:", err);
         setMessages((prev) => ({ ...prev, [idStr]: [] }));
       } finally {
-        setLoadingConversationId(null); // 👈 termina carga
+        setLoadingConversationId(null);
       }
     }
   };
@@ -652,7 +687,6 @@ function Conversations() {
                     conversationId={activeTab}
                     messages={selectedMessages}
                     loadingConversationId={loadingConversationId}
-
                     userName={selectedConversation?.alias || ""}
                     isTyping={typingState[activeTab] || false}
                     typingSender={"user"}
