@@ -41,7 +41,7 @@ function ConversationList({
   onStatusChange,
   onBlock,
   highlightedIds = [],
-  onClearHighlight = () => {},
+  onClearHighlight = () => { },
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
@@ -171,7 +171,6 @@ function ConversationList({
                 maxWidth: "100%", // 👈 asegura que no exceda el ancho del padre
                 overflow: "hidden", // 👈 oculta cualquier contenido que se desborde
                 whiteSpace: "nowrap", // 👈 impide que los textos se expandan en múltiples líneas
-                opacity: conv.isWithAI ? 1 : 0.5,
               }}
             >
               {/* Info principal */}
@@ -294,8 +293,8 @@ function ConversationList({
                           conv.status === "pendiente"
                             ? "#ff9800"
                             : conv.status === "resuelta"
-                            ? "#4caf50"
-                            : "#29b6f6",
+                              ? "#4caf50"
+                              : "#29b6f6",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -314,7 +313,7 @@ function ConversationList({
                       }}
                     />
                   </Tooltip>
-                  {conv.isWithAI && conv.unreadCount > 0 && (
+                  {!conv.isWithAI && conv.unreadCount > 0 && conv.id !== activeTab && (
                     <Chip
                       label={conv.unreadCount}
                       size="small"

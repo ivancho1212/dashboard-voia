@@ -26,7 +26,7 @@ function Controls({ onToggle, iaPaused }) {
           mb: 0.3,
         }}
       >
-        {iaPaused ? "Activa IA" : "Pausar IA"}
+        {iaPaused ? "Reanudar IA" : "Pausar IA"}
       </Typography>
 
       <Box

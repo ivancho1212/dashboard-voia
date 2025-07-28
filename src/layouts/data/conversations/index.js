@@ -46,6 +46,7 @@ function Conversations() {
   const [typingState, setTypingState] = useState({});
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [highlightedIds, setHighlightedIds] = useState([]);
+  const iaPausedMapRef = useRef({});
 
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [loadingConversationId, setLoadingConversationId] = useState(null);
@@ -54,16 +55,26 @@ function Conversations() {
 
   const handleToggleIA = async (conversationId) => {
     const newState = !iaPausedMap[conversationId];
-  
+
     setIaPausedMap((prev) => ({
       ...prev,
       [conversationId]: newState,
     }));
-  
+
     // 🔄 1. Actualizar en BD
-    await updateConversationIsWithAI(conversationId, !newState); // OJO: isWithAI = !pausado
-  
-    // 🔄 2. Actualizar en tiempo real vía SignalR
+    await updateConversationIsWithAI(conversationId, !newState); // isWithAI = !pausado
+
+    // ✅ 2. Actualizar el estado local de conversations
+    setConversationList((prev) =>
+      prev.map((conv) =>
+        conv.id === conversationId
+          ? { ...conv, isWithAI: !newState }
+          : conv
+      )
+    );
+
+
+    // 🔄 3. Enviar a SignalR si aplica
     if (connectionRef.current) {
       try {
         await connectionRef.current.invoke("SetIAPaused", Number(conversationId), newState);
@@ -72,6 +83,7 @@ function Conversations() {
       }
     }
   };
+
 
   const handleUpdateConversationStatus = async (conversationId, newStatus) => {
     const result = await updateConversationStatus(conversationId, newStatus);
@@ -93,6 +105,10 @@ function Conversations() {
       );
     }
   };
+  
+  useEffect(() => {
+    iaPausedMapRef.current = iaPausedMap;
+  }, [iaPausedMap]);
 
   useEffect(() => {
     // 1. Si no hay una conexión en nuestra referencia, la creamos
@@ -105,12 +121,21 @@ function Conversations() {
     const loadInitialConversations = async () => {
       try {
         const data = await getConversationsByUser(userId);
+
+        // 1️⃣ Actualiza las conversaciones
         setConversationList(
           data.map((c) => ({
             ...c,
-            unreadCount: c.unreadCount || 0, // 👈 por si no viene del backend
+            unreadCount: c.unreadCount || 0,
           }))
         );
+
+        // 2️⃣ Actualiza el mapa de pausado de IA
+        const iaMap = {};
+        data.forEach((c) => {
+          iaMap[c.id] = !c.isWithAI; // ❗️IMPORTANTE: isWithAI = false ⇒ está pausado
+        });
+        setIaPausedMap(iaMap);
       } catch (error) {
         console.error("Error al cargar conversaciones iniciales:", error);
       }
@@ -160,17 +185,20 @@ function Conversations() {
                   file: msg.file || null,
                   replyTo: msg.replyToMessageId
                     ? {
-                        messageId: msg.replyToMessageId,
-                        text: msg.replyToText,
-                      }
+                      messageId: msg.replyToMessageId,
+                      text: msg.replyToText,
+                    }
                     : null,
                 },
               ],
             };
           });
 
-          // Si el tab no está activo, marca como no leído
-          if (String(convId) !== String(activeTab)) {
+          // Solo aumentar unreadCount si NO está activa y la IA está pausada
+          const isPaused = iaPausedMap[convId];
+          const isActive = String(convId) === String(activeTab);
+
+          if (!isActive && isPaused) {
             // 🔁 1. Actualiza la lista de conversaciones principal
             setConversationList((prevList) =>
               prevList.map((conv) =>
@@ -189,6 +217,7 @@ function Conversations() {
 
             setHighlightedIds((prev) => [...new Set([...prev, convId])]);
           }
+
         });
 
         connection.on("NewConversation", (newConv) => {
@@ -297,11 +326,25 @@ function Conversations() {
     const exists = openTabs.find((t) => t.id === idStr);
 
     if (!exists) {
-      setOpenTabs((prev) => [...prev, { ...conv, id: idStr, unreadCount: 0 }]);
+      setOpenTabs((prev) => [
+        ...prev,
+        { ...conv, id: idStr, unreadCount: 0 } // 👈 se asegura de resetear a 0 al abrirla
+      ]);
+
+      // 🧠 Sincroniza el estado de la IA para este tab
+      setIaPausedMap((prev) => ({
+        ...prev,
+        [conv.id]: !conv.isWithAI,
+      }));
     }
 
+    // 👇 Establece como activa y resetea el contador también aquí por si ya estaba abierta
     setActiveTab(idStr);
-    setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
+    setOpenTabs((prev) =>
+      prev.map((tab) =>
+        tab.id === idStr ? { ...tab, unreadCount: 0 } : tab
+      )
+    );
 
     const shouldFetchMessages = messages[idStr] === undefined;
 
@@ -314,7 +357,11 @@ function Conversations() {
         if (fetchedHistory && Array.isArray(fetchedHistory.history)) {
           const normalized = fetchedHistory.history.map((msg) => ({
             id: msg.id || `${idStr}-${Date.now()}`,
-            type: msg.fileType?.startsWith("image/") ? "image" : msg.fileUrl ? "file" : "message",
+            type: msg.fileType?.startsWith("image/")
+              ? "image"
+              : msg.fileUrl
+                ? "file"
+                : "message",
             fromName: msg.fromName || msg.from || "Admin",
             fromId: msg.fromId ?? 0,
             fromRole: msg.fromRole || (msg.from === "user" ? "user" : "admin"),
@@ -335,10 +382,9 @@ function Conversations() {
           }));
 
           // ✅ Marca como leídos si hay mensajes sin leer
-          const hasUnread = conv.unreadCount > 0;
-          if (hasUnread) {
+          if (conv.unreadCount > 0) {
             try {
-              await markMessagesAsRead(conv.id);
+              await markMessagesAsRead(conv.id); // 👈 Aquí llamas la función de backend
               console.log(`📩 Mensajes marcados como leídos en conversación ${conv.id}`);
             } catch (error) {
               console.warn("❌ Error marcando mensajes como leídos:", error);
@@ -352,6 +398,16 @@ function Conversations() {
         setMessages((prev) => ({ ...prev, [idStr]: [] }));
       } finally {
         setLoadingConversationId(null);
+      }
+    } else {
+      // ✅ Si ya tiene mensajes y se vuelve a abrir, igual marcamos como leídos
+      if (conv.unreadCount > 0) {
+        try {
+          await markMessagesAsRead(conv.id);
+          console.log(`📩 Mensajes marcados como leídos en conversación ${conv.id}`);
+        } catch (error) {
+          console.warn("❌ Error marcando mensajes como leídos:", error);
+        }
       }
     }
   };
@@ -691,7 +747,7 @@ function Conversations() {
                     isTyping={typingState[activeTab] || false}
                     typingSender={"user"}
                     onToggleIA={() => handleToggleIA(activeTab)}
-                    iaPaused={!!iaPausedMap[activeTab]}
+                    iaPaused={iaPausedMap[activeTab] ?? false}
                     onSendAdminMessage={handleSendAdminMessage}
                     onStatusChange={(newStatus) =>
                       handleUpdateConversationStatus(activeTab, newStatus)
