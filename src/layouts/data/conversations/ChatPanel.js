@@ -39,6 +39,7 @@ import {
   updateConversationTag,
   deleteConversationTag,
 } from "services/conversationTagsService";
+import { updateConversationIsWithAI } from "services/conversationsService";
 
 const ChatPanel = forwardRef(
   (

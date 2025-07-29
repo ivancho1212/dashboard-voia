@@ -521,6 +521,7 @@ function Conversations() {
                   }}
                   onStatusChange={handleUpdateConversationStatus}
                   onBlock={(id) => handleBlockUser(id)}
+                  activeTab={activeTab}
                 />
               </SoftBox>
             </Card>
