@@ -395,29 +395,29 @@ function ChatWidget({
 
       if (messages.length === 0) {
         const demoSequence = [
-          { sender: "user", content: "Hola", delay: 1000 },
-          { sender: "bot", content: "Hola, ¿en qué puedo ayudarte hoy?", delay: 2000 },
-          { sender: "user", content: "Quisiera saber en qué horario puedo acercarme a la oficina de ustedes.", delay: 2000 },
-          { sender: "bot", content: "Nuestro horario es de lunes a viernes, de 8 a.m. a 5 p.m. ¿Te gustaría agendar una cita?", delay: 2500 },
-          { sender: "user", content: "Ah, ¿pero puedo saber contigo directamente si tienen solución para X cosa?", delay: 2000 },
-          { sender: "bot", content: "Claro, puedo orientarte. Cuéntame un poco más o comparte un documento o imagen si lo necesitas.", delay: 2500 },
-          { sender: "user", content: "O sea, ¿te puedo enviar esta imagen?", delay: 2000 },
+          { sender: "user", content: "Hola", delay: 2000 },
+          { sender: "bot", content: "Hola, ¿en qué puedo ayudarte hoy?", delay: 3000 },
+          { sender: "user", content: "Quisiera saber en qué horario puedo acercarme a la oficina de ustedes.", delay: 3000 },
+          { sender: "bot", content: "Nuestro horario es de lunes a viernes, de 8 a.m. a 5 p.m. ¿Te gustaría agendar una cita?", delay: 3500 },
+          { sender: "user", content: "Ah, ok ¿pero puedo saber contigo directamente si tienen solución para el arreglo de este logo?", delay: 3000 },
+          { sender: "bot", content: "Claro, puedo orientarte. Cuéntame un poco más o comparte la imagen del logo que necesitas arreglar", delay: 3500 },
+          { sender: "user", content: "O sea, ¿te puedo enviar esta imagen?", delay: 3000 },
           {
             sender: "user",
             content: "",
             type: "image",
             imageGroup: [
               {
-                url: "https://via.placeholder.com/300x200",
-                name: "DocumentoX.jpg"
+                url: "public/VIA.png",
+                name: "logo-via.png"
               }
             ],
-            delay: 1000
+            delay: 2000
           },
-          { sender: "bot", content: "Recibí tu archivo. Será revisado por un agente humano que te contactará en breve.", delay: 2000 },
-          { sender: "admin", content: "Hola, habla Juan Perdomo. Estoy viendo la imagen que acabas de enviar. Con esto ya procedemos a ayudarte con X cosa.", delay: 2500 },
-          { sender: "user", content: "Muchas gracias por la ayuda.", delay: 1500 },
-          { sender: "admin", content: "¡Con gusto! Feliz día.", delay: 1500 },
+          { sender: "bot", content: "Recibí tu archivo. Será revisado por un Usuario administrativo que te contactará en breve.", delay: 3000 },
+          { sender: "admin", content: "Hola, habla Jeronimo Herrera. Estoy viendo la imagen que acabas de enviar. Con esto ya procedemos a ayudarte con la correción del logo", delay: 3500 },
+          { sender: "user", content: "Muchas gracias por la ayuda.", delay: 2500 },
+          { sender: "admin", content: "¡Con gusto! Feliz día.", delay: 2500 },
         ];
 
         let totalDelay = 0;

@@ -11,6 +11,7 @@ export default function StylePreview({ style }) {
         botId={1}
         userId={9999}
         style={style}
+        title={style?.title}
         theme={style?.theme}
         primaryColor={style?.primaryColor}
         secondaryColor={style?.secondaryColor}

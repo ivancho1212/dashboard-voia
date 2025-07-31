@@ -98,6 +98,7 @@ export default function StyleEditor({
       <SoftBox mb={2}>
         <AvatarUploader style={style} setStyle={setStyle} />
       </SoftBox>
+      
       <SoftBox mb={2}>
         <SoftTypography variant="caption">Nombre del widget</SoftTypography>
         <TextField
