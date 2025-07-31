@@ -41,7 +41,7 @@ function ConversationList({
   onStatusChange,
   onBlock,
   highlightedIds = [],
-  onClearHighlight = () => { },
+  onClearHighlight = () => {},
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
@@ -183,7 +183,6 @@ function ConversationList({
                 >
                   {conv.alias || `Usuario ${conv.id.slice(-4)}`}
                 </Typography>
-
                 <Tooltip
                   title={(() => {
                     const lowerSearch = search.toLowerCase();
@@ -192,8 +191,21 @@ function ConversationList({
                     );
 
                     if (!search || !matchMessage) {
-                      const messages = messagesMap[conv.id] || [];
-                      const last = messages[messages.length - 1];
+                      const messages = messagesMap[conv.id];
+                      let last;
+
+                      if (messages?.length > 0) {
+                        last = messages[messages.length - 1];
+                      } else if (conv.lastMessage) {
+                        last = {
+                          text: conv.lastMessage.Type === "text" ? conv.lastMessage.Content : null,
+                          files:
+                            conv.lastMessage.Type !== "text"
+                              ? [{ name: conv.lastMessage.Content }]
+                              : [],
+                          type: conv.lastMessage.Type,
+                        };
+                      }
 
                       if (!last) return "Sin mensajes aún";
 
@@ -230,8 +242,22 @@ function ConversationList({
                       );
 
                       if (!search || !matchMessage) {
-                        const messages = messagesMap[conv.id] || [];
-                        const last = messages[messages.length - 1];
+                        const messages = messagesMap[conv.id];
+                        let last;
+
+                        if (messages?.length > 0) {
+                          last = messages[messages.length - 1];
+                        } else if (conv.lastMessage) {
+                          last = {
+                            text:
+                              conv.lastMessage.Type === "text" ? conv.lastMessage.Content : null,
+                            files:
+                              conv.lastMessage.Type !== "text"
+                                ? [{ name: conv.lastMessage.Content }]
+                                : [],
+                            type: conv.lastMessage.Type,
+                          };
+                        }
 
                         if (!last) return "Sin mensajes aún";
 
@@ -269,6 +295,7 @@ function ConversationList({
                     })()}
                   </Typography>
                 </Tooltip>
+                
               </Box>
 
               <Box
@@ -293,8 +320,8 @@ function ConversationList({
                           conv.status === "pendiente"
                             ? "#ff9800"
                             : conv.status === "resuelta"
-                              ? "#4caf50"
-                              : "#29b6f6",
+                            ? "#4caf50"
+                            : "#29b6f6",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",

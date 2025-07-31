@@ -85,18 +85,6 @@ const ChatPanel = forwardRef(
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     };
     const [hasMounted, setHasMounted] = useState(false);
-    useEffect(() => {
-      const container = document.getElementById("chat-container");
-      if (!container) return;
-
-      // Esperamos un poco antes de hacer scroll y luego marcamos como montado
-      setTimeout(() => {
-        container.scrollTop = container.scrollHeight;
-        setIsUserAtBottom(true);
-        setHasNewMessageBelow(false);
-        setHasMounted(true); // <- Evita mostrar botón prematuramente
-      }, 100);
-    }, []);
 
     useImperativeHandle(ref, () => ({
       isInputFocused: () => inputRef.current === document.activeElement,
@@ -214,7 +202,8 @@ const ChatPanel = forwardRef(
             inputValue.trim(),
             conversationId,
             messageId,
-            replyTo ? replyTo.id : null
+            replyTo ? replyTo.id : null,
+            replyTo ? replyTo.text || replyTo.fileName || "mensaje" : null
           );
 
           setInputValue("");
@@ -299,16 +288,24 @@ const ChatPanel = forwardRef(
             (m) => m.id?.toString() === msg.replyToMessageId?.toString()
           );
           if (original) {
-            const firstFile = original.file || original.images?.[0];
+            // ✅ Buscar archivo: imagen o documento
+            const firstFile =
+              original.file ||
+              (Array.isArray(original.images) && original.images.length > 0
+                ? original.images[0]
+                : null) ||
+              (Array.isArray(original.files) && original.files.length > 0
+                ? original.files[0]
+                : null);
+
             resolvedReplyTo = {
               id: original.id,
-              text: original.text || (firstFile ? "📎 " + firstFile.fileName : null),
+              text: original.text || (firstFile ? null : msg.replyToText),
+              fromName: original.fromName || original.from || "Usuario",
+              fromRole: original.fromRole || original.from || "user",
               fileName: firstFile?.fileName,
-            };
-          } else if (msg.replyToText) {
-            resolvedReplyTo = {
-              id: msg.replyToMessageId,
-              text: msg.replyToText,
+              fileUrl: firstFile?.fileUrl || firstFile?.url,
+              fileType: firstFile?.fileType,
             };
           }
         }
@@ -321,18 +318,6 @@ const ChatPanel = forwardRef(
         };
       });
     }, [messages]);
-
-    useEffect(() => {
-      processedMessages.forEach((msg) => {
-        if (msg.replyTo) {
-          console.log("🔁 Mensaje con replyTo:", {
-            id: msg.id,
-            text: msg.text,
-            replyTo: msg.replyTo,
-          });
-        }
-      });
-    }, [processedMessages]);
 
     useEffect(() => {
       const fetchTags = async () => {
@@ -349,18 +334,65 @@ const ChatPanel = forwardRef(
       fetchTags();
     }, [conversationId]);
 
-    useEffect(() => {
-      if (!conversationId) return;
+    useLayoutEffect(() => {
+      const container = document.getElementById("chat-container");
+      if (!container || !bottomRef.current) return;
 
-      // ✅ Simulamos carga del historial
-      setLoadingConversationId(conversationId);
+      const images = container.querySelectorAll("img");
+      let loaded = 0;
 
-      // ⏳ Aquí simularías el fetch real de historial de chat
-      const timeout = setTimeout(() => {
-        setLoadingConversationId(null);
-      }, 1000); // simula 1 segundo de carga
+      const scrollToBottom = () => {
+        bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+        setIsUserAtBottom(true);
+      };
 
-      return () => clearTimeout(timeout);
+      const handleImageLoad = () => {
+        loaded++;
+        if (loaded === images.length) {
+          scrollToBottom();
+        }
+      };
+
+      if (images.length === 0) {
+        scrollToBottom();
+        return;
+      }
+
+      images.forEach((img) => {
+        if (img.complete) {
+          loaded++;
+        } else {
+          img.addEventListener("load", handleImageLoad);
+          img.addEventListener("error", handleImageLoad);
+        }
+      });
+
+      if (loaded === images.length) {
+        scrollToBottom();
+      }
+
+      return () => {
+        images.forEach((img) => {
+          img.removeEventListener("load", handleImageLoad);
+          img.removeEventListener("error", handleImageLoad);
+        });
+      };
+    }, [conversationId, messages.length]);
+
+    useLayoutEffect(() => {
+      const container = document.getElementById("chat-container");
+      if (!container || !bottomRef.current) return;
+
+      const observer = new ResizeObserver(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+        setIsUserAtBottom(true);
+      });
+
+      observer.observe(container);
+
+      return () => {
+        observer.disconnect();
+      };
     }, [conversationId]);
 
     return (

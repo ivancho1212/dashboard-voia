@@ -93,11 +93,11 @@ const MessageBubble = React.forwardRef(
           alignSelf: isRight ? "flex-end" : "flex-start",
           backgroundColor,
           color: "#1a1a1a",
-          padding: "10px 14px",
+          padding: "10px 10px",
           borderRadius: "16px",
           maxWidth: "70%",
           width: imageFiles.length === 1 ? "auto" : "fit-content",
-          minWidth: "120px",
+          minWidth: "30%",
           fontSize: "14px",
           fontFamily: "Arial",
           marginBottom: "8px",
@@ -128,24 +128,31 @@ const MessageBubble = React.forwardRef(
               fontSize: "13px",
               color: "#333",
               maxWidth: "95%",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
               cursor: "pointer",
             }}
-            title={replyTo.text || replyTo.fileName || ""}
           >
-            <span style={{ fontWeight: "bold", color: "#1976d2" }}>
-              {replyTo.fromName || (replyTo.fromRole === "user" ? "Usuario" : "Mensaje")}
-            </span>
-            {": "}
-            <span style={{ fontStyle: "italic" }}>
-              {replyTo?.text
-                ? replyTo.text.length > 80
-                  ? replyTo.text.slice(0, 80) + "..."
-                  : replyTo.text
-                : replyTo?.fileName || "[sin contenido]"}
-            </span>
+            <div style={{ fontWeight: "bold", color: "#1976d2", marginBottom: "4px" }}>
+              {replyTo.fromName || "Usuario"}:
+            </div>
+
+            {replyTo.text ? (
+              <div style={{ fontStyle: "italic" }}>
+                {replyTo.text.length > 80 ? replyTo.text.slice(0, 80) + "..." : replyTo.text}
+              </div>
+            ) : replyTo.fileType?.startsWith("image/") && replyTo.fileUrl ? (
+              <img
+                src={buildFileUrl(replyTo.fileUrl)}
+                alt="imagen respondida"
+                style={{
+                  maxWidth: "80px",
+                  maxHeight: "80px",
+                  borderRadius: "6px",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <div style={{ fontStyle: "italic" }}>{replyTo.fileName || "[archivo adjunto]"}</div>
+            )}
           </div>
         )}
 

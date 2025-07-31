@@ -110,3 +110,30 @@ export async function updateConversationIsWithAI(conversationId, isWithAI) {
     return null;
   }
 }
+// ✅ Cargar conversaciones con su último mensaje (texto o archivo)
+export async function getConversationsWithLastMessage() {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/Conversations/with-last-message`);
+
+    const conversations = Array.isArray(response.data) ? response.data : [];
+
+    return conversations.map((c) => ({
+      id: `${c.id}`,
+      alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
+      lastMessage: c.lastMessage
+        ? c.lastMessage.Type === "text"
+          ? c.lastMessage.Content
+          : c.lastMessage.Type === "image"
+          ? "📷 Imagen enviada"
+          : `📎 Archivo: ${c.lastMessage.Content}`
+        : "Conversación iniciada",
+      updatedAt: c.lastMessage?.Timestamp || new Date().toISOString(),
+      status: c.status,
+      blocked: false,
+      isWithAI: c.isWithAI ?? true,
+    }));
+  } catch (error) {
+    console.error("❌ [getConversationsWithLastMessage] Error:", error);
+    return [];
+  }
+}

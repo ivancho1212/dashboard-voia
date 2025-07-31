@@ -26,6 +26,7 @@ import {
   updateConversationStatus,
   markMessagesAsRead,
   updateConversationIsWithAI,
+  getConversationsWithLastMessage,
 } from "services/conversationsService";
 
 function Conversations() {
@@ -34,6 +35,8 @@ function Conversations() {
   const messageRefs = useRef({}); // ✅ Añade esto
   const chatPanelRef = useRef(null); // ✅ NECESARIO para limpiar parpadeo automáticamente
   const connectionRef = useRef(null);
+  const messageCache = useRef(new Map());
+
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [conversationList, setConversationList] = useState([]);
   const [openTabs, setOpenTabs] = useState([]);
@@ -66,13 +69,8 @@ function Conversations() {
 
     // ✅ 2. Actualizar el estado local de conversations
     setConversationList((prev) =>
-      prev.map((conv) =>
-        conv.id === conversationId
-          ? { ...conv, isWithAI: !newState }
-          : conv
-      )
+      prev.map((conv) => (conv.id === conversationId ? { ...conv, isWithAI: !newState } : conv))
     );
-
 
     // 🔄 3. Enviar a SignalR si aplica
     if (connectionRef.current) {
@@ -83,7 +81,6 @@ function Conversations() {
       }
     }
   };
-
 
   const handleUpdateConversationStatus = async (conversationId, newStatus) => {
     const result = await updateConversationStatus(conversationId, newStatus);
@@ -105,7 +102,7 @@ function Conversations() {
       );
     }
   };
-  
+
   useEffect(() => {
     iaPausedMapRef.current = iaPausedMap;
   }, [iaPausedMap]);
@@ -170,7 +167,13 @@ function Conversations() {
           const convId = String(msg.conversationId);
 
           setMessages((prev) => {
+            const convId = String(msg.conversationId);
             const existingMessages = prev[convId] || [];
+
+            // Buscar el mensaje al que se responde
+            const repliedMsg = msg.replyToMessageId
+              ? existingMessages.find((m) => m.id === msg.replyToMessageId)
+              : null;
 
             return {
               ...prev,
@@ -184,10 +187,22 @@ function Conversations() {
                   images: msg.images || [],
                   file: msg.file || null,
                   replyTo: msg.replyToMessageId
-                    ? {
-                      messageId: msg.replyToMessageId,
-                      text: msg.replyToText,
-                    }
+                    ? repliedMsg
+                      ? {
+                          id: repliedMsg.id,
+                          text: repliedMsg.text,
+                          fromName: repliedMsg.fromName || repliedMsg.from || "Usuario",
+                          fromRole: repliedMsg.fromRole || "user",
+                          fileName: repliedMsg.fileName ?? null,
+                          fileType: repliedMsg.fileType ?? null,
+                          fileUrl: repliedMsg.fileUrl ?? null,
+                        }
+                      : {
+                          id: msg.replyToMessageId,
+                          text: msg.replyToText || "Mensaje no disponible",
+                          fromName: "Usuario",
+                          fromRole: "user",
+                        }
                     : null,
                 },
               ],
@@ -217,7 +232,6 @@ function Conversations() {
 
             setHighlightedIds((prev) => [...new Set([...prev, convId])]);
           }
-
         });
 
         connection.on("NewConversation", (newConv) => {
@@ -274,13 +288,7 @@ function Conversations() {
       // Detenemos la conexión
       connection.stop();
     };
-  }, []); // El array vacío asegura que esto se ejecute solo una vez
-
-  useEffect(() => {
-    if (conversationList.length > 0 && !activeTab) {
-      handleSelectConversation(conversationList[0]);
-    }
-  }, [conversationList]);
+  }, []); 
 
   useEffect(() => {
     if (!activeTab) return;
@@ -321,6 +329,21 @@ function Conversations() {
     }
   }, [activeTab]);
 
+  useEffect(() => {
+    if (!userId) return;
+
+    const fetchData = async () => {
+      try {
+        const data = await getConversationsWithLastMessage(userId);
+        setConversationList(data);
+      } catch (error) {
+        console.error("Error al obtener conversaciones:", error);
+      }
+    };
+
+    fetchData();
+  }, [userId]);
+
   const handleSelectConversation = async (conv) => {
     const idStr = `${conv.id}`;
     const exists = openTabs.find((t) => t.id === idStr);
@@ -328,7 +351,7 @@ function Conversations() {
     if (!exists) {
       setOpenTabs((prev) => [
         ...prev,
-        { ...conv, id: idStr, unreadCount: 0 } // 👈 se asegura de resetear a 0 al abrirla
+        { ...conv, id: idStr, unreadCount: 0 }, // 👈 se asegura de resetear a 0 al abrirla
       ]);
 
       // 🧠 Sincroniza el estado de la IA para este tab
@@ -340,56 +363,97 @@ function Conversations() {
 
     // 👇 Establece como activa y resetea el contador también aquí por si ya estaba abierta
     setActiveTab(idStr);
-    setOpenTabs((prev) =>
-      prev.map((tab) =>
-        tab.id === idStr ? { ...tab, unreadCount: 0 } : tab
-      )
-    );
+    setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
 
-    const shouldFetchMessages = messages[idStr] === undefined;
+    const cached = messageCache.current.get(idStr);
 
-    if (shouldFetchMessages) {
+    if (cached) {
+      // ✅ Usa el cache directamente
+      setMessages((prev) => ({
+        ...prev,
+        [idStr]: cached,
+      }));
+
+      // ✅ Marca como leídos si hace falta
+      if (conv.unreadCount > 0) {
+        try {
+          await markMessagesAsRead(conv.id);
+          console.log(`📩 Mensajes marcados como leídos (cache) en conversación ${conv.id}`);
+        } catch (error) {
+          console.warn("❌ Error marcando mensajes como leídos:", error);
+        }
+      }
+
+      // ✅ Hacemos scroll al fondo
+      setTimeout(() => {
+        const container = document.getElementById("chat-container");
+        if (container) container.scrollTop = container.scrollHeight;
+      }, 100);
+    } else {
+      // ⏳ Si no hay cache, cargar desde el servidor
       setLoadingConversationId(idStr);
 
       try {
         const fetchedHistory = await getConversationHistory(conv.id);
 
         if (fetchedHistory && Array.isArray(fetchedHistory.history)) {
-          const normalized = fetchedHistory.history.map((msg) => ({
-            id: msg.id || `${idStr}-${Date.now()}`,
-            type: msg.fileType?.startsWith("image/")
-              ? "image"
-              : msg.fileUrl
-                ? "file"
-                : "message",
-            fromName: msg.fromName || msg.from || "Admin",
-            fromId: msg.fromId ?? 0,
-            fromRole: msg.fromRole || (msg.from === "user" ? "user" : "admin"),
-            text: msg.text || "",
-            timestamp: msg.timestamp,
-            fileName: msg.fileName ?? null,
-            fileType: msg.fileType ?? null,
-            fileUrl: msg.fileUrl ?? null,
-            files: msg.files ?? [],
-            images: msg.images ?? [],
-            replyTo: msg.replyTo ?? null,
-            ...msg,
-          }));
+          const normalized = fetchedHistory.history.map((msg) => {
+            const repliedMsg = fetchedHistory.history.find((m) => m.id === msg.replyToMessageId);
 
+            return {
+              id: msg.id || `${idStr}-${Date.now()}`,
+              type: msg.fileType?.startsWith("image/") ? "image" : msg.fileUrl ? "file" : "message",
+              fromName: msg.fromName || msg.from || "Admin",
+              fromId: msg.fromId ?? 0,
+              fromRole: msg.fromRole || (msg.from === "user" ? "user" : "admin"),
+              text: msg.text || "",
+              timestamp: msg.timestamp,
+              fileName: msg.fileName ?? null,
+              fileType: msg.fileType ?? null,
+              fileUrl: msg.fileUrl ?? null,
+              files: msg.files ?? [],
+              images: msg.images ?? [],
+              replyTo: msg.replyToMessageId
+                ? repliedMsg
+                  ? {
+                      id: repliedMsg.id,
+                      text: repliedMsg.text,
+                      fromName: repliedMsg.fromName || repliedMsg.from || "Usuario",
+                      fromRole: repliedMsg.fromRole || "user",
+                    }
+                  : {
+                      id: msg.replyToMessageId,
+                      text: msg.replyToText || "Mensaje no disponible",
+                      fromName: "Usuario",
+                      fromRole: "user",
+                    }
+                : null,
+              ...msg,
+            };
+          });
+
+          // ✅ Guardamos en estado y en cache
           setMessages((prev) => ({
             ...prev,
             [idStr]: normalized,
           }));
+          messageCache.current.set(idStr, normalized); // 👈 IMPORTANTE
 
-          // ✅ Marca como leídos si hay mensajes sin leer
+          // ✅ Marca como leídos si hace falta
           if (conv.unreadCount > 0) {
             try {
-              await markMessagesAsRead(conv.id); // 👈 Aquí llamas la función de backend
+              await markMessagesAsRead(conv.id);
               console.log(`📩 Mensajes marcados como leídos en conversación ${conv.id}`);
             } catch (error) {
               console.warn("❌ Error marcando mensajes como leídos:", error);
             }
           }
+
+          // ✅ Scroll al final
+          setTimeout(() => {
+            const container = document.getElementById("chat-container");
+            if (container) container.scrollTop = container.scrollHeight;
+          }, 100);
         } else {
           setMessages((prev) => ({ ...prev, [idStr]: [] }));
         }
@@ -398,16 +462,6 @@ function Conversations() {
         setMessages((prev) => ({ ...prev, [idStr]: [] }));
       } finally {
         setLoadingConversationId(null);
-      }
-    } else {
-      // ✅ Si ya tiene mensajes y se vuelve a abrir, igual marcamos como leídos
-      if (conv.unreadCount > 0) {
-        try {
-          await markMessagesAsRead(conv.id);
-          console.log(`📩 Mensajes marcados como leídos en conversación ${conv.id}`);
-        } catch (error) {
-          console.warn("❌ Error marcando mensajes como leídos:", error);
-        }
       }
     }
   };
@@ -430,8 +484,14 @@ function Conversations() {
     }
   };
 
-  const handleSendAdminMessage = async (text, conversationId, messageId, replyInfo = null) => {
-    const connection = connectionRef.current; // ✅ Usa la referencia
+  const handleSendAdminMessage = async (
+    text,
+    conversationId,
+    messageId,
+    replyToMessageId = null,
+    replyToText = null
+  ) => {
+    const connection = connectionRef.current;
     if (!connection || connection.state !== "Connected") {
       console.warn("SignalR connection not ready yet");
       return;
@@ -442,7 +502,8 @@ function Conversations() {
         "AdminMessage",
         Number(conversationId),
         text,
-        replyInfo?.replyToMessageId || null
+        replyToMessageId,
+        replyToText // 👈 aquí se añade
       );
 
       setReplyToMessage(null);
