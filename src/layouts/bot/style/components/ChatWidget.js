@@ -13,6 +13,7 @@ import voiaLogo from "assets/images/VOIA-LOGO.png";
 const voaiGif = "/VIA.png";
 
 function ChatWidget({
+  style = {},
   title = "",
   theme: initialTheme,
   primaryColor = "#000000",
@@ -23,6 +24,7 @@ function ChatWidget({
   position = "bottom-right",
   botId: propBotId,
   userId: propUserId,
+  isDemo = false,
 }) {
   const connectionRef = useRef(null);
   const botId = propBotId ?? 1;
@@ -46,6 +48,8 @@ function ChatWidget({
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
   const typingTimeoutRef = useRef(null);
+  const allowImageUpload = style.allowImageUpload ?? true;
+  const allowFileUpload = style.allowFileUpload ?? true;
 
   // 🧠 Refs para animación individual de mensajes
   const messageRefs = useRef([]);
@@ -54,7 +58,7 @@ function ChatWidget({
 
   // ✅ USEEFFECT PRINCIPAL CORREGIDO
   useEffect(() => {
-    if (!isOpen) {
+    if (isDemo || !isOpen) {
       if (connectionRef.current) {
         connectionRef.current.stop();
         connectionRef.current = null;
@@ -65,7 +69,7 @@ function ChatWidget({
     if (!connectionRef.current) {
       connectionRef.current = createHubConnection();
     }
-    
+
     const connection = connectionRef.current; // ✅ Definir connection aquí
 
     // --- Definición de Handlers (ahora con acceso a connection) ---
@@ -79,12 +83,12 @@ function ChatWidget({
       console.log("⌨️ Usuario escribiendo:", sender);
       setTypingSender(sender);
       setIsTyping(true);
-      
+
       // Limpiar timeout anterior
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      
+
       // Ocultar typing después de 3 segundos
       typingTimeoutRef.current = setTimeout(() => {
         setIsTyping(false);
@@ -123,7 +127,7 @@ function ChatWidget({
         connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
         connectionRef.current.off("Typing", handleTyping);
       }
-      
+
       // Limpiar timeout de typing
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
@@ -143,30 +147,30 @@ function ChatWidget({
     // Solo ejecutar si el widget está abierto y ya tenemos un ID de conversación
     if (isOpen && conversationId) {
       const connection = connectionRef.current; // ✅ Definir connection localmente
-      
+
       if (!connection || connection.state !== "Connected") {
         console.warn("No SignalR connection active for heartbeat.");
         return;
       }
 
       console.log(`❤️ Iniciando heartbeat para conversación ${conversationId}`);
-      
+
       // 1. Envía una señal inicial inmediata para marcar como activo
-      connection.invoke("UserIsActive", conversationId).catch(err => 
+      connection.invoke("UserIsActive", conversationId).catch(err =>
         console.error("Error en heartbeat inicial:", err)
       );
-      
+
       // 2. Configura el heartbeat para que se ejecute cada 30 segundos
       const intervalId = setInterval(() => {
         // Nos aseguramos de que la conexión siga activa antes de enviar
         const currentConnection = connectionRef.current; // ✅ Usar ref actual
         if (currentConnection && currentConnection.state === "Connected") {
-          currentConnection.invoke("UserIsActive", conversationId).catch(err => 
+          currentConnection.invoke("UserIsActive", conversationId).catch(err =>
             console.error("Error en heartbeat periódico:", err)
           );
         }
       }, 30000); // 30 segundos
-      
+
       // 3. La función de limpieza es crucial: se ejecuta si el widget se cierra o cambia el ID
       return () => {
         console.log(`💔 Deteniendo heartbeat para ${conversationId}`);
@@ -190,7 +194,7 @@ function ChatWidget({
         }
       }
     };
-    
+
     // El evento 'beforeunload' se dispara justo antes de que el usuario deje la página
     window.addEventListener("beforeunload", handlePageClose);
 
@@ -200,10 +204,47 @@ function ChatWidget({
     };
   }, [conversationId]); // Se actualiza si cambia el ID de la conversación
 
-  const sendMessage = async () => {
-    if (!message.trim() || !conversationId) return;
+  const [demoMessageCount, setDemoMessageCount] = useState(0);
+  const maxDemoMessages = 5;
 
-    const connection = connectionRef.current; // ✅ Usa la referencia
+  const sendMessage = async () => {
+    if (!message.trim()) return;
+
+    if (isDemo) {
+      if (demoMessageCount >= maxDemoMessages) {
+        setIaWarning("Límite de mensajes en modo demo alcanzado.");
+        return;
+      }
+
+      const userMsg = {
+        id: Date.now(),
+        sender: "user",
+        content: message,
+        timestamp: new Date().toISOString(),
+        type: "text",
+      };
+
+      const botMsg = {
+        id: Date.now() + 1,
+        sender: "bot",
+        content: "Respuesta simulada de la IA en modo demo.",
+        timestamp: new Date().toISOString(),
+        type: "text",
+      };
+
+      setMessages(prev => [...prev, userMsg]);
+      setMessage("");
+      setTimeout(() => {
+        setMessages(prev => [...prev, botMsg]);
+        setDemoMessageCount(prev => prev + 1);
+      }, 1000); // simula "pensamiento" de la IA
+
+      return;
+    }
+
+    // 🔽 lógica real de producción
+    if (!conversationId) return;
+    const connection = connectionRef.current;
     if (!connection || connection.state !== "Connected") {
       console.error("Error: La conexión de SignalR no está activa.");
       return;
@@ -213,11 +254,12 @@ function ChatWidget({
 
     try {
       await connection.invoke("SendMessage", conversationId, payload);
-      setMessage(""); // Limpia el input después de enviar
+      setMessage("");
     } catch (err) {
       console.error("❌ Error enviando mensaje:", err);
     }
   };
+
 
   // ✅ Configuración de temas
   const fallbackTextColor = "#1a1a1a";
@@ -346,6 +388,80 @@ function ChatWidget({
       setIsImageModalOpen(true);
     }, 10); // Pequeño delay para asegurar la limpieza
   };
+
+  useEffect(() => {
+    if (isDemo) {
+      setIsOpen(true);
+
+      if (messages.length === 0) {
+        const demoSequence = [
+          { sender: "user", content: "Hola", delay: 1000 },
+          { sender: "bot", content: "Hola, ¿en qué puedo ayudarte hoy?", delay: 2000 },
+          { sender: "user", content: "Quisiera saber en qué horario puedo acercarme a la oficina de ustedes.", delay: 2000 },
+          { sender: "bot", content: "Nuestro horario es de lunes a viernes, de 8 a.m. a 5 p.m. ¿Te gustaría agendar una cita?", delay: 2500 },
+          { sender: "user", content: "Ah, ¿pero puedo saber contigo directamente si tienen solución para X cosa?", delay: 2000 },
+          { sender: "bot", content: "Claro, puedo orientarte. Cuéntame un poco más o comparte un documento o imagen si lo necesitas.", delay: 2500 },
+          { sender: "user", content: "O sea, ¿te puedo enviar esta imagen?", delay: 2000 },
+          {
+            sender: "user",
+            content: "",
+            type: "image",
+            imageGroup: [
+              {
+                url: "https://via.placeholder.com/300x200",
+                name: "DocumentoX.jpg"
+              }
+            ],
+            delay: 1000
+          },
+          { sender: "bot", content: "Recibí tu archivo. Será revisado por un agente humano que te contactará en breve.", delay: 2000 },
+          { sender: "admin", content: "Hola, habla Juan Perdomo. Estoy viendo la imagen que acabas de enviar. Con esto ya procedemos a ayudarte con X cosa.", delay: 2500 },
+          { sender: "user", content: "Muchas gracias por la ayuda.", delay: 1500 },
+          { sender: "admin", content: "¡Con gusto! Feliz día.", delay: 1500 },
+        ];
+
+        let totalDelay = 0;
+
+        demoSequence.forEach((item, i) => {
+          totalDelay += item.delay;
+
+          // 🧠 Simula "escribiendo" antes de los mensajes del bot o admin
+          if (item.sender === "bot" || item.sender === "admin") {
+            setTimeout(() => {
+              setTypingSender(item.sender);
+              setIsTyping(true);
+            }, totalDelay - 1500); // typing visible 1.5s antes
+          }
+
+          // 📨 Mostrar el mensaje real
+          setTimeout(() => {
+            const newMsg = {
+              id: Date.now() + i,
+              from: item.sender,
+              text: item.content,
+              type: item.type || "text",
+              timestamp: new Date().toISOString(),
+              userId:
+                item.sender === "user"
+                  ? "demo-user-id"
+                  : item.sender === "bot"
+                    ? "bot-id"
+                    : "admin-id",
+              imageGroup: item.imageGroup || undefined,
+              files: item.files || undefined,
+            };
+
+            setMessages((prev) => [...prev, newMsg]);
+            setIsTyping(false);
+            setTypingSender(null);
+          }, totalDelay);
+        });
+
+      }
+    }
+  }, [isDemo]);
+
+  const isInputDisabled = isDemo;
 
   return (
     <div style={wrapperStyle}>
@@ -519,6 +635,7 @@ function ChatWidget({
 
           {/* 📝 Input + Adjuntar + Enviar */}
           <InputArea
+            key={`${style.allowImageUpload}-${style.allowFileUpload}`} // 🔄 Forzar re-render al cambiar los switches
             inputText={inputText}
             inputBg={inputBg}
             inputBorder={inputBorder}
@@ -530,7 +647,12 @@ function ChatWidget({
             connectionRef={connectionRef}
             conversationId={conversationId}
             userId={userId}
+            isInputDisabled={isDemo}
+            allowImageUpload={style.allowImageUpload}
+            allowFileUpload={style.allowFileUpload}
           />
+
+
 
           <div
             style={{
@@ -548,7 +670,6 @@ function ChatWidget({
           >
             © {new Date().getFullYear()}{" "}
             <b style={{ color: primaryColor, display: "flex", alignItems: "center", gap: "4px" }}>
-              VIA
               <img
                 src={voiaLogo}
                 alt="Logo VIA"
@@ -574,6 +695,7 @@ function ChatWidget({
 // ✅ PropTypes
 ChatWidget.propTypes = {
   botId: PropTypes.number.isRequired,
+  style: PropTypes.object,
   userId: PropTypes.number.isRequired,
   title: PropTypes.string,
   theme: PropTypes.oneOf(["light", "dark", "custom"]).isRequired,
@@ -582,6 +704,7 @@ ChatWidget.propTypes = {
   headerBackgroundColor: PropTypes.string,
   fontFamily: PropTypes.string,
   avatarUrl: PropTypes.string,
+  isDemo: PropTypes.bool,
   position: PropTypes.oneOf([
     "bottom-right",
     "bottom-left",

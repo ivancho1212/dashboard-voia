@@ -3,10 +3,18 @@ import PropTypes from "prop-types";
 
 function MessageBubble({ message, index, messageRef, fontFamily, openImageModal }) {
   const isUser = message.from === "user";
+  const isAI = message.from === "ai";
+  const isAdmin = message.from === "admin";
 
   const containerStyle = {
     alignSelf: isUser ? "flex-end" : "flex-start",
-    backgroundColor: isUser ? "#e1f0ff" : "#f0f0f0",
+    backgroundColor: isUser
+      ? "#e1f0ff"     // Azul claro (usuario)
+      : isAI
+      ? "#f5eaff"     // Lila suave (IA)
+      : isAdmin
+      ? "#e9fce9"     // Verde claro (admin)
+      : "#f0f0f0",    // Por defecto
     color: "#1a1a1a",
     padding: "10px",
     borderRadius: "12px",

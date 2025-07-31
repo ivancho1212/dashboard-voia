@@ -12,9 +12,12 @@ const InputArea = ({
   setMessage,
   textareaRef,
   sendMessage,
-  connectionRef, // ✅ CAMBIÉ: connection -> connectionRef
+  connectionRef,
   conversationId,
+  isInputDisabled,
   userId,
+  allowImageUpload = true,
+  allowFileUpload = true,
 }) => {
   const autoResizeTextarea = () => {
     const textarea = textareaRef.current;
@@ -34,7 +37,6 @@ const InputArea = ({
     const images = files.filter(isImage);
     const documents = files.filter((file) => !isImage(file));
 
-    // ✅ AGREGUÉ: Obtener connection de la referencia
     const connection = connectionRef.current;
     if (!connection || connection.state !== "Connected") {
       console.error("❌ No hay conexión SignalR activa para subir archivos");
@@ -85,58 +87,66 @@ const InputArea = ({
       }}
     >
       {/* 📎 Adjuntar documentos */}
-      <label
-        style={{
-          position: "absolute",
-          left: "20px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          cursor: "pointer",
-        }}
-      >
-        <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
-        <input
-          type="file"
-          name="document"
-          accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.xlsx,.csv,.zip"
-          style={{ display: "none" }}
-          onChange={handleUpload}
-        />
-      </label>
+      {allowFileUpload && (
+        <label
+          style={{
+            position: "absolute",
+            left: "20px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            cursor: isInputDisabled ? "not-allowed" : "pointer",
+          }}
+        >
+          <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
+          {!isInputDisabled && (
+            <input
+              type="file"
+              name="document"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.xlsx,.csv,.zip"
+              style={{ display: "none" }}
+              onChange={handleUpload}
+            />
+          )}
+        </label>
+      )}
 
       {/* 🖼️ Subir imágenes múltiples */}
-      <label
-        style={{
-          position: "absolute",
-          left: "50px",
-          top: "50%",
-          transform: "translateY(-50%)",
-          cursor: "pointer",
-        }}
-      >
-        <FaImage style={{ color: inputText, fontSize: "18px" }} />
-        <input
-          type="file"
-          name="image"
-          accept="image/*"
-          multiple
-          style={{ display: "none" }}
-          onChange={handleUpload}
-        />
-      </label>
+      {allowImageUpload && (
+        <label
+          style={{
+            position: "absolute",
+            left: "50px",
+            top: "50%",
+            transform: "translateY(-50%)",
+            cursor: isInputDisabled ? "not-allowed" : "pointer",
+          }}
+        >
+          <FaImage style={{ color: inputText, fontSize: "18px" }} />
+          {!isInputDisabled && (
+            <input
+              type="file"
+              name="image"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              onChange={handleUpload}
+            />
+          )}
+        </label>
+      )}
 
       {/* 📝 Textarea */}
       <textarea
         ref={textareaRef}
-        placeholder="Escribe un mensaje..."
+        placeholder={isInputDisabled ? "Modo demo activo: no puedes escribir." : "Escribe un mensaje..."}
         value={message}
+        disabled={isInputDisabled}
         onChange={async (e) => {
           const text = e.target.value;
           setMessage(text);
           autoResizeTextarea();
 
           if (text.trim()) {
-            // ✅ CORREGÍ: Usar connectionRef.current
             const connection = connectionRef.current;
             if (connection && connection.state === "Connected") {
               try {
@@ -148,6 +158,8 @@ const InputArea = ({
           }
         }}
         onKeyDown={(e) => {
+          if (isInputDisabled) return;
+
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
@@ -171,7 +183,7 @@ const InputArea = ({
           fontFamily,
           fontSize: "14px",
           outline: "none",
-          color: inputText,
+          color: "#000",
           backgroundColor: inputBg,
           resize: "none",
           boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
@@ -181,7 +193,7 @@ const InputArea = ({
 
       {/* 🚀 Icono de enviar */}
       <FaPaperPlane
-        onClick={sendMessage}
+        onClick={!isInputDisabled ? sendMessage : undefined}
         style={{
           position: "absolute",
           right: "20px",
@@ -189,7 +201,7 @@ const InputArea = ({
           transform: "translateY(-50%)",
           color: inputText,
           fontSize: "18px",
-          cursor: "pointer",
+          cursor: isInputDisabled ? "not-allowed" : "pointer",
         }}
       />
     </div>
@@ -205,9 +217,12 @@ InputArea.propTypes = {
   setMessage: PropTypes.func.isRequired,
   textareaRef: PropTypes.object.isRequired,
   sendMessage: PropTypes.func.isRequired,
-  connectionRef: PropTypes.object, // ✅ CAMBIÉ: connection -> connectionRef
+  connectionRef: PropTypes.object,
   conversationId: PropTypes.string,
   userId: PropTypes.string,
+  isInputDisabled: PropTypes.bool,
+  allowImageUpload: PropTypes.bool,
+  allowFileUpload: PropTypes.bool,
 };
 
 export default InputArea;

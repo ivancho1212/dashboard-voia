@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import PropTypes from "prop-types";
 import { SketchPicker } from "react-color";
 
@@ -10,6 +10,10 @@ import SoftButton from "components/SoftButton";
 
 import AvatarUploader from "./AvatarUploader";
 import SaveApplyButtons from "./SaveApplyButtons";
+
+import Switch from "@mui/material/Switch";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import TextField from "@mui/material/TextField";
 
 export default function StyleEditor({
   style,
@@ -24,24 +28,40 @@ export default function StyleEditor({
   const [showPrimaryPicker, setShowPrimaryPicker] = useState(false);
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
   const [showHeaderBgPicker, setShowHeaderBgPicker] = useState(false);
-
-  const closePickers = () => {
-    setShowPrimaryPicker(false);
-    setShowSecondaryPicker(false);
-    setShowHeaderBgPicker(false);
-  };
+  const primaryRef = useRef(null);
+  const secondaryRef = useRef(null);
+  const headerRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (!e.target.closest(".color-picker")) {
-        closePickers();
+    function handleClickOutside(event) {
+      if (
+        showPrimaryPicker &&
+        primaryRef.current &&
+        !primaryRef.current.contains(event.target)
+      ) {
+        setShowPrimaryPicker(false);
       }
-    };
+
+      if (
+        showSecondaryPicker &&
+        secondaryRef.current &&
+        !secondaryRef.current.contains(event.target)
+      ) {
+        setShowSecondaryPicker(false);
+      }
+
+      if (
+        showHeaderBgPicker &&
+        headerRef.current &&
+        !headerRef.current.contains(event.target)
+      ) {
+        setShowHeaderBgPicker(false);
+      }
+    }
+
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-  // 👉 Añade este inmediatamente después:
-  useEffect(() => {}, [style]);
+  }, [showPrimaryPicker, showSecondaryPicker, showHeaderBgPicker]);
 
   const handleSelectChange = (name) => (e) => {
     const value = e.target.value;
@@ -78,6 +98,15 @@ export default function StyleEditor({
       <SoftBox mb={2}>
         <AvatarUploader style={style} setStyle={setStyle} />
       </SoftBox>
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption">Nombre del widget</SoftTypography>
+        <TextField
+          fullWidth
+          placeholder="Ej. Asistente virtual"
+          value={style.title || ""}
+          onChange={(e) => setStyle((prev) => ({ ...prev, title: e.target.value }))}
+        />
+      </SoftBox>
 
       <SoftBox mb={2}>
         <SoftTypography variant="caption">Tema</SoftTypography>
@@ -103,7 +132,7 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              bgcolor={style.primaryColor || "#000000"}
+              sx={{ backgroundColor: style.primaryColor || "#000000" }}
               border="1px solid #ccc"
               borderRadius="8px"
             />
@@ -123,7 +152,11 @@ export default function StyleEditor({
             )}
           </SoftBox>
           {showPrimaryPicker && (
-            <div className="color-picker" style={{ position: "relative", marginTop: "8px" }}>
+            <div
+              ref={primaryRef}
+              className="color-picker"
+              style={{ position: "relative", marginTop: "8px" }}
+            >
               <SketchPicker
                 color={style.primaryColor}
                 onChangeComplete={(color) =>
@@ -131,26 +164,10 @@ export default function StyleEditor({
                 }
                 disableAlpha
               />
-              <SoftButton
-                onClick={() => setShowPrimaryPicker(false)}
-                size="small"
-                color="error"
-                style={{
-                  position: "absolute",
-                  top: "-8px",
-                  right: "22px",
-                  minWidth: "32px",
-                  height: "32px",
-                  padding: 0,
-                  fontSize: "14px",
-                  zIndex: 10,
-                  borderRadius: "50%",
-                }}
-              >
-                ✕
-              </SoftButton>
+
             </div>
           )}
+
         </SoftBox>
 
         {/* Color de fondo del widget */}
@@ -160,7 +177,7 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              bgcolor={style.secondaryColor || "#ffffff"}
+              sx={{ backgroundColor: style.secondaryColor || "#ffffff" }}
               border="1px solid #ccc"
               borderRadius="8px"
             />
@@ -180,7 +197,11 @@ export default function StyleEditor({
             )}
           </SoftBox>
           {showSecondaryPicker && (
-            <div className="color-picker" style={{ position: "relative", marginTop: "8px" }}>
+            <div
+              ref={secondaryRef}
+              className="color-picker"
+              style={{ position: "relative", marginTop: "8px" }}
+            >
               <SketchPicker
                 color={style.secondaryColor}
                 onChangeComplete={(color) =>
@@ -188,26 +209,10 @@ export default function StyleEditor({
                 }
                 disableAlpha
               />
-              <SoftButton
-                onClick={() => setShowSecondaryPicker(false)}
-                size="small"
-                color="error"
-                style={{
-                  position: "absolute",
-                  top: "-8px",
-                  right: "22px",
-                  minWidth: "32px",
-                  height: "32px",
-                  padding: 0,
-                  fontSize: "14px",
-                  zIndex: 10,
-                  borderRadius: "50%",
-                }}
-              >
-                ✕
-              </SoftButton>
+
             </div>
           )}
+
         </SoftBox>
 
         {/* Color de fondo del header */}
@@ -217,7 +222,7 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              bgcolor={style.headerBackgroundColor || "#f5f5f5"}
+              sx={{ backgroundColor: style.headerBackgroundColor || "#f5f5f5" }}
               border="1px solid #ccc"
               borderRadius="8px"
             />
@@ -237,7 +242,11 @@ export default function StyleEditor({
             )}
           </SoftBox>
           {showHeaderBgPicker && (
-            <div className="color-picker" style={{ position: "relative", marginTop: "8px" }}>
+            <div
+              ref={headerRef}
+              className="color-picker"
+              style={{ position: "relative", marginTop: "8px" }}
+            >
               <SketchPicker
                 color={style.headerBackgroundColor || "#f5f5f5"}
                 onChangeComplete={(color) =>
@@ -245,26 +254,10 @@ export default function StyleEditor({
                 }
                 disableAlpha
               />
-              <SoftButton
-                onClick={() => setShowHeaderBgPicker(false)}
-                size="small"
-                color="error"
-                style={{
-                  position: "absolute",
-                  top: "-8px",
-                  right: "22px",
-                  minWidth: "32px",
-                  height: "32px",
-                  padding: 0,
-                  fontSize: "14px",
-                  zIndex: 10,
-                  borderRadius: "50%",
-                }}
-              >
-                ✕
-              </SoftButton>
+
             </div>
           )}
+
         </SoftBox>
       </SoftBox>
 
@@ -315,6 +308,65 @@ export default function StyleEditor({
             ))}
           </SoftSelect>
         </SoftBox>
+      </SoftBox>
+
+      <SoftBox mb={2}>
+        <SoftTypography variant="button" fontWeight="bold" color="text" style={{ fontSize: "0.85rem" }}>
+          Opciones de carga: puedes habilitar o deshabilitar los campos de imágenes y documentos
+        </SoftTypography>
+      </SoftBox>
+
+      <SoftBox mb={3} ml={2} display="flex" gap={3}>
+        <FormControlLabel
+          labelPlacement="end"
+          control={
+            <Switch
+              checked={style.allowImageUpload ?? true}
+              onChange={(e) =>
+                setStyle((prev) => ({ ...prev, allowImageUpload: e.target.checked }))
+              }
+              color="info" // asegúrate de que "info" esté definido en el theme
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: '#00bcd4', // color info personalizado
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: '#00bcd4',
+                },
+              }}
+            />
+          }
+          label={
+            <SoftTypography style={{ fontSize: "0.75rem" }}>
+              Permitir carga de imágenes
+            </SoftTypography>
+          }
+        />
+        <FormControlLabel
+          labelPlacement="end"
+          control={
+            <Switch
+              checked={style.allowFileUpload ?? true}
+              onChange={(e) =>
+                setStyle((prev) => ({ ...prev, allowFileUpload: e.target.checked }))
+              }
+              color="info"
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: '#00bcd4',
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: '#00bcd4',
+                },
+              }}
+            />
+          }
+          label={
+            <SoftTypography style={{ fontSize: "0.75rem" }}>
+              Permitir carga de archivos
+            </SoftTypography>
+          }
+        />
       </SoftBox>
 
       <SaveApplyButtons

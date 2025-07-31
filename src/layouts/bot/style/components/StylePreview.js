@@ -5,10 +5,12 @@ import ChatWidget from "./ChatWidget";
 const DEFAULT_AVATAR = "/VIA.png";
 
 export default function StylePreview({ style }) {
-
   return (
     <div>
       <ChatWidget
+        botId={1}
+        userId={9999}
+        style={style}
         theme={style?.theme}
         primaryColor={style?.primaryColor}
         secondaryColor={style?.secondaryColor}
@@ -16,6 +18,9 @@ export default function StylePreview({ style }) {
         fontFamily={style?.fontFamily}
         avatarUrl={style?.avatarUrl?.trim() ? style.avatarUrl : DEFAULT_AVATAR}
         position={style?.position}
+        isDemo={true} // ✅ AÑADIDO
+        allowImageUpload={style?.allowImageUpload}
+        allowFileUpload={style?.allowFileUpload}
       />
     </div>
   );
@@ -29,6 +34,8 @@ StylePreview.propTypes = {
     headerBackgroundColor: PropTypes.string,
     fontFamily: PropTypes.string,
     avatarUrl: PropTypes.string,
+    allowImageUpload: PropTypes.bool,
+    allowFileUpload: PropTypes.bool,
     position: PropTypes.oneOf([
       "bottom-right",
       "bottom-left",
