@@ -98,7 +98,6 @@ export default function StyleEditor({
       <SoftBox mb={2}>
         <AvatarUploader style={style} setStyle={setStyle} />
       </SoftBox>
-      
       <SoftBox mb={2}>
         <SoftTypography variant="caption">Nombre del widget</SoftTypography>
         <TextField
@@ -322,7 +321,7 @@ export default function StyleEditor({
           labelPlacement="end"
           control={
             <Switch
-              checked={style.allowImageUpload ?? true}
+              checked={!!style.allowImageUpload}
               onChange={(e) =>
                 setStyle((prev) => ({ ...prev, allowImageUpload: e.target.checked }))
               }
@@ -347,7 +346,7 @@ export default function StyleEditor({
           labelPlacement="end"
           control={
             <Switch
-              checked={style.allowFileUpload ?? true}
+              checked={!!style.allowFileUpload}
               onChange={(e) =>
                 setStyle((prev) => ({ ...prev, allowFileUpload: e.target.checked }))
               }

@@ -16,9 +16,10 @@ const InputArea = ({
   conversationId,
   isInputDisabled,
   userId,
-  allowImageUpload = true,
-  allowFileUpload = true,
+  allowImageUpload,
+  allowFileUpload,
 }) => {
+
   const autoResizeTextarea = () => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -86,59 +87,57 @@ const InputArea = ({
         padding: "10px 10px",
       }}
     >
-      {/* 📎 Adjuntar documentos */}
-      {allowFileUpload && (
-        <label
+      {(allowImageUpload || allowFileUpload) && (
+        <div
           style={{
+            display: "flex",
+            gap: "10px",
             position: "absolute",
             left: "20px",
             top: "50%",
             transform: "translateY(-50%)",
-            cursor: isInputDisabled ? "not-allowed" : "pointer",
           }}
         >
-          <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
-          {!isInputDisabled && (
-            <input
-              type="file"
-              name="document"
-              accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.xlsx,.csv,.zip"
-              style={{ display: "none" }}
-              onChange={handleUpload}
-            />
+          {allowFileUpload && (
+            <label style={{ cursor: isInputDisabled ? "not-allowed" : "pointer" }}>
+              <FaPaperclip
+                style={{ color: inputText, fontSize: "18px", }}
+              />
+              <input
+                type="file"
+                name="document"
+                accept=".pdf,.doc,.docx,.ppt,.pptx,.txt,.xlsx"
+                style={{ display: "none" }}
+                onChange={handleUpload}
+                disabled={isInputDisabled}
+              />
+            </label>
           )}
-        </label>
-      )}
-
-      {/* 🖼️ Subir imágenes múltiples */}
-      {allowImageUpload && (
-        <label
-          style={{
-            position: "absolute",
-            left: "50px",
-            top: "50%",
-            transform: "translateY(-50%)",
-            cursor: isInputDisabled ? "not-allowed" : "pointer",
-          }}
-        >
-          <FaImage style={{ color: inputText, fontSize: "18px" }} />
-          {!isInputDisabled && (
-            <input
-              type="file"
-              name="image"
-              accept="image/*"
-              multiple
-              style={{ display: "none" }}
-              onChange={handleUpload}
-            />
+          {allowImageUpload && (
+            <label style={{ cursor: isInputDisabled ? "not-allowed" : "pointer" }}>
+              <FaImage
+                style={{ color: inputText, fontSize: "18px", }}
+              />
+              <input
+                type="file"
+                name="image"
+                accept="image/*"
+                multiple
+                style={{ display: "none" }}
+                onChange={handleUpload}
+                disabled={isInputDisabled}
+              />
+            </label>
           )}
-        </label>
+        </div>
       )}
 
       {/* 📝 Textarea */}
       <textarea
         ref={textareaRef}
-        placeholder={isInputDisabled ? "Modo demo activo: no puedes escribir." : "Escribe un mensaje..."}
+        placeholder={
+          isInputDisabled ? "Modo demo activo: no puedes escribir." : "Escribe un mensaje..."
+        }
         value={message}
         disabled={isInputDisabled}
         onChange={async (e) => {

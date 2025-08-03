@@ -77,11 +77,27 @@ function BotStylePage() {
       setLoading(false);
     }
   };
-
+  const normalizeStyle = (style) => ({
+    id: style.id,
+    user_id: style.userId,
+    theme: style.theme,
+    primary_color: style.primaryColor,
+    secondary_color: style.secondaryColor,
+    font_family: style.fontFamily,
+    avatar_url: style.avatarUrl || "",
+    position: style.position,
+    custom_css: style.customCss || "",
+    name: style.name || "",
+    title: style.title || "",
+    allow_image_upload: style.allowImageUpload ?? true,
+    allow_file_upload: style.allowFileUpload ?? true,
+    header_background_color: style.headerBackgroundColor || "#f5f5f5",
+  });
+  
   useEffect(() => {
     fetchBotAndStyles();
   }, [botId]);
-
+  
   const onTabChange = (_, newVal) => {
     setActiveTab(newVal);
     if (newVal === 0) {
@@ -172,7 +188,11 @@ function BotStylePage() {
       position: style.position,
       custom_css: style.customCss || "",
       name: style.name || "",
-    };
+      title: style.title || "",
+      allow_image_upload: style.allowImageUpload ?? true,
+      allow_file_upload: style.allowFileUpload ?? true,
+      header_background_color: style.headerBackgroundColor
+    };    
 
     setStyleEditing(normalizedStyle);
     setViewMode("edit");
@@ -206,13 +226,16 @@ function BotStylePage() {
   };
 
   const styleToPreview =
-    viewMode === "edit" || viewMode === "create" ? styleEditing : selectedStyle || null;
+  viewMode === "edit" || viewMode === "create"
+    ? styleEditing
+    : selectedStyle
+    ? normalizeStyle(selectedStyle)
+    : null;
 
   const handleContinue = () => {
     navigate("/bots/integration");
   };
-
-
+  
   return (
     <DashboardLayout>
       <DashboardNavbar />

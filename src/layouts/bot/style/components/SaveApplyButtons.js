@@ -36,6 +36,7 @@ export default function SaveApplyButtons({
 
   const saveStyle = async (styleData, isUpdate = false) => {
     const apiUrl = "http://localhost:5006/api/BotStyles";
+    console.log("🚀 ENVIANDO AL BACKEND:", JSON.stringify(styleData, null, 2));
 
     try {
       setLoading(true);
@@ -61,9 +62,14 @@ export default function SaveApplyButtons({
 
   const handleSave = () => {
     if (isEditMode) {
+      console.log("STYLE EN handleSave:", style); // 👈 agrega esto
+
       const updatedStyle = {
         userId,
         name: style.name,
+        title: style.title || "",
+        allowImageUpload: style.allowImageUpload,
+        allowFileUpload: style.allowFileUpload,
         theme: style.theme,
         primaryColor: style.primary_color,
         secondaryColor: style.secondary_color,
@@ -71,6 +77,7 @@ export default function SaveApplyButtons({
         avatarUrl: style.avatar_url,
         position: style.position,
         customCss: style.custom_css,
+        headerBackgroundColor: style.headerBackgroundColor, // ✅ AGREGA ESTO
       };
 
       saveStyle(updatedStyle, true);
@@ -84,10 +91,14 @@ export default function SaveApplyButtons({
       alert("Por favor, ingresa un nombre para el estilo.");
       return;
     }
+    console.log("STYLE EN handleConfirmSave:", style); // 👈 agrega esto
 
     const newStyle = {
       userId,
       name: styleName,
+      title: style.title || "",
+      allowImageUpload: style.allowImageUpload ?? false,
+      allowFileUpload: style.allowFileUpload ?? false,
       theme: style.theme,
       primaryColor: style.primary_color,
       secondaryColor: style.secondary_color,
@@ -95,6 +106,7 @@ export default function SaveApplyButtons({
       avatarUrl: style.avatar_url,
       position: style.position,
       customCss: style.custom_css,
+      headerBackgroundColor: style.headerBackgroundColor, // ✅ AGREGA ESTO
     };
 
     await saveStyle(newStyle, false);

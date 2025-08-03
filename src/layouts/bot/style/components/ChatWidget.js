@@ -18,7 +18,7 @@ function ChatWidget({
   theme: initialTheme,
   primaryColor = "#000000",
   secondaryColor = "#ffffff",
-  headerBackgroundColor = "#f5f5f5",
+  headerBackgroundColor,
   fontFamily = "Arial",
   avatarUrl,
   position = "bottom-right",
@@ -29,6 +29,13 @@ function ChatWidget({
   const connectionRef = useRef(null);
   const botId = propBotId ?? 1;
   const userId = propUserId ?? 45;
+  // ✅ Normalizar posibles claves con guión bajo
+  const normalizedStyle = {
+    ...style,
+    headerBackgroundColor: style.headerBackgroundColor || style.header_background_color,
+    allowImageUpload: style.allowImageUpload ?? style.allow_image_upload,
+    allowFileUpload: style.allowFileUpload ?? style.allow_file_upload,
+  };
 
   const [isOpen, setIsOpen] = useState(false);
   const themeKey = initialTheme || "light";
@@ -48,8 +55,8 @@ function ChatWidget({
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
   const typingTimeoutRef = useRef(null);
-  const allowImageUpload = style.allowImageUpload ?? true;
-  const allowFileUpload = style.allowFileUpload ?? true;
+  const allowImageUpload = normalizedStyle.allowImageUpload ?? true;
+  const allowFileUpload = normalizedStyle.allowFileUpload ?? true;
 
   // 🧠 Refs para animación individual de mensajes
   const messageRefs = useRef([]);
@@ -75,7 +82,7 @@ function ChatWidget({
     // --- Definición de Handlers (ahora con acceso a connection) ---
     const handleReceiveMessage = (msg) => {
       console.log("📩 Mensaje recibido:", msg);
-      setMessages(prev => [...prev, msg]);
+      setMessages((prev) => [...prev, msg]);
       setIsTyping(false);
     };
 
@@ -113,7 +120,6 @@ function ChatWidget({
 
         connection.on("ReceiveMessage", handleReceiveMessage);
         connection.on("Typing", handleTyping);
-
       } catch (err) {
         console.error("❌ Error conectando a SignalR en Widget:", err);
       }
@@ -156,18 +162,18 @@ function ChatWidget({
       console.log(`❤️ Iniciando heartbeat para conversación ${conversationId}`);
 
       // 1. Envía una señal inicial inmediata para marcar como activo
-      connection.invoke("UserIsActive", conversationId).catch(err =>
-        console.error("Error en heartbeat inicial:", err)
-      );
+      connection
+        .invoke("UserIsActive", conversationId)
+        .catch((err) => console.error("Error en heartbeat inicial:", err));
 
       // 2. Configura el heartbeat para que se ejecute cada 30 segundos
       const intervalId = setInterval(() => {
         // Nos aseguramos de que la conexión siga activa antes de enviar
         const currentConnection = connectionRef.current; // ✅ Usar ref actual
         if (currentConnection && currentConnection.state === "Connected") {
-          currentConnection.invoke("UserIsActive", conversationId).catch(err =>
-            console.error("Error en heartbeat periódico:", err)
-          );
+          currentConnection
+            .invoke("UserIsActive", conversationId)
+            .catch((err) => console.error("Error en heartbeat periódico:", err));
         }
       }, 30000); // 30 segundos
 
@@ -232,11 +238,11 @@ function ChatWidget({
         type: "text",
       };
 
-      setMessages(prev => [...prev, userMsg]);
+      setMessages((prev) => [...prev, userMsg]);
       setMessage("");
       setTimeout(() => {
-        setMessages(prev => [...prev, botMsg]);
-        setDemoMessageCount(prev => prev + 1);
+        setMessages((prev) => [...prev, botMsg]);
+        setDemoMessageCount((prev) => prev + 1);
       }, 1000); // simula "pensamiento" de la IA
 
       return;
@@ -259,7 +265,6 @@ function ChatWidget({
       console.error("❌ Error enviando mensaje:", err);
     }
   };
-
 
   // ✅ Configuración de temas
   const fallbackTextColor = "#1a1a1a";
@@ -293,10 +298,7 @@ function ChatWidget({
         primaryColor.toLowerCase() === secondaryColor.toLowerCase()
           ? fallbackBgColor
           : secondaryColor,
-      headerBackground:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackBgColor
-          : secondaryColor,
+      headerBackground: headerBackgroundColor?.trim() || secondaryColor,
       textColor:
         primaryColor.toLowerCase() === secondaryColor.toLowerCase()
           ? fallbackTextColor
@@ -319,10 +321,18 @@ function ChatWidget({
     },
   };
 
-  const { backgroundColor, textColor, headerBackground, inputBg, inputText, inputBorder } =
-    themeConfig[themeKey] || themeConfig.light;
+  const themeDefaults = themeConfig[themeKey] || themeConfig.light;
 
-  // ✅ Calcular color de texto del header según fondo
+  const headerBackground = normalizedStyle.headerBackgroundColor?.trim()
+    ? normalizedStyle.headerBackgroundColor
+    : themeDefaults.headerBackground;
+
+  const backgroundColor = themeDefaults.backgroundColor;
+  const textColor = themeDefaults.textColor;
+  const inputBg = themeDefaults.inputBg;
+  const inputText = themeDefaults.inputText;
+  const inputBorder = themeDefaults.inputBorder;
+
   const isColorDark = (hexColor) => {
     if (!hexColor) return false;
     const color = hexColor.replace("#", "");
@@ -333,8 +343,7 @@ function ChatWidget({
     return luminance < 0.5;
   };
 
-  const headerBg = headerBackgroundColor || headerBackground;
-  const headerTextColor = isColorDark(headerBg) ? "#ffffff" : "#000000";
+  const headerTextColor = isColorDark(headerBackground) ? "#ffffff" : "#000000";
 
   // ✅ Estilos
   const widgetStyle = {
@@ -390,77 +399,101 @@ function ChatWidget({
   };
 
   useEffect(() => {
-    if (isDemo) {
-      setIsOpen(true);
-
-      if (messages.length === 0) {
-        const demoSequence = [
-          { sender: "user", content: "Hola", delay: 2000 },
-          { sender: "bot", content: "Hola, ¿en qué puedo ayudarte hoy?", delay: 3000 },
-          { sender: "user", content: "Quisiera saber en qué horario puedo acercarme a la oficina de ustedes.", delay: 3000 },
-          { sender: "bot", content: "Nuestro horario es de lunes a viernes, de 8 a.m. a 5 p.m. ¿Te gustaría agendar una cita?", delay: 3500 },
-          { sender: "user", content: "Ah, ok ¿pero puedo saber contigo directamente si tienen solución para el arreglo de este logo?", delay: 3000 },
-          { sender: "bot", content: "Claro, puedo orientarte. Cuéntame un poco más o comparte la imagen del logo que necesitas arreglar", delay: 3500 },
-          { sender: "user", content: "O sea, ¿te puedo enviar esta imagen?", delay: 3000 },
-          {
-            sender: "user",
-            content: "",
-            type: "image",
-            imageGroup: [
-              {
-                url: "public/VIA.png",
-                name: "logo-via.png"
-              }
-            ],
-            delay: 2000
-          },
-          { sender: "bot", content: "Recibí tu archivo. Será revisado por un Usuario administrativo que te contactará en breve.", delay: 3000 },
-          { sender: "admin", content: "Hola, habla Jeronimo Herrera. Estoy viendo la imagen que acabas de enviar. Con esto ya procedemos a ayudarte con la correción del logo", delay: 3500 },
-          { sender: "user", content: "Muchas gracias por la ayuda.", delay: 2500 },
-          { sender: "admin", content: "¡Con gusto! Feliz día.", delay: 2500 },
-        ];
-
-        let totalDelay = 0;
-
-        demoSequence.forEach((item, i) => {
-          totalDelay += item.delay;
-
-          // 🧠 Simula "escribiendo" antes de los mensajes del bot o admin
-          if (item.sender === "bot" || item.sender === "admin") {
-            setTimeout(() => {
-              setTypingSender(item.sender);
-              setIsTyping(true);
-            }, totalDelay - 1500); // typing visible 1.5s antes
-          }
-
-          // 📨 Mostrar el mensaje real
+    if (isDemo && messages.length === 0 && isOpen) {
+      const demoSequence = [
+        { sender: "user", content: "Hola", delay: 2000 },
+        { sender: "bot", content: "Hola, ¿en qué puedo ayudarte hoy?", delay: 3000 },
+        {
+          sender: "user",
+          content: "Quisiera saber en qué horario puedo acercarme a la oficina de ustedes.",
+          delay: 3000,
+        },
+        {
+          sender: "bot",
+          content:
+            "Nuestro horario es de lunes a viernes, de 8 a.m. a 5 p.m. ¿Te gustaría agendar una cita?",
+          delay: 3500,
+        },
+        {
+          sender: "user",
+          content:
+            "Ah, ok ¿pero puedo saber contigo directamente si tienen solución para el arreglo de este logo?",
+          delay: 3000,
+        },
+        {
+          sender: "bot",
+          content:
+            "Claro, puedo orientarte. Cuéntame un poco más o comparte la imagen del logo que necesitas arreglar",
+          delay: 3500,
+        },
+        { sender: "user", content: "O sea, ¿te puedo enviar esta imagen?", delay: 3000 },
+        {
+          sender: "user",
+          content: "",
+          type: "image",
+          imageGroup: [
+            {
+              url: "public/VIA.png",
+              name: "logo-via.png",
+            },
+          ],
+          delay: 2000,
+        },
+        {
+          sender: "bot",
+          content:
+            "Recibí tu archivo. Será revisado por un Usuario administrativo que te contactará en breve.",
+          delay: 3000,
+        },
+        {
+          sender: "admin",
+          content:
+            "Hola, habla Jeronimo Herrera. Estoy viendo la imagen que acabas de enviar. Con esto ya procedemos a ayudarte con la correción del logo",
+          delay: 3500,
+        },
+        { sender: "user", content: "Muchas gracias por la ayuda.", delay: 2500 },
+        { sender: "admin", content: "¡Con gusto! Feliz día.", delay: 2500 },
+      ];
+  
+      let totalDelay = 0;
+  
+      demoSequence.forEach((item, i) => {
+        totalDelay += item.delay;
+  
+        // 🧠 Simula "escribiendo" antes de los mensajes del bot o admin
+        if (item.sender === "bot" || item.sender === "admin") {
           setTimeout(() => {
-            const newMsg = {
-              id: Date.now() + i,
-              from: item.sender,
-              text: item.content,
-              type: item.type || "text",
-              timestamp: new Date().toISOString(),
-              userId:
-                item.sender === "user"
-                  ? "demo-user-id"
-                  : item.sender === "bot"
-                    ? "bot-id"
-                    : "admin-id",
-              imageGroup: item.imageGroup || undefined,
-              files: item.files || undefined,
-            };
-
-            setMessages((prev) => [...prev, newMsg]);
-            setIsTyping(false);
-            setTypingSender(null);
-          }, totalDelay);
-        });
-
-      }
+            setTypingSender(item.sender);
+            setIsTyping(true);
+          }, totalDelay - 1500);
+        }
+  
+        // 📨 Mostrar el mensaje real
+        setTimeout(() => {
+          const newMsg = {
+            id: Date.now() + i,
+            from: item.sender,
+            text: item.content,
+            type: item.type || "text",
+            timestamp: new Date().toISOString(),
+            userId:
+              item.sender === "user"
+                ? "demo-user-id"
+                : item.sender === "bot"
+                ? "bot-id"
+                : "admin-id",
+            imageGroup: item.imageGroup || undefined,
+            files: item.files || undefined,
+          };
+  
+          setMessages((prev) => [...prev, newMsg]);
+          setIsTyping(false);
+          setTypingSender(null);
+        }, totalDelay);
+      });
     }
-  }, [isDemo]);
-
+  }, [isDemo, isOpen, messages.length]);
+  
   const isInputDisabled = isDemo;
 
   return (
@@ -471,7 +504,7 @@ function ChatWidget({
           onClick={() => setIsOpen(true)}
           aria-label="Abrir chat"
           style={{
-            backgroundColor: headerBackgroundColor,
+            backgroundColor: headerBackground,
             borderRadius: "50%",
             width: "80px",
             height: "80px",
@@ -514,7 +547,7 @@ function ChatWidget({
           {/* 🔥 Header */}
           <div
             style={{
-              backgroundColor: headerBackgroundColor || "#f5f5f5",
+              backgroundColor: headerBackground,
               width: "100%",
               height: "100px",
               borderTopLeftRadius: "16px",
@@ -648,11 +681,9 @@ function ChatWidget({
             conversationId={conversationId}
             userId={userId}
             isInputDisabled={isDemo}
-            allowImageUpload={style.allowImageUpload}
-            allowFileUpload={style.allowFileUpload}
+            allowImageUpload={normalizedStyle.allowImageUpload}
+            allowFileUpload={normalizedStyle.allowFileUpload}
           />
-
-
 
           <div
             style={{
