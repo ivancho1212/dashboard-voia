@@ -31,7 +31,20 @@ export default function StyleEditor({
   const primaryRef = useRef(null);
   const secondaryRef = useRef(null);
   const headerRef = useRef(null);
-
+  
+  useEffect(() => {
+    if (
+      style &&
+      (style.allowImageUpload === undefined || style.allowFileUpload === undefined)
+    ) {
+      setStyle((prev) => ({
+        ...prev,
+        allowImageUpload: prev.allowImageUpload ?? true,
+        allowFileUpload: prev.allowFileUpload ?? true,
+      }));
+    }
+  }, [style]);
+  
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -321,7 +334,7 @@ export default function StyleEditor({
           labelPlacement="end"
           control={
             <Switch
-              checked={!!style.allowImageUpload}
+              checked={style.allowImageUpload ?? true}
               onChange={(e) =>
                 setStyle((prev) => ({ ...prev, allowImageUpload: e.target.checked }))
               }
@@ -346,7 +359,7 @@ export default function StyleEditor({
           labelPlacement="end"
           control={
             <Switch
-              checked={!!style.allowFileUpload}
+              checked={style.allowFileUpload ?? true}
               onChange={(e) =>
                 setStyle((prev) => ({ ...prev, allowFileUpload: e.target.checked }))
               }

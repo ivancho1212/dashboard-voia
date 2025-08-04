@@ -2,11 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
-import {
-  getBotStylesByUser,
-  getBotStyleById,
-  createBotStyle,
-} from "services/botStylesService";
+import { getBotStylesByUser, getBotStyleById, createBotStyle } from "services/botStylesService";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -50,6 +46,11 @@ function BotStylePage() {
     avatar_url: "",
     position: "bottom-right",
     custom_css: "",
+    name: "",
+    title: "",
+    allow_image_upload: true,
+    allow_file_upload: true,
+    header_background_color: "#f5f5f5",
   };
 
   const fetchBotAndStyles = async () => {
@@ -77,27 +78,29 @@ function BotStylePage() {
       setLoading(false);
     }
   };
+
   const normalizeStyle = (style) => ({
     id: style.id,
-    user_id: style.userId,
+    user_id: style.userId ?? style.user_id,
     theme: style.theme,
-    primary_color: style.primaryColor,
-    secondary_color: style.secondaryColor,
-    font_family: style.fontFamily,
-    avatar_url: style.avatarUrl || "",
+    primary_color: style.primaryColor ?? style.primary_color,
+    secondary_color: style.secondaryColor ?? style.secondary_color,
+    font_family: style.fontFamily ?? style.font_family,
+    avatar_url: style.avatarUrl ?? style.avatar_url ?? "",
     position: style.position,
-    custom_css: style.customCss || "",
-    name: style.name || "",
-    title: style.title || "",
-    allow_image_upload: style.allowImageUpload ?? true,
-    allow_file_upload: style.allowFileUpload ?? true,
-    header_background_color: style.headerBackgroundColor || "#f5f5f5",
+    custom_css: style.customCss ?? style.custom_css ?? "",
+    name: style.name ?? "",
+    title: style.title ?? "",
+    allow_image_upload: style.allowImageUpload ?? style.allow_image_upload ?? true,
+    allow_file_upload: style.allowFileUpload ?? style.allow_file_upload ?? true,
+    header_background_color:
+      style.headerBackgroundColor ?? style.header_background_color ?? "#f5f5f5",
   });
-  
+
   useEffect(() => {
     fetchBotAndStyles();
   }, [botId]);
-  
+
   const onTabChange = (_, newVal) => {
     setActiveTab(newVal);
     if (newVal === 0) {
@@ -177,23 +180,7 @@ function BotStylePage() {
   };
 
   const onEditStyle = (style) => {
-    const normalizedStyle = {
-      id: style.id,
-      user_id: style.userId,
-      theme: style.theme,
-      primary_color: style.primaryColor,
-      secondary_color: style.secondaryColor,
-      font_family: style.fontFamily,
-      avatar_url: style.avatarUrl || "",
-      position: style.position,
-      custom_css: style.customCss || "",
-      name: style.name || "",
-      title: style.title || "",
-      allow_image_upload: style.allowImageUpload ?? true,
-      allow_file_upload: style.allowFileUpload ?? true,
-      header_background_color: style.headerBackgroundColor
-    };    
-
+    const normalizedStyle = normalizeStyle(style);
     setStyleEditing(normalizedStyle);
     setViewMode("edit");
     setActiveTab(1);
@@ -226,16 +213,16 @@ function BotStylePage() {
   };
 
   const styleToPreview =
-  viewMode === "edit" || viewMode === "create"
-    ? styleEditing
-    : selectedStyle
-    ? normalizeStyle(selectedStyle)
-    : null;
+    viewMode === "edit" || viewMode === "create"
+      ? styleEditing
+      : selectedStyle
+      ? normalizeStyle(selectedStyle)
+      : null;
 
   const handleContinue = () => {
     navigate("/bots/integration");
   };
-  
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
