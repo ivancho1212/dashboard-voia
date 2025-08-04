@@ -62,8 +62,7 @@ export default function SaveApplyButtons({
 
   const handleSave = () => {
     if (isEditMode) {
-      console.log("STYLE EN handleSave:", style); // 👈 agrega esto
-
+      console.log("STYLE EN handleSave:", style);
       const updatedStyle = {
         userId,
         name: style.name,
@@ -71,15 +70,14 @@ export default function SaveApplyButtons({
         allowImageUpload: style.allowImageUpload,
         allowFileUpload: style.allowFileUpload,
         theme: style.theme,
-        primaryColor: style.primary_color,
-        secondaryColor: style.secondary_color,
-        fontFamily: style.font_family,
-        avatarUrl: style.avatar_url,
+        primaryColor: style.primaryColor,
+        secondaryColor: style.secondaryColor,
+        fontFamily: style.fontFamily,
+        avatarUrl: style.avatarUrl,
         position: style.position,
-        customCss: style.custom_css,
-        headerBackgroundColor: style.headerBackgroundColor, // ✅ AGREGA ESTO
+        customCss: style.customCss ?? "",
+        headerBackgroundColor: style.headerBackgroundColor,
       };
-
       saveStyle(updatedStyle, true);
     } else {
       setOpenModal(true);
@@ -91,8 +89,7 @@ export default function SaveApplyButtons({
       alert("Por favor, ingresa un nombre para el estilo.");
       return;
     }
-    console.log("STYLE EN handleConfirmSave:", style); // 👈 agrega esto
-
+    console.log("STYLE EN handleConfirmSave:", style);
     const newStyle = {
       userId,
       name: styleName,
@@ -100,15 +97,14 @@ export default function SaveApplyButtons({
       allowImageUpload: style.allowImageUpload ?? false,
       allowFileUpload: style.allowFileUpload ?? false,
       theme: style.theme,
-      primaryColor: style.primary_color,
-      secondaryColor: style.secondary_color,
-      fontFamily: style.font_family,
-      avatarUrl: style.avatar_url,
+      primaryColor: style.primaryColor,
+      secondaryColor: style.secondaryColor,
+      fontFamily: style.fontFamily,
+      avatarUrl: style.avatarUrl,
       position: style.position,
-      customCss: style.custom_css,
-      headerBackgroundColor: style.headerBackgroundColor, // ✅ AGREGA ESTO
+      customCss: style.customCss ?? "",
+      headerBackgroundColor: style.headerBackgroundColor,
     };
-
     await saveStyle(newStyle, false);
     setOpenModal(false);
     setStyleName("");

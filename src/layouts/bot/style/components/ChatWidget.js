@@ -14,14 +14,7 @@ const voaiGif = "/VIA.png";
 
 function ChatWidget({
   style = {},
-  title = "",
   theme: initialTheme,
-  primaryColor = "#000000",
-  secondaryColor = "#ffffff",
-  headerBackgroundColor,
-  fontFamily = "Arial",
-  avatarUrl,
-  position = "bottom-right",
   botId: propBotId,
   userId: propUserId,
   isDemo = false,
@@ -29,16 +22,111 @@ function ChatWidget({
   const connectionRef = useRef(null);
   const botId = propBotId ?? 1;
   const userId = propUserId ?? 45;
-  // ✅ Normalizar posibles claves con guión bajo
+
+  // Configuración de temas (debe ir antes de cualquier uso)
+  const fallbackTextColor = "#1a1a1a";
+  const fallbackBgColor = "#f5f5f5";
+
+  // Normalizar claves de estilos desde backend (PascalCase, snake_case, camelCase)
   const normalizedStyle = {
     ...style,
-    headerBackgroundColor: style.headerBackgroundColor || style.header_background_color,
-    allowImageUpload: style.allowImageUpload ?? style.allow_image_upload,
-    allowFileUpload: style.allowFileUpload ?? style.allow_file_upload,
+    primaryColor:
+      style.primaryColor || style.PrimaryColor || style.primary_color || "#000000",
+    secondaryColor:
+      style.secondaryColor || style.SecondaryColor || style.secondary_color || "#ffffff",
+    fontFamily:
+      style.fontFamily || style.FontFamily || style.font_family || "Arial",
+    avatarUrl:
+      style.avatarUrl || style.AvatarUrl || style.avatar_url || "",
+    headerBackgroundColor:
+      style.headerBackgroundColor || style.HeaderBackgroundColor || style.header_background_color || "",
+    allowImageUpload:
+      style.allowImageUpload ?? style.AllowImageUpload ?? style.allow_image_upload ?? false,
+    allowFileUpload:
+      style.allowFileUpload ?? style.AllowFileUpload ?? style.allow_file_upload ?? false,
+    position:
+      style.position || style.Position || "bottom-right",
+    title:
+      style.title || style.Title || "",
+    theme:
+      style.theme || style.Theme || "light",
+    customCss:
+      style.customCss || style.CustomCss || style.custom_css || "",
   };
 
+  const allowImageUpload = normalizedStyle.allowImageUpload;
+  const allowFileUpload = normalizedStyle.allowFileUpload;
+  const themeKey = normalizedStyle.theme || initialTheme || "light";
+  const primaryColor = normalizedStyle.primaryColor;
+  const secondaryColor = normalizedStyle.secondaryColor;
+  const headerBackgroundColor = normalizedStyle.headerBackgroundColor;
+
+  const themeConfig = {
+    light: {
+      backgroundColor: "#ffffff",
+      headerBackground: "#f5f5f5",
+      textColor: "#000000",
+      borderColor: "#dddddd",
+      inputBg: "#ffffff",
+      inputText: "#000000",
+      inputBorder: "#dddddd",
+      buttonBg: primaryColor,
+      buttonColor: "#ffffff",
+    },
+    dark: {
+      backgroundColor: "#1e1e1e",
+      headerBackground: "#2a2a2a",
+      textColor: "#ffffff",
+      borderColor: "#444444",
+      inputBg: "#2a2a2a",
+      inputText: "#ffffff",
+      inputBorder: "#444444",
+      buttonBg: primaryColor,
+      buttonColor: "#000000",
+    },
+    custom: {
+      backgroundColor:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackBgColor
+          : secondaryColor,
+      headerBackground: headerBackgroundColor?.trim() || secondaryColor,
+      textColor:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackTextColor
+          : primaryColor,
+      borderColor: secondaryColor,
+      inputBg:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackBgColor
+          : secondaryColor,
+      inputText:
+        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
+          ? fallbackTextColor
+          : primaryColor,
+      inputBorder: secondaryColor,
+      buttonBg: primaryColor,
+      buttonColor:
+        secondaryColor.toLowerCase() === "#ffffff" || secondaryColor.toLowerCase() === "#fff"
+          ? "#000000"
+          : "#ffffff",
+    },
+  };
+
+  const themeDefaults = themeConfig[themeKey] || themeConfig.light;
+  const headerBackground = headerBackgroundColor?.trim()
+    ? headerBackgroundColor
+    : themeDefaults.headerBackground;
+  const backgroundColor = themeDefaults.backgroundColor;
+  const textColor = themeDefaults.textColor;
+  const inputBg = themeDefaults.inputBg;
+  const inputText = themeDefaults.inputText;
+  const inputBorder = themeDefaults.inputBorder;
+  const fontFamily = normalizedStyle.fontFamily;
+  const avatarUrl = normalizedStyle.avatarUrl;
+  const position = normalizedStyle.position;
+  const title = normalizedStyle.title;
+
   const [isOpen, setIsOpen] = useState(false);
-  const themeKey = initialTheme || "light";
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
@@ -55,8 +143,6 @@ function ChatWidget({
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
   const typingTimeoutRef = useRef(null);
-  const allowImageUpload = normalizedStyle.allowImageUpload ?? true;
-  const allowFileUpload = normalizedStyle.allowFileUpload ?? true;
 
   // 🧠 Refs para animación individual de mensajes
   const messageRefs = useRef([]);
@@ -266,72 +352,6 @@ function ChatWidget({
     }
   };
 
-  // ✅ Configuración de temas
-  const fallbackTextColor = "#1a1a1a";
-  const fallbackBgColor = "#f5f5f5";
-
-  const themeConfig = {
-    light: {
-      backgroundColor: "#ffffff",
-      headerBackground: "#f5f5f5",
-      textColor: "#000000",
-      borderColor: "#dddddd",
-      inputBg: "#ffffff",
-      inputText: "#000000",
-      inputBorder: "#dddddd",
-      buttonBg: primaryColor,
-      buttonColor: "#ffffff",
-    },
-    dark: {
-      backgroundColor: "#1e1e1e",
-      headerBackground: "#2a2a2a",
-      textColor: "#ffffff",
-      borderColor: "#444444",
-      inputBg: "#2a2a2a",
-      inputText: "#ffffff",
-      inputBorder: "#444444",
-      buttonBg: primaryColor,
-      buttonColor: "#000000",
-    },
-    custom: {
-      backgroundColor:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackBgColor
-          : secondaryColor,
-      headerBackground: headerBackgroundColor?.trim() || secondaryColor,
-      textColor:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackTextColor
-          : primaryColor,
-      borderColor: secondaryColor,
-      inputBg:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackBgColor
-          : secondaryColor,
-      inputText:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackTextColor
-          : primaryColor,
-      inputBorder: secondaryColor,
-      buttonBg: primaryColor,
-      buttonColor:
-        secondaryColor.toLowerCase() === "#ffffff" || secondaryColor.toLowerCase() === "#fff"
-          ? "#000000"
-          : "#ffffff",
-    },
-  };
-
-  const themeDefaults = themeConfig[themeKey] || themeConfig.light;
-
-  const headerBackground = normalizedStyle.headerBackgroundColor?.trim()
-    ? normalizedStyle.headerBackgroundColor
-    : themeDefaults.headerBackground;
-
-  const backgroundColor = themeDefaults.backgroundColor;
-  const textColor = themeDefaults.textColor;
-  const inputBg = themeDefaults.inputBg;
-  const inputText = themeDefaults.inputText;
-  const inputBorder = themeDefaults.inputBorder;
 
   const isColorDark = (hexColor) => {
     if (!hexColor) return false;
@@ -343,7 +363,21 @@ function ChatWidget({
     return luminance < 0.5;
   };
 
-  const headerTextColor = isColorDark(headerBackground) ? "#ffffff" : "#000000";
+  // Mejor contraste para el título del widget
+  function getContrastTextColor(bgColor) {
+    if (!bgColor) return "#000000";
+    let color = bgColor.replace("#", "");
+    if (color.length === 3) {
+      color = color[0]+color[0]+color[1]+color[1]+color[2]+color[2];
+    }
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+    // YIQ formula for contrast
+    const yiq = (r*299 + g*587 + b*114) / 1000;
+    return yiq >= 180 ? "#000000" : "#ffffff";
+  }
+  const headerTextColor = getContrastTextColor(headerBackground);
 
   // ✅ Estilos
   const widgetStyle = {

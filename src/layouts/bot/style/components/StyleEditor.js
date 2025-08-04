@@ -32,17 +32,27 @@ export default function StyleEditor({
   const secondaryRef = useRef(null);
   const headerRef = useRef(null);
   
+  // Normaliza los datos al cargar el estilo para edición
   useEffect(() => {
-    if (
-      style &&
-      (style.allowImageUpload === undefined || style.allowFileUpload === undefined)
-    ) {
-      setStyle((prev) => ({
-        ...prev,
-        allowImageUpload: prev.allowImageUpload ?? true,
-        allowFileUpload: prev.allowFileUpload ?? true,
-      }));
-    }
+    if (!style) return;
+    const normalized = {
+      ...style,
+      avatarUrl: style.avatarUrl || style.AvatarUrl || style.avatar_url || "",
+      title: style.title || style.Title || style.name || "",
+      primaryColor: style.primaryColor || style.PrimaryColor || style.primary_color || "#000000",
+      secondaryColor: style.secondaryColor || style.SecondaryColor || style.secondary_color || "#ffffff",
+      headerBackgroundColor:
+        style.headerBackgroundColor || style.HeaderBackgroundColor || style.header_background_color || "#f5f5f5",
+      fontFamily: style.fontFamily || style.FontFamily || style.font_family || "Arial",
+      allowImageUpload:
+        style.allowImageUpload ?? style.AllowImageUpload ?? style.allow_image_upload ?? true,
+      allowFileUpload:
+        style.allowFileUpload ?? style.AllowFileUpload ?? style.allow_file_upload ?? true,
+      position: style.position || style.Position || "bottom-right",
+      theme: style.theme || style.Theme || "light",
+      customCss: style.customCss || style.CustomCss || style.custom_css || "",
+    };
+    setStyle(normalized);
   }, [style]);
   
   useEffect(() => {
