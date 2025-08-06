@@ -25,10 +25,15 @@ import { CacheProvider } from "@emotion/react";
 import createCache from "@emotion/cache";
 
 // Rutas consolidadas desde src/routes/index.js
-import routes from "routes/index"; // Modificado para apuntar al archivo 'index.js'
+import routes from "routes/index";
 
 // Soft UI Dashboard React contexts
-import { useSoftUIController, setMiniSidenav, setOpenConfigurator } from "context";
+import {
+  useSoftUIController,
+  setMiniSidenav,
+  setOpenConfigurator,
+  setLayout,
+} from "context";
 
 // Images
 import brand from "assets/images/VOIA-LOGO.png";
@@ -39,7 +44,18 @@ export default function App() {
   const [onMouseEnter, setOnMouseEnter] = useState(false);
   const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
+  const isLandingPage = pathname === "/";
   const isWidgetFrame = pathname === "/widget-frame";
+
+  // Establecer layout según la ruta
+  useEffect(() => {
+    if (pathname === "/") {
+      setLayout(dispatch, "landing");
+      setMiniSidenav(dispatch, true);
+    } else {
+      setLayout(dispatch, "dashboard");
+    }
+  }, [pathname]);
 
   // Cache for the rtl
   useMemo(() => {
@@ -75,24 +91,38 @@ export default function App() {
     document.body.setAttribute("dir", direction);
   }, [direction]);
 
-  // Setting page scroll to 0 when changing the route
+  // Scroll to top on route change
   useEffect(() => {
     document.documentElement.scrollTop = 0;
     document.scrollingElement.scrollTop = 0;
   }, [pathname]);
 
-  const getRoutes = (allRoutes) =>
-    allRoutes.map((route) => {
-      if (route.collapse) {
-        return getRoutes(route.collapse);
-      }
+const getRoutes = (allRoutes) =>
+  allRoutes.map((route, index) => {
+    if (route.children) {
+      return (
+        <Route key={index} path={route.path} element={route.element}>
+          {route.children.map((child, idx) => (
+            <Route
+              key={idx}
+              index={child.index}
+              path={child.path}
+              element={child.element}
+            />
+          ))}
+        </Route>
+      );
+    }
 
-      if (route.route) {
-        return <Route exact path={route.route} element={route.component} key={route.key} />;
-      }
+    return (
+      <Route
+        key={index}
+        path={route.path}
+        element={route.element}
+      />
+    );
+  });
 
-      return null;
-    });
 
   const configsButton = (
     <SoftBox
@@ -118,35 +148,42 @@ export default function App() {
     </SoftBox>
   );
 
-  return direction === "rtl" ? (
-    <CacheProvider value={rtlCache}>
-      <ThemeProvider theme={themeRTL}>
-        <CssBaseline />
-        {!isWidgetFrame && layout === "dashboard" && (
-          <>
-            <Sidenav
-              color={sidenavColor}
-              brand={brand}
-              routes={routes}
-              onMouseEnter={handleOnMouseEnter}
-              onMouseLeave={handleOnMouseLeave}
-            />
-            <Configurator />
-            {configsButton}
-          </>
-        )}
+  const commonRoutes = (
+    <Routes>
+      {getRoutes(routes)}
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
+  );
 
-        {!isWidgetFrame && layout === "vr" && <Configurator />}
-        <Routes>
-          {getRoutes(routes)}
-          <Route path="*" element={<Navigate to="/dashboard" />} />
-        </Routes>
-      </ThemeProvider>
-    </CacheProvider>
-  ) : (
+  if (direction === "rtl") {
+    return (
+      <CacheProvider value={rtlCache}>
+        <ThemeProvider theme={themeRTL}>
+          <CssBaseline />
+          {!isWidgetFrame && layout === "dashboard" && !isLandingPage && (
+            <>
+              <Sidenav
+                color={sidenavColor}
+                brand={brand}
+                routes={routes}
+                onMouseEnter={handleOnMouseEnter}
+                onMouseLeave={handleOnMouseLeave}
+              />
+              <Configurator />
+              {configsButton}
+            </>
+          )}
+          {!isWidgetFrame && layout === "vr" && <Configurator />}
+          {commonRoutes}
+        </ThemeProvider>
+      </CacheProvider>
+    );
+  }
+
+  return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {!isWidgetFrame && layout === "dashboard" && (
+      {!isWidgetFrame && layout === "dashboard" && !isLandingPage && (
         <>
           <Sidenav
             color={sidenavColor}
@@ -160,10 +197,7 @@ export default function App() {
         </>
       )}
       {!isWidgetFrame && layout === "vr" && <Configurator />}
-      <Routes>
-        {getRoutes(routes)}
-        <Route path="*" element={<Navigate to="/dashboard" />} />
-      </Routes>
+      {commonRoutes}
     </ThemeProvider>
   );
 }

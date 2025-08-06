@@ -9,9 +9,11 @@ import configRoutes from "./config";
 import authRoutes from "./auth";
 import otherRoutes from "./others";
 import widgetRoutes from "./widget";
+import landingRoutes from "./landing";
 
 
 const routes = [
+  ...landingRoutes,
   ...dashboardRoutes,
   ...userRoutes,
   ...planRoutes,
