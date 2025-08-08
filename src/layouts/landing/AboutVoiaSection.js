@@ -1,15 +1,19 @@
-// src/layouts/landing/AboutVoiaSection.js
 import React from "react";
 
 const AboutVoiaSection = () => {
   return (
     <section style={styles.section} id="via">
-      <div style={styles.overlay}>
-        <div style={styles.content}>
-          <h2 style={styles.title}>¿Qué es Via?</h2>
-          <p style={styles.description}>
-            Via es una solución de atención automatizada que combina inteligencia artificial con interacción humana. Diseñada para escalar, entrenar y adaptarse a tus necesidades empresariales.
-          </p>
+      <div style={styles.container}>
+        <p style={styles.subtitle}>IA para empresas</p>
+        <h2 style={styles.headline}>Soluciones Full-Stack con Inteligencia Artificial</h2>
+        <p style={styles.summary}>
+          Resultados tangibles con datos de calidad, modelos personalizados, agentes inteligentes y despliegue ágil.
+        </p>
+
+        <div style={styles.logos}>
+          <img src="/360_F_815972611_RfHmGN2bO5HAfRpennZXV5l6wJ9PVFrE.jpg" alt="IA Provider 1" style={styles.logo} />
+          <img src="/pngimg.com - chatgpt_PNG3.png" alt="OpenAI" style={styles.logo} />
+          <img src="/Untitled-design-7.png" alt="Anthropic" style={styles.logo} />
         </div>
       </div>
     </section>
@@ -18,37 +22,54 @@ const AboutVoiaSection = () => {
 
 const styles = {
   section: {
-    position: "relative",
-    backgroundImage: "url('/Gemini_Generated_Image_4ohro64ohro64ohr.jpg')",
-    backgroundAttachment: "fixed",
-    backgroundSize: "cover",
-    backgroundPosition: "center",
-    height: "400px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  overlay: {
-    backgroundColor: "rgba(0, 0, 0, 0.55)",
-    width: "100%",
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: "0 20px",
-  },
-  content: {
+    backgroundColor: "#050505", // negro más profundo
+    padding: "80px 20px",
     color: "#fff",
+  },
+  container: {
+    maxWidth: "1100px",
+    margin: "0 auto",
     textAlign: "center",
-    maxWidth: "800px",
+  },
+  subtitle: {
+    color: "#00bfa5",
+    fontWeight: "bold",
+    fontSize: "1rem",
+    textTransform: "uppercase",
+    marginBottom: "0.8rem",
+  },
+  headline: {
+    fontSize: "2.2rem",
+    fontWeight: "700",
+    marginBottom: "0.4rem",
+  },
+  summary: {
+    fontSize: "1.1rem",
+    color: "#ccc",
+    marginBottom: "2rem",
   },
   title: {
-    fontSize: "2.5rem",
-    marginBottom: "1rem",
+    fontSize: "2rem",
+    marginBottom: "1.2rem",
   },
   description: {
-    fontSize: "1.2rem",
-    lineHeight: "1.6",
+    fontSize: "1.1rem",
+    lineHeight: "1.8",
+    marginBottom: "1.2rem",
+    padding: "0 10px",
+  },
+  logos: {
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: "40px",
+    marginTop: "30px",
+    flexWrap: "wrap",
+  },
+  logo: {
+    height: "60px",
+    objectFit: "contain",
+    filter: "brightness(0.9)",
   },
 };
 

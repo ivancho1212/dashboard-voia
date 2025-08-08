@@ -1,6 +1,6 @@
-// src/routes/landing.js
 import LandingLayout from "../layouts/landing/LandingLayout";
-import LandingPage from "../layouts/landing/LandingPage"; // ✅ ruta correcta
+import LandingPage from "../layouts/landing/LandingPage";
+import ViaPage from "../layouts/landing/ViaPage"; // ✅ nombre correcto
 
 const landingRoutes = [
   {
@@ -8,8 +8,12 @@ const landingRoutes = [
     element: <LandingLayout />,
     children: [
       {
-        index: true, // ← equivale a la ruta "/"
+        index: true,
         element: <LandingPage />,
+      },
+      {
+        path: "via", // esto equivale a /via
+        element: <ViaPage />,
       },
     ],
   },

@@ -34,7 +34,7 @@ const styles = {
         fontFamily: '"Varela Round", sans-serif',
     },
     overlay: {
-        backgroundColor: "rgba(0, 0, 0, 0.75)", // oscurecer para mejor lectura
+        backgroundColor: "rgba(0, 0, 0, 0.5)", // oscurecer para mejor lectura
         width: "100%",
         height: "100%",
         padding: "100px 20px",
@@ -51,8 +51,6 @@ const styles = {
     title: {
         fontSize: "2.5rem",
         fontWeight: "bold",
-        color: "#00bfa5",
-
         marginBottom: "1rem",
     },
     subtitle: {
