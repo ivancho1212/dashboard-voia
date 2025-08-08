@@ -1,11 +1,13 @@
 import React from "react";
+import NeuralBackground from "../../components/NeuralBackground";
 
 const ClientsSection = () => {
   return (
     <section style={styles.section}>
+      <NeuralBackground />
       <div style={styles.container}>
         <p style={styles.subtitle}>Empresas que confían en nosotros</p>
-        <h2 style={styles.title}>Con quienes trabajamos</h2>
+        <h4 style={styles.title}>Con quienes trabajamos</h4>
         <div style={styles.logos}>
           <img src="/google-logo-png-xubx3ihwtrrc42k0.jpg" alt="Google" style={styles.logo} />
           <img src="/8968d0640f2c4053333ce7334314ef83.webp" alt="AWS" style={styles.logo} />
@@ -21,21 +23,25 @@ const ClientsSection = () => {
 
 const styles = {
   section: {
-    padding: "80px 20px",
+    position: "relative", // 👈 importante para posicionar el fondo
+    padding: "250px 20px",
     backgroundColor: "#0e0e0e",
     color: "#fff",
+    overflow: "hidden", // 👈 asegura que el fondo no se desborde
   },
   container: {
+    position: "relative", // 👈 asegura que el contenido quede encima del fondo
+    zIndex: 1,
     maxWidth: "1200px",
     margin: "0 auto",
     textAlign: "center",
   },
   subtitle: {
-    color: "#00bcd4",
+    color: "#00bfa5",
+    fontWeight: "bold",
     fontSize: "1rem",
-    marginBottom: "10px",
     textTransform: "uppercase",
-    letterSpacing: "1px",
+    marginBottom: "0.8rem",
   },
   title: {
     fontSize: "2.2rem",

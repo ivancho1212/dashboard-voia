@@ -4,24 +4,21 @@ import React from "react";
 const HeroSection = () => {
     return (
         <section id="home" style={styles.hero}>
-            <div style={styles.overlay}>
-                <div style={styles.content}>
-                    <h1 style={styles.title}>
-                        Desarrollo web, apps móviles e inteligencia artificial para hacer crecer tu negocio
-                    </h1>
-                    <p style={styles.subtitle}>
-                        Ofrecemos soluciones digitales personalizadas con desarrollo a la medida, integración de IA y automatización de procesos. Potencia tu empresa con tecnología escalable, segura y diseñada para destacar en el mercado digital actual.
-                    </p>
-                </div>
+            <div style={styles.content}>
+                <h1 style={styles.title}>
+                    Desarrollo web, apps móviles e inteligencia artificial para hacer crecer tu negocio
+                </h1>
+                <p style={styles.subtitle}>
+                    Ofrecemos soluciones digitales personalizadas con desarrollo a la medida, integración de IA y automatización de procesos. Potencia tu empresa con tecnología escalable, segura y diseñada para destacar en el mercado digital actual.
+                </p>
             </div>
         </section>
-
     );
 };
 
 const styles = {
     hero: {
-        backgroundImage: `url("/Gemini_Generated_Image_b0upz2b0upz2b0up.jpg")`,
+        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.6)), url("/Gemini_Generated_Image_4fzbre4fzbre4fzb.jpg")`,
         backgroundAttachment: "fixed",
         backgroundPosition: "center",
         backgroundSize: "cover",
@@ -33,25 +30,18 @@ const styles = {
         justifyContent: "center",
         fontFamily: '"Varela Round", sans-serif',
     },
-    overlay: {
-        backgroundColor: "rgba(0, 0, 0, 0.5)", // oscurecer para mejor lectura
-        width: "100%",
-        height: "100%",
-        padding: "100px 20px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-    },
     content: {
         maxWidth: "900px",
         margin: "0 auto",
         textAlign: "center",
         color: "#fff",
+        padding: "100px clamp(1rem, 5vw, 2rem)",
     },
     title: {
         fontSize: "2.5rem",
         fontWeight: "bold",
         marginBottom: "1rem",
+
     },
     subtitle: {
         fontSize: "1.2rem",

@@ -110,11 +110,12 @@ const styles = {
   container: {
     maxWidth: "1200px",
     margin: "0 auto",
-    padding: "1rem 2rem",
+    padding: "1rem clamp(1rem, 5vw, 2rem)", // <-- padding adaptativo
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     fontFamily: '"Varela Round", sans-serif',
+    boxSizing: "border-box", // asegura que padding no desborde
   },
   logoContainer: {
     display: "flex",
@@ -122,7 +123,7 @@ const styles = {
     gap: "0.5rem",
   },
   logoImg: {
-    height: "30px",
+    height: "50px",
     width: "auto",
   },
   navList: {
@@ -143,6 +144,7 @@ const styles = {
     fontWeight: "500",
     transition: "color 0.3s ease",
     fontFamily: '"Varela Round", sans-serif',
+    fontSize: "1.1rem",
   },
   buttonReset: {
     background: "none",

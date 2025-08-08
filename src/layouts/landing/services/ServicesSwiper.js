@@ -1,9 +1,9 @@
 import React from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { Pagination, Autoplay } from "swiper/modules";
+import { Autoplay, EffectFade } from "swiper/modules";
 
 import "swiper/css";
-import "swiper/css/pagination";
+import "swiper/css/effect-fade";
 
 const services = [
   {
@@ -44,45 +44,73 @@ const services = [
   },
 ];
 
+const chunkServices = (arr, size) => {
+  const result = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+};
+
 const ServicesSwiper = () => {
+  const groupedServices = chunkServices(services, 3);
+
   return (
     <section style={styles.section}>
+      {/* Subtítulo arriba */}
+      <p style={styles.subtitle}>Nuestros Servicios</p>
+      {/* Título opcional */}
+      <h3 style={styles.headline}>Soluciones que transforman tu negocio</h3>
+
       <Swiper
-        modules={[Pagination, Autoplay]}
-        pagination={{ clickable: true }}
-        autoplay={{ delay: 4000 }}
-        spaceBetween={30}
+        modules={[Autoplay, EffectFade]}
+        autoplay={{ delay: 5000, disableOnInteraction: false }}
+        effect="fade"
+        speed={1500}
+        spaceBetween={40}
         slidesPerView={1}
         style={{ ...styles.swiper, paddingBottom: "3rem" }}
       >
-        {services.map((service) => (
-          <SwiperSlide key={service.id}>
-            <div style={styles.slide}>
-              <img src={service.image} alt={service.title} style={styles.image} />
-              <h3 style={styles.title}>{service.title}</h3>
-              <p style={styles.description}>{service.description}</p>
+        {groupedServices.map((group, index) => (
+          <SwiperSlide key={index}>
+            <div style={styles.groupSlide}>
+              {group.map((service) => (
+                <div key={service.id} style={styles.slide}>
+                  <img src={service.image} alt={service.title} style={styles.image} />
+                  <h3 style={styles.title}>{service.title}</h3>
+                  <p style={styles.description}>{service.description}</p>
+                </div>
+              ))}
             </div>
           </SwiperSlide>
         ))}
       </Swiper>
 
-      {/* Estilos para los bullets de paginación */}
-      <style>
-        {`
-          .swiper-pagination {
-            margin-top: 2rem;
-          }
-
-          .swiper-pagination-bullet {
-            background-color: #ccc;
-            opacity: 1;
-          }
-
-          .swiper-pagination-bullet-active {
-            background-color: #007bff;
-          }
-        `}
-      </style>
+      <style>{`
+        .swiper-wrapper {
+          position: relative !important;
+        }
+        .swiper-slide {
+          position: absolute !important;
+          top: 0;
+          left: 0;
+          width: 100% !important;
+          height: 400px;
+          opacity: 0;
+          transition-property: opacity;
+          transition-timing-function: ease;
+          transition-duration: 1500ms;
+          pointer-events: none;
+          z-index: 0;
+          overflow: hidden;
+        }
+        .swiper-slide-active {
+          opacity: 1;
+          position: relative !important;
+          pointer-events: auto;
+          z-index: 10;
+        }
+      `}</style>
     </section>
   );
 };
@@ -90,32 +118,56 @@ const ServicesSwiper = () => {
 const styles = {
   section: {
     backgroundColor: "#000",
-    padding: "3rem 1rem",
+    padding: "250px 20px",
     color: "#fff",
     textAlign: "center",
   },
+  subtitle: {
+    color: "#00bfa5",
+    fontWeight: "bold",
+    fontSize: "1rem",
+    textTransform: "uppercase",
+    marginBottom: "0.5rem",
+  },
+  headline: {
+    fontSize: "2rem",
+    fontWeight: "700",
+    marginBottom: "2rem",
+  },
   swiper: {
     width: "100%",
-    maxWidth: "600px",
+    maxWidth: "1200px",
     margin: "0 auto",
+  },
+  groupSlide: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    display: "flex",
+    justifyContent: "center",
+    gap: "3rem",
   },
   slide: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     gap: "1rem",
+    padding: "1rem",
+    boxSizing: "border-box",
+    width: "30%",
   },
   image: {
     width: "100%",
-    maxWidth: "300px",
     borderRadius: "12px",
   },
   title: {
-    fontSize: "1.5rem",
+    fontSize: "1.2rem",
     margin: 0,
   },
   description: {
-    fontSize: "1rem",
+    fontSize: "0.95rem",
     maxWidth: "90%",
   },
 };

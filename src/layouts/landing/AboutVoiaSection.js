@@ -22,8 +22,8 @@ const AboutVoiaSection = () => {
 
 const styles = {
   section: {
-    backgroundColor: "#050505", // negro más profundo
-    padding: "80px 20px",
+    backgroundColor: "#0e0e0e", // negro más profundo
+    padding: "100px 20px",
     color: "#fff",
   },
   container: {
