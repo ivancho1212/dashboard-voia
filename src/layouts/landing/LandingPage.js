@@ -5,6 +5,7 @@ import AboutVoiaSection from "./AboutVoiaSection";
 import VoiaSection from "./VoiaSection";
 import ClientsSection from "./ClientsSection";
 import ContactSection from "./ContactSection";
+import TestimonialsSection from "./TestimonialsSection";
 
 const LandingPage = () => {
   return (
@@ -22,6 +23,9 @@ const LandingPage = () => {
       </section>
       <section id="clients">
         <ClientsSection />
+      </section>
+      <section id="testimonials">
+        <TestimonialsSection />
       </section>
       {/* ID para scroll a "Contacto" */}
       <section id="contact">

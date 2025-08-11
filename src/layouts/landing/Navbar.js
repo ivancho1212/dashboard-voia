@@ -8,6 +8,7 @@ const Navbar = ({ isDarkBackground = false }) => {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hoveredItem, setHoveredItem] = useState(null); // 👈 estado para hover
 
   const logoSrc = isDarkBackground ? "/via-negativo.png" : "/VIA.png";
   const textColor = isDarkBackground ? "#fff" : "#222";
@@ -15,7 +16,7 @@ const Navbar = ({ isDarkBackground = false }) => {
   const handleResize = () => {
     setIsMobile(window.innerWidth < 768);
     if (window.innerWidth >= 768) {
-      setMenuOpen(false); // Cierra el menú si ya no está en modo móvil
+      setMenuOpen(false);
     }
   };
 
@@ -35,15 +36,16 @@ const Navbar = ({ isDarkBackground = false }) => {
       const el = document.getElementById(anchor);
       if (el) el.scrollIntoView({ behavior: "smooth" });
     }
-
-    if (isMobile) setMenuOpen(false); // Cierra menú después de clic en móvil
+    if (isMobile) setMenuOpen(false);
   };
 
   return (
     <header
       style={{
         ...styles.header,
-        backgroundColor: isDarkBackground ? "rgba(0, 0, 0, 0.4)" : "rgba(255, 255, 255, 0.6)",
+        backgroundColor: isDarkBackground
+          ? "rgba(0, 0, 0, 0.4)"
+          : "rgba(255, 255, 255, 0.6)",
       }}
     >
       <div style={{ ...styles.container, color: textColor }}>
@@ -51,45 +53,51 @@ const Navbar = ({ isDarkBackground = false }) => {
           <img src={logoSrc} alt="Logo Voia" style={styles.logoImg} />
         </div>
 
-        {/* Botón hamburguesa para móviles */}
         {isMobile && (
           <button onClick={() => setMenuOpen(!menuOpen)} style={styles.hamburger}>
             ☰
           </button>
         )}
 
-        {/* Menú */}
         <nav style={{ display: isMobile ? (menuOpen ? "block" : "none") : "block" }}>
           <ul style={{ ...styles.navList, ...(isMobile ? styles.mobileNavList : {}) }}>
-            <li>
-              <button
-                onClick={() => handleNavigateToAnchor("home")}
-                style={{ ...styles.navItem, color: textColor, ...styles.buttonReset }}
-              >
-                Inicio
-              </button>
-            </li>
-            <li>
-              <button
-                onClick={() => handleNavigateToAnchor("services")}
-                style={{ ...styles.navItem, color: textColor, ...styles.buttonReset }}
-              >
-                Servicios
-              </button>
-            </li>
-            <li>
-              <Link to="/via" style={{ ...styles.navItem, color: textColor }}>
-                Via
-              </Link>
-            </li>
-            <li>
-              <button
-                onClick={() => handleNavigateToAnchor("contact")}
-                style={{ ...styles.navItem, color: textColor, ...styles.buttonReset }}
-              >
-                Contacto
-              </button>
-            </li>
+            {[
+              { label: "Inicio", anchor: "home" },
+              { label: "Servicios", anchor: "services" },
+              { label: "Via", link: "/via" },
+              { label: "Contacto", anchor: "contact" },
+            ].map((item, index) => (
+              <li key={index}>
+                {item.link ? (
+                  <Link
+                    to={item.link}
+                    style={{
+                      ...styles.navItem,
+                      color:
+                        hoveredItem === index ? "#00bfa5" : textColor,
+                    }}
+                    onMouseEnter={() => setHoveredItem(index)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => handleNavigateToAnchor(item.anchor)}
+                    style={{
+                      ...styles.navItem,
+                      ...styles.buttonReset,
+                      color:
+                        hoveredItem === index ? "#00bfa5" : textColor,
+                    }}
+                    onMouseEnter={() => setHoveredItem(index)}
+                    onMouseLeave={() => setHoveredItem(null)}
+                  >
+                    {item.label}
+                  </button>
+                )}
+              </li>
+            ))}
           </ul>
         </nav>
       </div>
@@ -110,12 +118,12 @@ const styles = {
   container: {
     maxWidth: "1200px",
     margin: "0 auto",
-    padding: "1rem clamp(1rem, 5vw, 2rem)", // <-- padding adaptativo
+    padding: "1rem clamp(1rem, 5vw, 2rem)",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     fontFamily: '"Varela Round", sans-serif',
-    boxSizing: "border-box", // asegura que padding no desborde
+    boxSizing: "border-box",
   },
   logoContainer: {
     display: "flex",
@@ -145,11 +153,11 @@ const styles = {
     transition: "color 0.3s ease",
     fontFamily: '"Varela Round", sans-serif',
     fontSize: "1.1rem",
+    cursor: "pointer",
   },
   buttonReset: {
     background: "none",
     border: "none",
-    cursor: "pointer",
     padding: 0,
     font: "inherit",
   },

@@ -6,42 +6,12 @@ import "swiper/css";
 import "swiper/css/effect-fade";
 
 const services = [
-  {
-    id: "web",
-    title: "Desarrollo Web",
-    description: "Creamos sitios y aplicaciones web responsivas, modernas y optimizadas.",
-    image: "/Gemini_Generated_Image_akpz0takpz0takpz.png",
-  },
-  {
-    id: "mobile",
-    title: "Desarrollo Móvil",
-    description: "Aplicaciones nativas e híbridas para Android y iOS.",
-    image: "/Gemini_Generated_Image_ruqzvqruqzvqruqz.png",
-  },
-  {
-    id: "ai",
-    title: "Soluciones con Inteligencia Artificial",
-    description: "Automatización con modelos de lenguaje y visión computarizada.",
-    image: "/Gemini_Generated_Image_573dgf573dgf573d.png",
-  },
-  {
-    id: "chatbots",
-    title: "Chatbots y Asistentes Virtuales",
-    description: "Atiende a tus clientes 24/7 con bots inteligentes.",
-    image: "/Gemini_Generated_Image_bb0s6ubb0s6ubb0s.png",
-  },
-  {
-    id: "automation",
-    title: "Automatización de Procesos",
-    description: "Optimiza tareas repetitivas con flujos automatizados.",
-    image: "/Gemini_Generated_Image_hzenwthzenwthzen.png",
-  },
-  {
-    id: "support",
-    title: "Soporte y Mantenimiento",
-    description: "Mantenemos tus sistemas siempre funcionando.",
-    image: "/Gemini_Generated_Image_xugnhsxugnhsxugn.png",
-  },
+  { id: "web", title: "Desarrollo Web", description: "Creamos sitios y aplicaciones web responsivas, modernas y optimizadas.", image: "/editorcode.webp" },
+  { id: "mobile", title: "Desarrollo Móvil", description: "Aplicaciones nativas e híbridas para Android y iOS.", image: "/appscell.webp" },
+  { id: "ai", title: "Soluciones con Inteligencia Artificial", description: "Automatización con modelos de lenguaje y visión computarizada.", image: "/chipAI.webp" },
+  { id: "chatbots", title: "Chatbots y Asistentes Virtuales", description: "Atiende a tus clientes 24/7 con bots inteligentes.", image: "/chatAI.webp" },
+  { id: "automation", title: "Automatización de Procesos", description: "Optimiza tareas repetitivas con flujos automatizados.", image: "/automatizacion.webp" },
+  { id: "support", title: "Soporte y Mantenimiento", description: "Mantenemos tus sistemas siempre funcionando.", image: "/mantenimiento.webp" },
 ];
 
 const chunkServices = (arr, size) => {
@@ -57,19 +27,18 @@ const ServicesSwiper = () => {
 
   return (
     <section style={styles.section}>
-      {/* Subtítulo arriba */}
       <p style={styles.subtitle}>Nuestros Servicios</p>
-      {/* Título opcional */}
       <h3 style={styles.headline}>Soluciones que transforman tu negocio</h3>
 
       <Swiper
         modules={[Autoplay, EffectFade]}
         autoplay={{ delay: 5000, disableOnInteraction: false }}
         effect="fade"
-        speed={1500}
-        spaceBetween={40}
+        fadeEffect={{ crossFade: true }}
+        speed={1000}
         slidesPerView={1}
-        style={{ ...styles.swiper, paddingBottom: "3rem" }}
+        loop={true} // 🔹 Esto habilita la paginación infinita
+        style={styles.swiper}
       >
         {groupedServices.map((group, index) => (
           <SwiperSlide key={index}>
@@ -85,32 +54,6 @@ const ServicesSwiper = () => {
           </SwiperSlide>
         ))}
       </Swiper>
-
-      <style>{`
-        .swiper-wrapper {
-          position: relative !important;
-        }
-        .swiper-slide {
-          position: absolute !important;
-          top: 0;
-          left: 0;
-          width: 100% !important;
-          height: 400px;
-          opacity: 0;
-          transition-property: opacity;
-          transition-timing-function: ease;
-          transition-duration: 1500ms;
-          pointer-events: none;
-          z-index: 0;
-          overflow: hidden;
-        }
-        .swiper-slide-active {
-          opacity: 1;
-          position: relative !important;
-          pointer-events: auto;
-          z-index: 10;
-        }
-      `}</style>
     </section>
   );
 };
@@ -118,7 +61,7 @@ const ServicesSwiper = () => {
 const styles = {
   section: {
     backgroundColor: "#000",
-    padding: "250px 20px",
+    padding: "150px 20px",
     color: "#fff",
     textAlign: "center",
   },
@@ -140,23 +83,17 @@ const styles = {
     margin: "0 auto",
   },
   groupSlide: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    width: "100%",
-    height: "100%",
     display: "flex",
     justifyContent: "center",
     gap: "3rem",
+    padding: "1rem",
   },
   slide: {
+    flex: "0 0 30%",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     gap: "1rem",
-    padding: "1rem",
-    boxSizing: "border-box",
-    width: "30%",
   },
   image: {
     width: "100%",

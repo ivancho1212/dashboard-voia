@@ -6,15 +6,15 @@ const ClientsSection = () => {
     <section style={styles.section}>
       <NeuralBackground />
       <div style={styles.container}>
-        <p style={styles.subtitle}>Empresas que confían en nosotros</p>
-        <h4 style={styles.title}>Con quienes trabajamos</h4>
+        <p style={styles.subtitle}>Empresas líderes en tecnología e inteligencia artificial</p>
+        <h4 style={styles.title}>Socios estratégicos que confían en nosotros</h4>
+
         <div style={styles.logos}>
-          <img src="/google-logo-png-xubx3ihwtrrc42k0.jpg" alt="Google" style={styles.logo} />
-          <img src="/8968d0640f2c4053333ce7334314ef83.webp" alt="AWS" style={styles.logo} />
-          <img src="/650e823c6cf62f0b69f5b1a0_64c34ca5f2845578bc3b2e5f_stabilityai.png" alt="Stability AI" style={styles.logo} />
-          <img src="/ce2ec8123de88ad088b618cc6f2b87f4.jpg" alt="OpenAI" style={styles.logo} />
-          <img src="/claude.png" alt="Anthropic" style={styles.logo} />
-          <img src="/Screen+Shot+2023-05-18+at+10.10.45+AM.webp" alt="Meta" style={styles.logo} />
+          <img src="/logo-google.webp" alt="Google" style={styles.logo} />
+          <img src="/logo-openAI.webp" alt="Open AI" style={styles.logo} />
+          <img src="/logo-mistarl.webp" alt="Misatral" style={styles.logo} />
+          <img src="/logo-anthropic.webp" alt="Anthropic" style={styles.logo} />
+          <img src="/logo-microsoft.webp" alt="Microsoft" style={styles.logo} />
         </div>
       </div>
     </section>
@@ -52,7 +52,7 @@ const styles = {
     flexWrap: "wrap",
     justifyContent: "center",
     alignItems: "center",
-    gap: "40px",
+    gap: "100px",
   },
   logo: {
     maxWidth: "120px",

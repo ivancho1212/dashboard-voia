@@ -1,28 +1,77 @@
-import React from "react";
+import React, { useState } from "react";
 
 const AboutVoiaSection = () => {
+  const [hovered, setHovered] = useState(null);
+
   return (
     <section style={styles.section} id="via">
       <div style={styles.container}>
         <p style={styles.subtitle}>IA para empresas</p>
-        <h2 style={styles.headline}>Soluciones Full-Stack con Inteligencia Artificial</h2>
+        <h2 style={styles.headline}>
+          Soluciones Full-Stack con Inteligencia Artificial
+        </h2>
         <p style={styles.summary}>
-          Resultados tangibles con datos de calidad, modelos personalizados, agentes inteligentes y despliegue ágil.
+          Resultados tangibles con datos de calidad, modelos personalizados,
+          agentes inteligentes y despliegue ágil.
         </p>
 
         <div style={styles.logos}>
-          <img src="/360_F_815972611_RfHmGN2bO5HAfRpennZXV5l6wJ9PVFrE.jpg" alt="IA Provider 1" style={styles.logo} />
-          <img src="/pngimg.com - chatgpt_PNG3.png" alt="OpenAI" style={styles.logo} />
-          <img src="/Untitled-design-7.png" alt="Anthropic" style={styles.logo} />
+          <img
+            src="/logo-gemini.webp"
+            alt="Gemini"
+            style={{
+              ...styles.logoGemini,
+              ...hoverEffect(hovered === "gemini"),
+            }}
+            onMouseEnter={() => setHovered("gemini")}
+            onMouseLeave={() => setHovered(null)}
+          />
+          <img
+            src="/logo-chatgpt.webp"
+            alt="ChatGPT"
+            style={{
+              ...styles.logoChatgpt,
+              ...hoverEffect(hovered === "chatgpt"),
+            }}
+            onMouseEnter={() => setHovered("chatgpt")}
+            onMouseLeave={() => setHovered(null)}
+          />
+          <img
+            src="/logo-claude.webp"
+            alt="Claude"
+            style={{
+              ...styles.logoClaude,
+              ...hoverEffect(hovered === "claude"),
+            }}
+            onMouseEnter={() => setHovered("claude")}
+            onMouseLeave={() => setHovered(null)}
+          />
+          <img
+            src="/logo-DeepSeek.webp"
+            alt="DeepSeek"
+            style={{
+              ...styles.logoDeepSeek,
+              ...hoverEffect(hovered === "deepseek"),
+            }}
+            onMouseEnter={() => setHovered("deepseek")}
+            onMouseLeave={() => setHovered(null)}
+          />
         </div>
       </div>
     </section>
   );
 };
 
+// Función para aplicar el efecto hover
+const hoverEffect = (isHovered) => ({
+  transform: isHovered ? "scale(1.12)" : "scale(1)",
+  filter: isHovered ? "brightness(1.15)" : "brightness(1)",
+  transition: "transform 0.3s ease, filter 0.3s ease",
+});
+
 const styles = {
   section: {
-    backgroundColor: "#0e0e0e", // negro más profundo
+    backgroundColor: "#0e0e0e",
     padding: "100px 20px",
     color: "#fff",
   },
@@ -48,28 +97,35 @@ const styles = {
     color: "#ccc",
     marginBottom: "2rem",
   },
-  title: {
-    fontSize: "2rem",
-    marginBottom: "1.2rem",
-  },
-  description: {
-    fontSize: "1.1rem",
-    lineHeight: "1.8",
-    marginBottom: "1.2rem",
-    padding: "0 10px",
-  },
   logos: {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    gap: "40px",
+    gap: "100px",
     marginTop: "30px",
     flexWrap: "wrap",
   },
-  logo: {
-    height: "60px",
+  logoGemini: {
+    width: "90px",
+    height: "90px",
+    marginBottom: "10px",
     objectFit: "contain",
-    filter: "brightness(0.9)",
+  },
+  logoChatgpt: {
+    width: "120px",
+    height: "120px",
+    marginTop: "10px",
+    objectFit: "contain",
+  },
+  logoClaude: {
+    width: "100px",
+    height: "100px",
+    objectFit: "contain",
+  },
+  logoDeepSeek: {
+    width: "100px",
+    height: "100px",
+    objectFit: "contain",
   },
 };
 
