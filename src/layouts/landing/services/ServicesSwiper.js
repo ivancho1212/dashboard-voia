@@ -14,6 +14,7 @@ const services = [
   { id: "support", title: "Soporte y Mantenimiento", description: "Mantenemos tus sistemas siempre funcionando.", image: "/mantenimiento.webp" },
 ];
 
+// Función para agrupar servicios en bloques de 3
 const chunkServices = (arr, size) => {
   const result = [];
   for (let i = 0; i < arr.length; i += size) {
@@ -30,30 +31,68 @@ const ServicesSwiper = () => {
       <p style={styles.subtitle}>Nuestros Servicios</p>
       <h3 style={styles.headline}>Soluciones que transforman tu negocio</h3>
 
-      <Swiper
-        modules={[Autoplay, EffectFade]}
-        autoplay={{ delay: 5000, disableOnInteraction: false }}
-        effect="fade"
-        fadeEffect={{ crossFade: true }}
-        speed={1000}
-        slidesPerView={1}
-        loop={true} // 🔹 Esto habilita la paginación infinita
-        style={styles.swiper}
-      >
-        {groupedServices.map((group, index) => (
-          <SwiperSlide key={index}>
-            <div style={styles.groupSlide}>
-              {group.map((service) => (
-                <div key={service.id} style={styles.slide}>
-                  <img src={service.image} alt={service.title} style={styles.image} />
-                  <h3 style={styles.title}>{service.title}</h3>
-                  <p style={styles.description}>{service.description}</p>
-                </div>
-              ))}
-            </div>
-          </SwiperSlide>
-        ))}
-      </Swiper>
+      {/* Swiper para versión móvil */}
+      <div className="mobile-view">
+        <Swiper
+          modules={[Autoplay]}
+          autoplay={{ delay: 4000, disableOnInteraction: false }}
+          speed={600}
+          slidesPerView={1}
+          loop={true}
+          style={styles.swiper}
+        >
+          {services.map((service) => (
+            <SwiperSlide key={service.id}>
+              <div style={styles.slide}>
+                <img src={service.image} alt={service.title} style={styles.image} />
+                <h3 style={styles.title}>{service.title}</h3>
+                <p style={styles.description}>{service.description}</p>
+              </div>
+            </SwiperSlide>
+          ))}
+        </Swiper>
+      </div>
+
+      {/* Swiper para versión escritorio */}
+      <div className="desktop-view">
+        <Swiper
+          modules={[Autoplay, EffectFade]}
+          autoplay={{ delay: 5000, disableOnInteraction: false }}
+          effect="fade"
+          fadeEffect={{ crossFade: true }}
+          speed={1000}
+          slidesPerView={1}
+          loop={true}
+          style={styles.swiper}
+        >
+          {groupedServices.map((group, index) => (
+            <SwiperSlide key={index}>
+              <div style={styles.groupSlide}>
+                {group.map((service) => (
+                  <div key={service.id} style={styles.slide}>
+                    <img src={service.image} alt={service.title} style={styles.image} />
+                    <h3 style={styles.title}>{service.title}</h3>
+                    <p style={styles.description}>{service.description}</p>
+                  </div>
+                ))}
+              </div>
+            </SwiperSlide>
+          ))}
+        </Swiper>
+      </div>
+
+      {/* Estilos responsivos */}
+      <style>
+        {`
+          .mobile-view { display: none; }
+          .desktop-view { display: block; }
+          
+          @media (max-width: 767px) {
+            .mobile-view { display: block; }
+            .desktop-view { display: none; }
+          }
+        `}
+      </style>
     </section>
   );
 };

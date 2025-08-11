@@ -32,11 +32,11 @@ const ContactSection = () => {
           <div style={styles.contactDetails}>
             <div style={styles.contactItem}>
               <FaPhoneAlt style={styles.icon} />
-              <span>+57 300 123 4567</span>
+              <span>+57 317 853 1533</span>
             </div>
             <div style={styles.contactItem}>
               <FaEnvelope style={styles.icon} />
-              <span>contacto@voia.com</span>
+              <span>via@gmail.com</span>
             </div>
             <div style={styles.contactItem}>
               <FaMapMarkerAlt style={styles.icon} />
@@ -117,7 +117,7 @@ const styles = {
   text: {
     fontSize: "1.1rem",
     marginBottom: "1.5rem",
-    textAlign: "justify",
+    textAlign: "left",
   },
   contactDetails: {
     display: "flex",

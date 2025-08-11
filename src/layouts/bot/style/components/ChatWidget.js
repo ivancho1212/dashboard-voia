@@ -8,7 +8,6 @@ import MessageBubble from "./chat/MessageBubble";
 import MessageList from "./chat/MessageList";
 import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
-import voiaLogo from "assets/images/VOIA-LOGO.png";
 
 const voaiGif = "/VIA.png";
 

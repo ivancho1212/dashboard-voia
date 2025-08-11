@@ -1,6 +1,8 @@
+// dashboard-voia/src/routes/landing.js
 import LandingLayout from "../layouts/landing/LandingLayout";
 import LandingPage from "../layouts/landing/LandingPage";
-import ViaPage from "../layouts/landing/ViaPage"; // ✅ nombre correcto
+import ViaPage from "../layouts/landing/ViaPage";
+import FaqDetail from "../layouts/landing/FaqDetail"; // ✅ importa tu componente
 
 const landingRoutes = [
   {
@@ -12,8 +14,12 @@ const landingRoutes = [
         element: <LandingPage />,
       },
       {
-        path: "via", // esto equivale a /via
+        path: "via", // /via
         element: <ViaPage />,
+      },
+      {
+        path: "pregunta/:slug", // /pregunta/ejemplo
+        element: <FaqDetail />,
       },
     ],
   },

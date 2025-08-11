@@ -2,7 +2,12 @@
 import React from "react";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay } from "swiper/modules";
-
+import IvanaImage from "../../assets/images/ivana-square.jpg";
+import MarieImage from "../../assets/images/marie.jpg";
+import AnaImage from "../../assets/images/team-1.jpg";
+import JavierImage from "../../assets/images/team-3.jpg";
+import CarlosImage from "../../assets/images/team-4.jpg";
+import RicardoImage from "../../assets/images/team-2.jpg";
 import "swiper/css";
 
 const testimonials = [
@@ -11,42 +16,42 @@ const testimonials = [
     role: "CEO de StartTech",
     comment:
       "El equipo de Voia superó nuestras expectativas. La implementación de IA mejoró nuestra eficiencia en un 40%.",
-    image: "/person1.webp",
+    image: IvanaImage,
   },
   {
     name: "Carlos Gómez",
     role: "CTO de Innovatech",
     comment:
       "Profesionales, puntuales y con gran conocimiento técnico. Nuestra nueva plataforma es más rápida y segura.",
-    image: "/person2.webp",
+    image: CarlosImage,
   },
   {
     name: "María Rodríguez",
     role: "Fundadora de EcoSolutions",
     comment:
       "Gracias a Voia, automatizamos procesos clave y reducimos costos operativos. ¡Recomendados al 100%!",
-    image: "/person3.webp",
+    image: MarieImage,
   },
   {
     name: "Javier Torres",
     role: "Director de Marketing en BrightMedia",
     comment:
       "El rediseño web que hicieron elevó la imagen de nuestra marca y aumentó la conversión de clientes.",
-    image: "/person4.webp",
+    image: JavierImage,
   },
   {
     name: "Ana Pérez",
     role: "Gerente de Operaciones en LogistiFast",
     comment:
       "Implementaron un sistema de automatización que nos ahorra horas de trabajo cada semana.",
-    image: "/person5.webp",
+    image: AnaImage,
   },
   {
     name: "Ricardo Fernández",
     role: "Cofundador de TechWave",
     comment:
       "La integración de IA en nuestros procesos ha sido un cambio radical en la productividad del equipo.",
-    image: "/person6.webp",
+    image: RicardoImage,
   },
 ];
 

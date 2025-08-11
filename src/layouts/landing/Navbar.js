@@ -50,7 +50,9 @@ const Navbar = ({ isDarkBackground = false }) => {
     >
       <div style={{ ...styles.container, color: textColor }}>
         <div style={styles.logoContainer}>
-          <img src={logoSrc} alt="Logo Voia" style={styles.logoImg} />
+          <Link to="/">
+            <img src={logoSrc} alt="Logo Voia" style={styles.logoImg} />
+          </Link>
         </div>
 
         {isMobile && (

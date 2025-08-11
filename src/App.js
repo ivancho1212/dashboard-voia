@@ -1,3 +1,4 @@
+// dashboard-voia\src\App.js
 import { useState, useEffect, useMemo } from "react";
 
 // react-router components
@@ -35,8 +36,15 @@ import {
   setLayout,
 } from "context";
 
+// ParallaxProvider para react-scroll-parallax
+import { ParallaxProvider } from "react-scroll-parallax";
+
+// Importa tu componente ScrollToTop
+import ScrollToTop from "components/ScrollToTop";
+
 // Images
-import brand from "assets/images/VOIA-LOGO.png";
+
+// ...
 
 export default function App() {
   const [controller, dispatch] = useSoftUIController();
@@ -44,18 +52,23 @@ export default function App() {
   const [onMouseEnter, setOnMouseEnter] = useState(false);
   const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
-  const isLandingPage = pathname === "/";
   const isWidgetFrame = pathname === "/widget-frame";
+
+  // Detectar rutas landing (sin sidebar)
+  const isLandingRoute =
+    pathname === "/" ||
+    pathname === "/via" ||
+    pathname.startsWith("/pregunta");  // <-- aquí el cambio importante
 
   // Establecer layout según la ruta
   useEffect(() => {
-    if (pathname === "/") {
+    if (isLandingRoute) {
       setLayout(dispatch, "landing");
       setMiniSidenav(dispatch, true);
     } else {
       setLayout(dispatch, "dashboard");
     }
-  }, [pathname]);
+  }, [pathname, dispatch, isLandingRoute]);
 
   // Cache for the rtl
   useMemo(() => {
@@ -66,6 +79,8 @@ export default function App() {
 
     setRtlCache(cacheRtl);
   }, []);
+
+  const brand = "/via-negativo.png";
 
   // Open sidenav when mouse enter on mini sidenav
   const handleOnMouseEnter = () => {
@@ -91,38 +106,37 @@ export default function App() {
     document.body.setAttribute("dir", direction);
   }, [direction]);
 
-  // Scroll to top on route change
-  useEffect(() => {
-    document.documentElement.scrollTop = 0;
-    document.scrollingElement.scrollTop = 0;
-  }, [pathname]);
+  // ** REMOVIDO EL USEEFFECT QUE HACÍA SCROLL AL CAMBIAR RUTA **
+  // useEffect(() => {
+  //   document.documentElement.scrollTop = 0;
+  //   document.scrollingElement.scrollTop = 0;
+  // }, [pathname]);
 
-const getRoutes = (allRoutes) =>
-  allRoutes.map((route, index) => {
-    if (route.children) {
+  const getRoutes = (allRoutes) =>
+    allRoutes.map((route, index) => {
+      if (route.children) {
+        return (
+          <Route key={index} path={route.path} element={route.element}>
+            {route.children.map((child, idx) => (
+              <Route
+                key={idx}
+                index={child.index}
+                path={child.path}
+                element={child.element}
+              />
+            ))}
+          </Route>
+        );
+      }
+
       return (
-        <Route key={index} path={route.path} element={route.element}>
-          {route.children.map((child, idx) => (
-            <Route
-              key={idx}
-              index={child.index}
-              path={child.path}
-              element={child.element}
-            />
-          ))}
-        </Route>
+        <Route
+          key={index}
+          path={route.path}
+          element={route.element}
+        />
       );
-    }
-
-    return (
-      <Route
-        key={index}
-        path={route.path}
-        element={route.element}
-      />
-    );
-  });
-
+    });
 
   const configsButton = (
     <SoftBox
@@ -158,46 +172,52 @@ const getRoutes = (allRoutes) =>
   if (direction === "rtl") {
     return (
       <CacheProvider value={rtlCache}>
-        <ThemeProvider theme={themeRTL}>
-          <CssBaseline />
-          {!isWidgetFrame && layout === "dashboard" && !isLandingPage && (
-            <>
-              <Sidenav
-                color={sidenavColor}
-                brand={brand}
-                routes={routes}
-                onMouseEnter={handleOnMouseEnter}
-                onMouseLeave={handleOnMouseLeave}
-              />
-              <Configurator />
-              {configsButton}
-            </>
-          )}
-          {!isWidgetFrame && layout === "vr" && <Configurator />}
-          {commonRoutes}
-        </ThemeProvider>
+        <ParallaxProvider>
+          <ThemeProvider theme={themeRTL}>
+            <CssBaseline />
+            <ScrollToTop /> {/* Aquí agregas ScrollToTop */}
+            {!isWidgetFrame && layout === "dashboard" && (
+              <>
+                <Sidenav
+                  color={sidenavColor}
+                  brand={brand}
+                  routes={routes}
+                  onMouseEnter={handleOnMouseEnter}
+                  onMouseLeave={handleOnMouseLeave}
+                />
+                <Configurator />
+                {configsButton}
+              </>
+            )}
+            {!isWidgetFrame && layout === "vr" && <Configurator />}
+            {commonRoutes}
+          </ThemeProvider>
+        </ParallaxProvider>
       </CacheProvider>
     );
   }
 
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      {!isWidgetFrame && layout === "dashboard" && !isLandingPage && (
-        <>
-          <Sidenav
-            color={sidenavColor}
-            brand={brand}
-            routes={routes}
-            onMouseEnter={handleOnMouseEnter}
-            onMouseLeave={handleOnMouseLeave}
-          />
-          <Configurator />
-          {configsButton}
-        </>
-      )}
-      {!isWidgetFrame && layout === "vr" && <Configurator />}
-      {commonRoutes}
-    </ThemeProvider>
+    <ParallaxProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <ScrollToTop /> {/* Aquí agregas ScrollToTop */}
+        {!isWidgetFrame && layout === "dashboard" && (
+          <>
+            <Sidenav
+              color={sidenavColor}
+              brand={brand}
+              routes={routes}
+              onMouseEnter={handleOnMouseEnter}
+              onMouseLeave={handleOnMouseLeave}
+            />
+            <Configurator />
+            {configsButton}
+          </>
+        )}
+        {!isWidgetFrame && layout === "vr" && <Configurator />}
+        {commonRoutes}
+      </ThemeProvider>
+    </ParallaxProvider>
   );
 }

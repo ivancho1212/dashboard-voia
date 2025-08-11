@@ -30,7 +30,6 @@ import {
 } from "layouts/virtual-reality/components/BaseLayout/styles";
 
 // Images
-import brand from "assets/images/VOIA-LOGO.png";
 
 function BaseLayout({ children }) {
   const [controller, dispatch] = useSoftUIController();
