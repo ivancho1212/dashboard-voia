@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const AboutVoiaSection = () => {
+const AboutViaSection = () => {
   const [hovered, setHovered] = useState(null);
 
   return (
@@ -129,4 +129,4 @@ const styles = {
   },
 };
 
-export default AboutVoiaSection;
+export default AboutViaSection;

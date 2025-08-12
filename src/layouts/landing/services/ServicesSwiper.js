@@ -1,18 +1,13 @@
+// dashboard-voia/src/layouts/landing/services/ServicesSwiper.js
 import React from "react";
+import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, EffectFade } from "swiper/modules";
 
 import "swiper/css";
 import "swiper/css/effect-fade";
 
-const services = [
-  { id: "web", title: "Desarrollo Web", description: "Creamos sitios y aplicaciones web responsivas, modernas y optimizadas.", image: "/editorcode.webp" },
-  { id: "mobile", title: "Desarrollo Móvil", description: "Aplicaciones nativas e híbridas para Android y iOS.", image: "/appscell.webp" },
-  { id: "ai", title: "Soluciones con Inteligencia Artificial", description: "Automatización con modelos de lenguaje y visión computarizada.", image: "/chipAI.webp" },
-  { id: "chatbots", title: "Chatbots y Asistentes Virtuales", description: "Atiende a tus clientes 24/7 con bots inteligentes.", image: "/chatAI.webp" },
-  { id: "automation", title: "Automatización de Procesos", description: "Optimiza tareas repetitivas con flujos automatizados.", image: "/automatizacion.webp" },
-  { id: "support", title: "Soporte y Mantenimiento", description: "Mantenemos tus sistemas siempre funcionando.", image: "/mantenimiento.webp" },
-];
+import { services } from "./services"; // ✅ ahora se importa desde services.js
 
 // Función para agrupar servicios en bloques de 3
 const chunkServices = (arr, size) => {
@@ -25,6 +20,7 @@ const chunkServices = (arr, size) => {
 
 const ServicesSwiper = () => {
   const groupedServices = chunkServices(services, 3);
+  const linkStyle = { textDecoration: "none", color: "inherit", display: "block", width: "100%" };
 
   return (
     <section style={styles.section}>
@@ -42,12 +38,14 @@ const ServicesSwiper = () => {
           style={styles.swiper}
         >
           {services.map((service) => (
-            <SwiperSlide key={service.id}>
-              <div style={styles.slide}>
-                <img src={service.image} alt={service.title} style={styles.image} />
-                <h3 style={styles.title}>{service.title}</h3>
-                <p style={styles.description}>{service.description}</p>
-              </div>
+            <SwiperSlide key={service.slug}>
+              <Link to={`/servicio/${service.slug}`} style={linkStyle}>
+                <div style={styles.slide}>
+                  <img src={service.image} alt={service.title} style={styles.image} />
+                  <h3 style={styles.title}>{service.title}</h3>
+                  <p style={styles.description}>{service.description}</p>
+                </div>
+              </Link>
             </SwiperSlide>
           ))}
         </Swiper>
@@ -69,11 +67,13 @@ const ServicesSwiper = () => {
             <SwiperSlide key={index}>
               <div style={styles.groupSlide}>
                 {group.map((service) => (
-                  <div key={service.id} style={styles.slide}>
-                    <img src={service.image} alt={service.title} style={styles.image} />
-                    <h3 style={styles.title}>{service.title}</h3>
-                    <p style={styles.description}>{service.description}</p>
-                  </div>
+                  <Link key={service.slug} to={`/servicio/${service.slug}`} style={linkStyle}>
+                    <div style={styles.slide}>
+                      <img src={service.image} alt={service.title} style={styles.image} />
+                      <h3 style={styles.title}>{service.title}</h3>
+                      <p style={styles.description}>{service.description}</p>
+                    </div>
+                  </Link>
                 ))}
               </div>
             </SwiperSlide>
@@ -81,18 +81,15 @@ const ServicesSwiper = () => {
         </Swiper>
       </div>
 
-      {/* Estilos responsivos */}
-      <style>
-        {`
-          .mobile-view { display: none; }
-          .desktop-view { display: block; }
-          
-          @media (max-width: 767px) {
-            .mobile-view { display: block; }
-            .desktop-view { display: none; }
-          }
-        `}
-      </style>
+      <style>{`
+        .mobile-view { display: none; }
+        .desktop-view { display: block; }
+        
+        @media (max-width: 767px) {
+          .mobile-view { display: block; }
+          .desktop-view { display: none; }
+        }
+      `}</style>
     </section>
   );
 };
@@ -133,10 +130,12 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
     gap: "1rem",
+    cursor: "pointer",
   },
   image: {
     width: "100%",
     borderRadius: "12px",
+    objectFit: "cover",
   },
   title: {
     fontSize: "1.2rem",

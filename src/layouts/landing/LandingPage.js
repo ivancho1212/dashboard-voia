@@ -1,7 +1,7 @@
 import React from "react";
 import HeroSection from "./HeroSection";
 import ServicesSection from "./ServicesSection";
-import AboutVoiaSection from "./AboutVoiaSection";
+import AboutViaSection from "./AboutViaSection";
 import ClientsSection from "./ClientsSection";
 import ContactSection from "./ContactSection";
 import TestimonialsSection from "./TestimonialsSection";
@@ -14,7 +14,7 @@ const LandingPage = () => {
         <HeroSection />
       </section>
       <section id="about">
-        <AboutVoiaSection />
+        <AboutViaSection />
       </section>
       {/* ID para scroll a "Servicios" */}
       <section id="services">

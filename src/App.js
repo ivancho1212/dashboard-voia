@@ -58,7 +58,9 @@ export default function App() {
   const isLandingRoute =
     pathname === "/" ||
     pathname === "/via" ||
-    pathname.startsWith("/pregunta");  // <-- aquí el cambio importante
+    pathname.startsWith("/pregunta") ||
+    pathname.startsWith("/servicio"); 
+
 
   // Establecer layout según la ruta
   useEffect(() => {

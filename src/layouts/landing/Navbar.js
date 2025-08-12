@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Link, useNavigate, useLocation } from "react-router-dom";
+import { services } from "../landing/services/services"; // importa tu array de servicios
 
 const Navbar = ({ isDarkBackground = false }) => {
   const navigate = useNavigate();
@@ -8,7 +9,8 @@ const Navbar = ({ isDarkBackground = false }) => {
 
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hoveredItem, setHoveredItem] = useState(null); // 👈 estado para hover
+  const [hoveredItem, setHoveredItem] = useState(null);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const logoSrc = isDarkBackground ? "/via-negativo.png" : "/VIA.png";
   const textColor = isDarkBackground ? "#fff" : "#222";
@@ -63,43 +65,93 @@ const Navbar = ({ isDarkBackground = false }) => {
 
         <nav style={{ display: isMobile ? (menuOpen ? "block" : "none") : "block" }}>
           <ul style={{ ...styles.navList, ...(isMobile ? styles.mobileNavList : {}) }}>
-            {[
-              { label: "Inicio", anchor: "home" },
-              { label: "Servicios", anchor: "services" },
-              { label: "Via", link: "/via" },
-              { label: "Contacto", anchor: "contact" },
-            ].map((item, index) => (
-              <li key={index}>
-                {item.link ? (
-                  <Link
-                    to={item.link}
-                    style={{
-                      ...styles.navItem,
-                      color:
-                        hoveredItem === index ? "#00bfa5" : textColor,
-                    }}
-                    onMouseEnter={() => setHoveredItem(index)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                  >
-                    {item.label}
-                  </Link>
-                ) : (
-                  <button
-                    onClick={() => handleNavigateToAnchor(item.anchor)}
-                    style={{
-                      ...styles.navItem,
-                      ...styles.buttonReset,
-                      color:
-                        hoveredItem === index ? "#00bfa5" : textColor,
-                    }}
-                    onMouseEnter={() => setHoveredItem(index)}
-                    onMouseLeave={() => setHoveredItem(null)}
-                  >
-                    {item.label}
-                  </button>
-                )}
-              </li>
-            ))}
+            {/* Inicio */}
+            <li>
+              <button
+                onClick={() => handleNavigateToAnchor("home")}
+                style={{
+                  ...styles.navItem,
+                  ...styles.buttonReset,
+                  color: hoveredItem === "home" ? "#00bfa5" : textColor,
+                }}
+                onMouseEnter={() => setHoveredItem("home")}
+                onMouseLeave={() => setHoveredItem(null)}
+              >
+                Inicio
+              </button>
+            </li>
+
+            {/* Servicios con dropdown */}
+            <li
+              style={{ position: "relative" }}
+              onMouseEnter={() => setDropdownOpen(true)}
+              onMouseLeave={() => setDropdownOpen(false)}
+            >
+              <button
+                onClick={() => handleNavigateToAnchor("services")}
+                style={{
+                  ...styles.navItem,
+                  ...styles.buttonReset,
+                  color: hoveredItem === "services" ? "#00bfa5" : textColor,
+                }}
+                onMouseEnter={() => setHoveredItem("services")}
+                onMouseLeave={() => setHoveredItem(null)}
+              >
+                Servicios
+              </button>
+
+
+              {/* Menú desplegable */}
+              {dropdownOpen && !isMobile && (
+                <ul style={styles.dropdownMenu}>
+                  {services.map((srv) => (
+                    <li key={srv.slug}>
+                      <Link
+                        to={`/servicio/${srv.slug}`}
+                        style={styles.dropdownItem}
+                        onMouseEnter={(e) => (e.target.style.backgroundColor = "rgba(0, 191, 166, 0.56)")}
+                        onMouseLeave={(e) => (e.target.style.backgroundColor = "transparent")}
+                        onClick={() => setDropdownOpen(false)}
+                      >
+                        {srv.title}
+                      </Link>
+
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+
+            {/* VIA */}
+            <li>
+              <Link
+                to="/via"
+                style={{
+                  ...styles.navItem,
+                  color: hoveredItem === "via" ? "#00bfa5" : textColor,
+                }}
+                onMouseEnter={() => setHoveredItem("via")}
+                onMouseLeave={() => setHoveredItem(null)}
+              >
+                VIA (Próximamente)
+              </Link>
+            </li>
+
+            {/* Contacto */}
+            <li>
+              <button
+                onClick={() => handleNavigateToAnchor("contact")}
+                style={{
+                  ...styles.navItem,
+                  ...styles.buttonReset,
+                  color: hoveredItem === "contact" ? "#00bfa5" : textColor,
+                }}
+                onMouseEnter={() => setHoveredItem("contact")}
+                onMouseLeave={() => setHoveredItem(null)}
+              >
+                Contacto
+              </button>
+            </li>
           </ul>
         </nav>
       </div>
@@ -133,7 +185,7 @@ const styles = {
     gap: "0.5rem",
   },
   logoImg: {
-    height: "50px",
+    height: "40px",
     width: "auto",
   },
   navList: {
@@ -154,7 +206,7 @@ const styles = {
     fontWeight: "500",
     transition: "color 0.3s ease",
     fontFamily: '"Varela Round", sans-serif',
-    fontSize: "1.1rem",
+    fontSize: "0.95rem",
     cursor: "pointer",
   },
   buttonReset: {
@@ -170,6 +222,33 @@ const styles = {
     cursor: "pointer",
     color: "inherit",
     padding: "0 0.5rem",
+  },
+  dropdownMenu: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    backgroundColor: "#111",
+    borderRadius: "8px", // 🔹 suavizado
+    listStyle: "none",
+    padding: "10px 0",
+    margin: 0,
+    minWidth: "200px",
+    boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
+  },
+
+  dropdownItem: {
+    display: "block",
+    padding: "8px 16px",
+    fontSize: "0.85rem", // 🔹 más pequeño aún
+    color: "#fff",
+    textDecoration: "none",
+    transition: "background 0.3s, border-radius 0.3s",
+    borderRadius: "6px", // 🔹 bordes suaves para cada item
+  },
+
+  dropdownItemHover: {
+    backgroundColor: "#00bfa5",
+    color: "#000",
   },
 };
 
