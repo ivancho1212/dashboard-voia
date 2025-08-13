@@ -1,34 +1,30 @@
-// dashboard-voia\src\App.js
 import { useState, useEffect, useMemo } from "react";
-
-// react-router components
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 
-// @mui material components
+// MUI
 import { ThemeProvider } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
 import Icon from "@mui/material/Icon";
 
-// Soft UI Dashboard React components
+// Soft UI Components
 import SoftBox from "components/SoftBox";
-
-// Soft UI Dashboard React examples
 import Sidenav from "examples/Sidenav";
 import Configurator from "examples/Configurator";
 
-// Soft UI Dashboard React themes
+// Themes
 import theme from "assets/theme";
 import themeRTL from "assets/theme/theme-rtl";
+import NotFound from "layouts/notFound";
 
-// RTL plugins
+// RTL
 import rtlPlugin from "stylis-plugin-rtl";
 import { CacheProvider } from "@emotion/react";
 import createCache from "@emotion/cache";
 
-// Rutas consolidadas desde src/routes/index.js
+// Rutas
 import routes from "routes/index";
 
-// Soft UI Dashboard React contexts
+// Context
 import {
   useSoftUIController,
   setMiniSidenav,
@@ -36,15 +32,11 @@ import {
   setLayout,
 } from "context";
 
-// ParallaxProvider para react-scroll-parallax
+// Parallax
 import { ParallaxProvider } from "react-scroll-parallax";
 
-// Importa tu componente ScrollToTop
+// ScrollToTop
 import ScrollToTop from "components/ScrollToTop";
-
-// Images
-
-// ...
 
 export default function App() {
   const [controller, dispatch] = useSoftUIController();
@@ -54,15 +46,16 @@ export default function App() {
   const { pathname } = useLocation();
   const isWidgetFrame = pathname === "/widget-frame";
 
-  // Detectar rutas landing (sin sidebar)
+  // Detectar rutas landing
   const isLandingRoute =
     pathname === "/" ||
     pathname === "/via" ||
     pathname.startsWith("/pregunta") ||
-    pathname.startsWith("/servicio"); 
+    pathname.startsWith("/servicio") ||
+    pathname === "/authentication/sign-in" ||
+    pathname === "/authentication/sign-up";
 
-
-  // Establecer layout según la ruta
+  // Layout según la ruta
   useEffect(() => {
     if (isLandingRoute) {
       setLayout(dispatch, "landing");
@@ -72,19 +65,17 @@ export default function App() {
     }
   }, [pathname, dispatch, isLandingRoute]);
 
-  // Cache for the rtl
+  // Cache RTL
   useMemo(() => {
     const cacheRtl = createCache({
       key: "rtl",
       stylisPlugins: [rtlPlugin],
     });
-
     setRtlCache(cacheRtl);
   }, []);
 
   const brand = "/via-negativo.png";
 
-  // Open sidenav when mouse enter on mini sidenav
   const handleOnMouseEnter = () => {
     if (miniSidenav && !onMouseEnter) {
       setMiniSidenav(dispatch, false);
@@ -92,7 +83,6 @@ export default function App() {
     }
   };
 
-  // Close sidenav when mouse leave mini sidenav
   const handleOnMouseLeave = () => {
     if (onMouseEnter) {
       setMiniSidenav(dispatch, true);
@@ -100,22 +90,34 @@ export default function App() {
     }
   };
 
-  // Change the openConfigurator state
   const handleConfiguratorOpen = () => setOpenConfigurator(dispatch, !openConfigurator);
 
-  // Setting the dir attribute for the body element
+  // Dir attribute
   useEffect(() => {
     document.body.setAttribute("dir", direction);
   }, [direction]);
 
-  // ** REMOVIDO EL USEEFFECT QUE HACÍA SCROLL AL CAMBIAR RUTA **
-  // useEffect(() => {
-  //   document.documentElement.scrollTop = 0;
-  //   document.scrollingElement.scrollTop = 0;
-  // }, [pathname]);
-
+  // NUEVO: Soporte rutas estilo Soft UI y estilo moderno
   const getRoutes = (allRoutes) =>
-    allRoutes.map((route, index) => {
+    allRoutes.flatMap((route, index) => {
+      // Si tiene colapsables
+      if (route.collapse) {
+        return getRoutes(route.collapse);
+      }
+
+      // Formato Soft UI Dashboard
+      if (route.route && route.component) {
+        return (
+          <Route
+            exact
+            path={route.route}
+            element={route.component}
+            key={route.key || index}
+          />
+        );
+      }
+
+      // Formato moderno con children
       if (route.children) {
         return (
           <Route key={index} path={route.path} element={route.element}>
@@ -131,13 +133,18 @@ export default function App() {
         );
       }
 
-      return (
-        <Route
-          key={index}
-          path={route.path}
-          element={route.element}
-        />
-      );
+      // Ruta simple moderna
+      if (route.path && route.element) {
+        return (
+          <Route
+            key={index}
+            path={route.path}
+            element={route.element}
+          />
+        );
+      }
+
+      return null;
     });
 
   const configsButton = (
@@ -167,7 +174,7 @@ export default function App() {
   const commonRoutes = (
     <Routes>
       {getRoutes(routes)}
-      <Route path="*" element={<Navigate to="/" />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 
@@ -177,7 +184,7 @@ export default function App() {
         <ParallaxProvider>
           <ThemeProvider theme={themeRTL}>
             <CssBaseline />
-            <ScrollToTop /> {/* Aquí agregas ScrollToTop */}
+            <ScrollToTop />
             {!isWidgetFrame && layout === "dashboard" && (
               <>
                 <Sidenav
@@ -203,7 +210,7 @@ export default function App() {
     <ParallaxProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <ScrollToTop /> {/* Aquí agregas ScrollToTop */}
+        <ScrollToTop />
         {!isWidgetFrame && layout === "dashboard" && (
           <>
             <Sidenav

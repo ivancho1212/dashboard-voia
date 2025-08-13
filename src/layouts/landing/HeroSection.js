@@ -86,7 +86,7 @@ const styles = {
     padding: "0.8rem 2rem",
     fontSize: "1.1rem",
     fontWeight: "bold",
-    borderRadius: "50px",
+    borderRadius: "8px",
     cursor: "pointer",
     transition: "all 0.3s ease",
   },

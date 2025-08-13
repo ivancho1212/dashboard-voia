@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import { services } from "../landing/services/services"; // importa tu array de servicios
+import { services } from "../landing/services/services";
+import authRoutes from "routes/auth";
 
 const Navbar = ({ isDarkBackground = false }) => {
   const navigate = useNavigate();
@@ -17,9 +18,7 @@ const Navbar = ({ isDarkBackground = false }) => {
 
   const handleResize = () => {
     setIsMobile(window.innerWidth < 768);
-    if (window.innerWidth >= 768) {
-      setMenuOpen(false);
-    }
+    if (window.innerWidth >= 768) setMenuOpen(false);
   };
 
   useEffect(() => {
@@ -40,6 +39,10 @@ const Navbar = ({ isDarkBackground = false }) => {
     }
     if (isMobile) setMenuOpen(false);
   };
+
+  const authLinks = authRoutes.filter(
+    (r) => r.key === "sign-in" || r.key === "sign-up"
+  );
 
   return (
     <header
@@ -70,9 +73,9 @@ const Navbar = ({ isDarkBackground = false }) => {
               <button
                 onClick={() => handleNavigateToAnchor("home")}
                 style={{
-                  ...styles.navItem,
-                  ...styles.buttonReset,
+                  ...styles.navLinkButton,
                   color: hoveredItem === "home" ? "#00bfa5" : textColor,
+                  borderBottom: hoveredItem === "home" ? "1px solid #00bfa5" : "1px solid transparent",
                 }}
                 onMouseEnter={() => setHoveredItem("home")}
                 onMouseLeave={() => setHoveredItem(null)}
@@ -90,9 +93,9 @@ const Navbar = ({ isDarkBackground = false }) => {
               <button
                 onClick={() => handleNavigateToAnchor("services")}
                 style={{
-                  ...styles.navItem,
-                  ...styles.buttonReset,
+                  ...styles.navLinkButton,
                   color: hoveredItem === "services" ? "#00bfa5" : textColor,
+                  borderBottom: hoveredItem === "services" ? "1px solid #00bfa5" : "1px solid transparent",
                 }}
                 onMouseEnter={() => setHoveredItem("services")}
                 onMouseLeave={() => setHoveredItem(null)}
@@ -100,8 +103,6 @@ const Navbar = ({ isDarkBackground = false }) => {
                 Servicios
               </button>
 
-
-              {/* Menú desplegable */}
               {dropdownOpen && !isMobile && (
                 <ul style={styles.dropdownMenu}>
                   {services.map((srv) => (
@@ -109,13 +110,16 @@ const Navbar = ({ isDarkBackground = false }) => {
                       <Link
                         to={`/servicio/${srv.slug}`}
                         style={styles.dropdownItem}
-                        onMouseEnter={(e) => (e.target.style.backgroundColor = "rgba(0, 191, 166, 0.56)")}
-                        onMouseLeave={(e) => (e.target.style.backgroundColor = "transparent")}
+                        onMouseEnter={(e) =>
+                          (e.target.style.backgroundColor = "rgba(0, 191, 166, 0.56)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.target.style.backgroundColor = "transparent")
+                        }
                         onClick={() => setDropdownOpen(false)}
                       >
                         {srv.title}
                       </Link>
-
                     </li>
                   ))}
                 </ul>
@@ -127,13 +131,14 @@ const Navbar = ({ isDarkBackground = false }) => {
               <Link
                 to="/via"
                 style={{
-                  ...styles.navItem,
+                  ...styles.navLinkButton,
                   color: hoveredItem === "via" ? "#00bfa5" : textColor,
+                  borderBottom: hoveredItem === "via" ? "1px solid #00bfa5" : "1px solid transparent",
                 }}
                 onMouseEnter={() => setHoveredItem("via")}
                 onMouseLeave={() => setHoveredItem(null)}
               >
-                VIA (Próximamente)
+                Conoce a Via
               </Link>
             </li>
 
@@ -142,9 +147,9 @@ const Navbar = ({ isDarkBackground = false }) => {
               <button
                 onClick={() => handleNavigateToAnchor("contact")}
                 style={{
-                  ...styles.navItem,
-                  ...styles.buttonReset,
+                  ...styles.navLinkButton,
                   color: hoveredItem === "contact" ? "#00bfa5" : textColor,
+                  borderBottom: hoveredItem === "contact" ? "1px solid #00bfa5" : "1px solid transparent",
                 }}
                 onMouseEnter={() => setHoveredItem("contact")}
                 onMouseLeave={() => setHoveredItem(null)}
@@ -152,6 +157,46 @@ const Navbar = ({ isDarkBackground = false }) => {
                 Contacto
               </button>
             </li>
+
+{/* Botones de autenticación */}
+{authLinks.map((link) => (
+  <li key={link.key}>
+    <Link
+      to={link.route}
+      style={{
+        ...styles.navLinkButton,
+        ...(link.key === "sign-up"
+          ? {
+              color: hoveredItem === link.key ? "#fff" : "#00bfa5",
+              borderBottom:
+                hoveredItem === link.key
+                  ? "1px solid #fff"
+                  : "1px solid transparent",
+              backgroundColor: "transparent",
+              transition: "all 0.3s ease",
+            }
+          : {
+              color: hoveredItem === link.key ? "#00bfa5" : textColor,
+              borderBottom:
+                hoveredItem === link.key
+                  ? "1px solid #00bfa5"
+                  : "1px solid transparent",
+              backgroundColor: "transparent",
+            }),
+        textDecoration: "none",
+      }}
+      onMouseEnter={() => setHoveredItem(link.key)}
+      onMouseLeave={() => setHoveredItem(null)}
+    >
+      {link.name}
+    </Link>
+  </li>
+))}
+
+
+
+
+
           </ul>
         </nav>
       </div>
@@ -201,19 +246,18 @@ const styles = {
     gap: "1rem",
     marginTop: "1rem",
   },
-  navItem: {
-    textDecoration: "none",
+  navLinkButton: {
+    padding: "0.5rem 1rem",
+    borderRadius: "0", // sin esquinas
     fontWeight: "500",
-    transition: "color 0.3s ease",
-    fontFamily: '"Varela Round", sans-serif',
-    fontSize: "0.95rem",
+    fontSize: "0.9rem",
+    textDecoration: "none",
+    transition: "all 0.3s ease",
+    backgroundColor: "transparent",
+    border: "none", // sin borde completo
+    borderBottom: "1px solid transparent", // línea inferior por defecto
     cursor: "pointer",
-  },
-  buttonReset: {
-    background: "none",
-    border: "none",
-    padding: 0,
-    font: "inherit",
+    fontFamily: '"Varela Round", sans-serif',
   },
   hamburger: {
     fontSize: "24px",
@@ -228,27 +272,21 @@ const styles = {
     top: "100%",
     left: 0,
     backgroundColor: "#111",
-    borderRadius: "8px", // 🔹 suavizado
+    borderRadius: "8px",
     listStyle: "none",
     padding: "10px 0",
     margin: 0,
     minWidth: "200px",
     boxShadow: "0 8px 16px rgba(0,0,0,0.3)",
   },
-
   dropdownItem: {
     display: "block",
     padding: "8px 16px",
-    fontSize: "0.85rem", // 🔹 más pequeño aún
+    fontSize: "0.75rem",
     color: "#fff",
     textDecoration: "none",
     transition: "background 0.3s, border-radius 0.3s",
-    borderRadius: "6px", // 🔹 bordes suaves para cada item
-  },
-
-  dropdownItemHover: {
-    backgroundColor: "#00bfa5",
-    color: "#000",
+    borderRadius: "8px",
   },
 };
 
