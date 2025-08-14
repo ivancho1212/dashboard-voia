@@ -1,4 +1,4 @@
-// dashboard-voia/src/layouts/landing/services/ServicesSwiper.js
+// dashboard-via/src/layouts/landing/services/ServicesSwiper.js
 import React from "react";
 import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";

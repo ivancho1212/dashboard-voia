@@ -1,4 +1,4 @@
-// dashboard-voia/src/layouts/landing/FaqDetail.js
+// dashboard-via/src/layouts/landing/FaqDetail.js
 import React from "react";
 import { useParams } from "react-router-dom";
 import HeroSection from "./HeroSection";

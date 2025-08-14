@@ -56,7 +56,7 @@ const Navbar = ({ isDarkBackground = false }) => {
       <div style={{ ...styles.container, color: textColor }}>
         <div style={styles.logoContainer}>
           <Link to="/">
-            <img src={logoSrc} alt="Logo Voia" style={styles.logoImg} />
+            <img src={logoSrc} alt="Logo Via" style={styles.logoImg} />
           </Link>
         </div>
 

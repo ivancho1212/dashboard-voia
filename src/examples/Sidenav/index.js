@@ -133,7 +133,7 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             <SoftBox
               component="img"
               src={brand}
-              alt="Logo voia"
+              alt="Logo via"
               width="6rem"
               mx="auto"
               my={2}

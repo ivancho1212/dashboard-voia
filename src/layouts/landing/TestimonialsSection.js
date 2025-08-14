@@ -15,7 +15,7 @@ const testimonials = [
     name: "Laura Martínez",
     role: "CEO de StartTech",
     comment:
-      "El equipo de Voia superó nuestras expectativas. La implementación de IA mejoró nuestra eficiencia en un 40%.",
+      "El equipo de Via superó nuestras expectativas. La implementación de IA mejoró nuestra eficiencia en un 40%.",
     image: IvanaImage,
   },
   {
@@ -29,7 +29,7 @@ const testimonials = [
     name: "María Rodríguez",
     role: "Fundadora de EcoSolutions",
     comment:
-      "Gracias a Voia, automatizamos procesos clave y reducimos costos operativos. ¡Recomendados al 100%!",
+      "Gracias a Via, automatizamos procesos clave y reducimos costos operativos. ¡Recomendados al 100%!",
     image: MarieImage,
   },
   {

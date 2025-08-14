@@ -58,7 +58,7 @@ const Footer = () => {
         ))}
       </div>
       <p style={styles.text}>
-        © {new Date().getFullYear()} Voia | Desarrollado por Ivan Herrera.
+        © {new Date().getFullYear()} Via | Desarrollado por Ivan Herrera.
       </p>
     </footer>
   );

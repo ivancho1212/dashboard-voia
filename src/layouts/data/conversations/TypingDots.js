@@ -1,4 +1,4 @@
-// dashboard-voia/src/layouts/data/conversations/TypingDots.js
+// dashboard-via/src/layouts/data/conversations/TypingDots.js
 import React from "react";
 import PropTypes from "prop-types";
 

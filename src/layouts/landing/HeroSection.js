@@ -16,7 +16,8 @@ const HeroSection = ({ title, subtitle, backgroundImage }) => {
       layers={[
         {
           image: bgImage,
-          speed: -35,
+          speed: -25, // antes -35
+          scale: [1, 1], // evita zoom progresivo
         },
         {
           children: <div style={styles.overlay} />,
@@ -25,6 +26,7 @@ const HeroSection = ({ title, subtitle, backgroundImage }) => {
       ]}
       style={{ minHeight: "60vh", position: "relative" }}
     >
+
       <div style={styles.content}>
         <h1 style={styles.title}>{mainTitle}</h1>
         <p style={styles.subtitle}>{mainSubtitle}</p>

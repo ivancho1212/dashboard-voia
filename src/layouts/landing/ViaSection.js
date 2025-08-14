@@ -1,12 +1,19 @@
 // src/layouts/landing/ViaSection.js
 import React from "react";
-import widgetImg from "../../assets/images/widget-preview.png";
+import widgetImg from "../../assets/images/widget-preview.webp";
 import plansImg from "../../assets/images/plans-preview.png";
+import { ReactComponent as AdaptableIcon } from '../../assets/icons/adaptable.svg';
+import { ReactComponent as BrainIcon } from '../../assets/icons/brain.svg';
+import { ReactComponent as PanelIcon } from '../../assets/icons/panel.svg';
+
 
 const ViaSection = () => {
   return (
     <section style={styles.section}>
       <div style={styles.container}>
+
+        {/* Introducción */}
+        <p style={styles.subtitle}>Plataforma de agentes de inteligencia artificial</p>
         <h2 style={styles.title}>¿Por qué elegir VIA?</h2>
         <p style={styles.text}>
           VIA es mucho más que un chatbot. Es una plataforma para crear{" "}
@@ -16,6 +23,7 @@ const ViaSection = () => {
           a tus necesidades.
         </p>
 
+        {/* Beneficios */}
         <div style={styles.featuresGrid}>
           {features.map((feature, idx) => (
             <div key={idx} style={styles.card}>
@@ -26,13 +34,25 @@ const ViaSection = () => {
           ))}
         </div>
 
-        {/* Imagen de ejemplo del widget */}
-        <div style={styles.imageContainer}>
-          <img src={widgetImg} alt="Vista previa del widget de VIA" style={styles.image} />
+        {/* Widget con texto al lado */}
+        <div style={styles.widgetSection}>
+          <div style={styles.widgetText}>
+            <p style={styles.subtitle}>Vista previa del widget VIA</p>
+            <h2 style={styles.widgetTitle}>Interactúa con tus clientes en tiempo real</h2>
+            <p style={styles.futureText}>
+              Nuestro widget de VIA se integra en tu sitio web en minutos, brindando
+              atención automatizada y soporte con IA 24/7. Permite enviar imágenes,
+              documentos y capturar datos clave para que nunca pierdas información valiosa.
+            </p>
+          </div>
+          <div style={styles.widgetImage}>
+            <img src={widgetImg} alt="Vista previa del widget de VIA" style={styles.image} />
+          </div>
         </div>
 
         {/* Sección futura */}
         <section id="chat" style={styles.futureSection}>
+          <p style={styles.subtitle}>Entrenamiento y personalización</p>
           <h2 style={styles.futureTitle}>Crea, entrena y personaliza tu agente de IA</h2>
           <p style={styles.futureText}>
             Con VIA puedes partir de plantillas específicas para tu sector y entrenar
@@ -40,7 +60,7 @@ const ViaSection = () => {
             <strong style={{ color: "#fff" }}>la información de tu empresa</strong>.
             Personaliza el widget con tus colores, fuentes y avatar. Configura
             la captura de datos clave como{" "}
-            <strong style={{ color: "#00bfa5" }}>nombre, documento o correo</strong>,
+            <strong style={{ color: "#00bfa5" }}>nombre, documento o correo etc...</strong>,
             recibe imágenes y documentos, y conecta con el{" "}
             <strong style={{ color: "#fff" }}>proveedor de IA que prefieras</strong>.
           </p>
@@ -52,6 +72,7 @@ const ViaSection = () => {
 
         {/* Sección de planes */}
         <section id="plans" style={styles.plansSection}>
+          <p style={styles.subtitle}>Opciones flexibles para tu negocio</p>
           <h2 style={styles.plansTitle}>Planes para cada necesidad</h2>
           <p style={styles.futureText}>
             Elige el plan que mejor se adapte a tu negocio, desde pequeñas empresas hasta
@@ -70,16 +91,14 @@ const features = [
     title: "Adaptable a sectores",
     description: "Atención médica, ecommerce, soporte técnico, educación y más.",
     icon: (
-      <svg width="40" height="40" fill="#00bfa5" viewBox="0 0 24 24">
-        <path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 14.5h-2v-2h2v2zm0-4h-2V7h2v5.5z" />
-      </svg>
+      <AdaptableIcon width={40} height={40} fill="#fff" />
     ),
   },
   {
     title: "Integración rápida",
     description: "Instálalo en minutos en tu web o aplicación.",
     icon: (
-      <svg width="40" height="40" fill="#00bfa5" viewBox="0 0 24 24">
+      <svg width="40" height="40" fill="#fff" viewBox="0 0 24 24">
         <path d="M10.59 13.41L9.17 12l4.24-4.24 1.41 1.41L12 12l2.83 2.83-1.41 1.41z" />
       </svg>
     ),
@@ -88,26 +107,23 @@ const features = [
     title: "Panel de control",
     description: "Monitorea y administra conversaciones en tiempo real.",
     icon: (
-      <svg width="40" height="40" fill="#00bfa5" viewBox="0 0 24 24">
-        <path d="M3 13h2v-2H3v2zm4 4h2v-6H7v6zm4 2h2V7h-2v12zm4-4h2v-4h-2v4zm4-10v14H5V5h14m0-2H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2z" />
-      </svg>
+      <PanelIcon width={40} height={40} fill="#fff" />
     ),
   },
   {
     title: "IA con contexto",
     description: "Aprende de cada interacción para mejorar respuestas.",
     icon: (
-      <svg width="40" height="40" fill="#00bfa5" viewBox="0 0 24 24">
-        <path d="M12 3C7 3 3 7 3 12s4 9 9 9 9-4 9-9-4-9-9-9zm0 16a7 7 0 110-14 7 7 0 010 14zm0-10a3 3 0 100 6 3 3 0 000-6z" />
-      </svg>
+      <BrainIcon width={40} height={40} fill="#fff" />
     ),
   },
+
 ];
 
 const styles = {
   section: {
     backgroundColor: "#000",
-    padding: "80px 20px",
+    padding: "150px 20px",
     fontFamily: '"Varela Round", sans-serif',
     color: "#ccc",
   },
@@ -116,9 +132,16 @@ const styles = {
     margin: "0 auto",
     textAlign: "center",
   },
+  subtitle: {
+    color: "#00bfa5",
+    fontWeight: "bold",
+    fontSize: "1rem",
+    textTransform: "uppercase",
+    marginBottom: "0.8rem",
+  },
   title: {
     fontSize: "2.5rem",
-    color: "#00bfa5",
+    color: "#fff",
     marginBottom: "1rem",
   },
   text: {
@@ -143,29 +166,53 @@ const styles = {
   },
   cardTitle: {
     fontSize: "1.2rem",
-    color: "#00bfa5",
+    color: "#fff",
     marginBottom: "0.5rem",
   },
   cardText: {
     fontSize: "1rem",
     color: "#ccc",
   },
-  imageContainer: {
-    marginTop: "40px",
+  widgetSection: {
+    marginTop: "280px",
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "40px",
+    textAlign: "left",
+  },
+  widgetText: {
+    flex: "1",
+    minWidth: "300px",
+  },
+  widgetTitle: {
+    fontSize: "2rem",
+    color: "#fff",
+    marginBottom: "1rem",
+  },
+  widgetImage: {
+    flex: "1",
+    minWidth: "280px",
+    textAlign: "center",
   },
   image: {
-    width: "100%",
-    maxWidth: "800px",
+    width: "60%",
+    maxWidth: "350px",
     borderRadius: "1rem",
-    boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
+    filter: `
+    drop-shadow(0 0 10px rgba(0, 191, 165, 0.8))
+    drop-shadow(0 0 20px rgba(0, 191, 165, 0.6))
+    drop-shadow(0 0 30px rgba(0, 191, 165, 0.4))
+  `,
+    transition: "transform 0.3s ease",
   },
   futureSection: {
-    marginTop: "60px",
-    paddingTop: "40px",
+    marginTop: "150px",
+    paddingTop: "150px",
     borderTop: "1px solid #222",
   },
   futureTitle: {
-    color: "#00bfa5",
+    color: "#fff",
     fontSize: "2rem",
     marginBottom: "1rem",
   },
@@ -176,12 +223,12 @@ const styles = {
     lineHeight: "1.6",
   },
   plansSection: {
-    marginTop: "60px",
-    paddingTop: "40px",
+    marginTop: "150px", // antes 60px
+    paddingTop: "150px", // antes 40px
     borderTop: "1px solid #222",
   },
   plansTitle: {
-    color: "#00bfa5",
+    color: "#fff",
     fontSize: "2rem",
     marginBottom: "1rem",
   },

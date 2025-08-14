@@ -1,4 +1,4 @@
-// dashboard-voia/src/routes/landing.js
+// dashboard-via/src/routes/landing.js
 import LandingLayout from "../layouts/landing/LandingLayout";
 import LandingPage from "../layouts/landing/LandingPage";
 import ViaPage from "../layouts/landing/ViaPage";

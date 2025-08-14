@@ -9,7 +9,8 @@ import MessageList from "./chat/MessageList";
 import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
 
-const voaiGif = "/VIA.png";
+
+const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 
 function ChatWidget({
   style = {},
@@ -735,7 +736,7 @@ function ChatWidget({
             © {new Date().getFullYear()}{" "}
             <b style={{ color: primaryColor, display: "flex", alignItems: "center", gap: "4px" }}>
               <img
-                src={voiaLogo}
+                src={viaLogo}
                 alt="Logo VIA"
                 style={{ width: "20px", height: "20px", objectFit: "contain" }}
               />

@@ -1,5 +1,6 @@
 // src/layouts/landing/ViaPage.js
 import React from "react";
+import HeroSection from "./HeroSection";
 import ViaSection from "./ViaSection";
 import ClientsSection from "./ClientsSection";
 import ContactSection from "./ContactSection";
@@ -8,24 +9,14 @@ import TestimonialsSection from "./TestimonialsSection";
 const ViaPage = () => {
   return (
     <main style={{ background: "#000", color: "#fff" }}>
-      {/* Encabezado de la página */}
-      <section style={{
-        textAlign: "center",
-        padding: "100px 20px 60px",
-        maxWidth: "900px",
-        margin: "0 auto"
-      }}>
-        <h1 style={{ fontSize: "2.8rem", marginBottom: "20px", color: "#00bfa5" }}>
-          Conoce VIA (Voice Intelligent Artificial)
-        </h1>
-        <p style={{ fontSize: "1.2rem", lineHeight: "1.6", opacity: 0.9 }}>
-          VIA es tu asistente conversacional inteligente, diseñado para mejorar
-          la atención al cliente mediante inteligencia artificial y voz.
-        </p>
-      </section>
+      {/* Hero con mensaje y fondo */}
+      <HeroSection
+        title="Conoce VIA (Voice Intelligent Artificial)"
+        subtitle="VIA es tu asistente conversacional inteligente, diseñado para mejorar la atención al cliente mediante inteligencia artificial."
+        backgroundImage="/Gemini_Generated_Image_b0upz2b0upz2b0up.jpg"
+      />
 
-      {/* Secciones independientes con sus estilos propios */}
-
+      {/* Secciones */}
       <ViaSection />
       <section id="testimonials">
         <TestimonialsSection />
@@ -33,7 +24,6 @@ const ViaPage = () => {
       <section id="clients">
         <ClientsSection />
       </section>
-      {/* ID para scroll a "Contacto" */}
       <section id="contact">
         <ContactSection />
       </section>
