@@ -1,12 +1,21 @@
-import React from "react";
+// src/layouts/landing/ClientsSection.js (Corregido)
+import React, { useEffect } from "react";
+// Ya no es necesario importar LazySection aquí
+// import LazySection from "./LazySection";
 import NeuralBackground from "../../components/NeuralBackground";
 
 const ClientsSection = () => {
+  useEffect(() => {
+    console.log("ClientsSection montada / visible");
+  }, []);
+
   return (
-    <section style={styles.section}>
+    <section id="clients" style={styles.section}>
       <NeuralBackground />
       <div style={styles.container}>
-        <p style={styles.subtitle}>Empresas líderes en tecnología e inteligencia artificial</p>
+        <p style={styles.subtitle}>
+          Empresas líderes en tecnología e inteligencia artificial
+        </p>
         <h4 style={styles.title}>Socios estratégicos que confían en nosotros</h4>
 
         <div style={styles.logos}>
@@ -23,14 +32,14 @@ const ClientsSection = () => {
 
 const styles = {
   section: {
-    position: "relative", // 👈 importante para posicionar el fondo
+    position: "relative",
     padding: "250px 20px",
     backgroundColor: "#0e0e0e",
     color: "#fff",
-    overflow: "hidden", // 👈 asegura que el fondo no se desborde
+    overflow: "hidden",
   },
   container: {
-    position: "relative", // 👈 asegura que el contenido quede encima del fondo
+    position: "relative",
     zIndex: 1,
     maxWidth: "1200px",
     margin: "0 auto",

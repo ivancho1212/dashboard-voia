@@ -1,8 +1,13 @@
 // src/layouts/landing/ContactSection.js
-import React, { useState } from "react";
+
+import React, { useState, useEffect } from "react";
 import { FaPhoneAlt, FaEnvelope, FaMapMarkerAlt } from "react-icons/fa";
 
 const ContactSection = () => {
+  useEffect(() => {
+    console.log("ContactSection montada / visible");
+  }, []);
+
   const [formData, setFormData] = useState({
     nombre: "",
     correo: "",
@@ -21,13 +26,13 @@ const ContactSection = () => {
   };
 
   return (
-    <section id="contacto" style={styles.section}>
+    <section id="contact" style={styles.section}>
       <div style={styles.wrapper}>
-        {/* INFO DE CONTACTO */}
         <div style={styles.infoBox}>
           <h5 style={styles.title}>¿Tienes alguna duda?</h5>
           <p style={styles.text}>
-            Contáctanos para conocer cómo podemos ayudarte a automatizar y escalar tu atención al cliente.
+            Contáctanos para conocer cómo podemos ayudarte a automatizar y
+            escalar tu atención al cliente.
           </p>
           <div style={styles.contactDetails}>
             <div style={styles.contactItem}>
@@ -45,7 +50,6 @@ const ContactSection = () => {
           </div>
         </div>
 
-        {/* FORMULARIO */}
         <form onSubmit={handleSubmit} style={styles.form}>
           <input
             type="text"
@@ -80,21 +84,25 @@ const ContactSection = () => {
             onChange={handleChange}
             rows={4}
             required
+            // ✅ CAMBIO 1: Copiar el estilo del input en el textarea
             style={styles.textarea}
           />
-          <button type="submit" style={styles.button}>Enviar</button>
+          <button type="submit" style={styles.button}>
+            Enviar
+          </button>
         </form>
       </div>
     </section>
   );
 };
 
-// 🎨 ESTILOS
 const styles = {
   section: {
-    backgroundColor: "#0e0e0e",
+    backgroundColor: "#000",
     color: "#fff",
     padding: "60px 20px",
+    // ✅ CAMBIO 2: Aplicar la fuente al contenedor principal para que se herede
+    fontFamily: "'Varela Round', sans-serif"
   },
   wrapper: {
     display: "flex",
@@ -146,6 +154,7 @@ const styles = {
     borderRadius: "6px",
     border: "none",
     fontSize: "1rem",
+    fontFamily: "'Varela Round', sans-serif" // ✅ CAMBIO 3: Aplicar la fuente directamente
   },
   textarea: {
     padding: "12px",
@@ -153,6 +162,7 @@ const styles = {
     border: "none",
     fontSize: "1rem",
     resize: "vertical",
+    fontFamily: "'Varela Round', sans-serif" // ✅ CAMBIO 4: Aplicar la fuente directamente
   },
   button: {
     padding: "12px",
@@ -162,6 +172,7 @@ const styles = {
     border: "none",
     borderRadius: "6px",
     cursor: "pointer",
+    fontFamily: "'Varela Round', sans-serif" // ✅ CAMBIO 5: Aplicar la fuente directamente
   },
 };
 

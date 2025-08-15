@@ -65,6 +65,7 @@ export const serviceContent = {
     viaSolution: `
       En VIA no solo diseñamos sitios web, creamos plataformas que venden, comunican y posicionan tu marca. Nuestro objetivo es que tu presencia digital sea una ventaja competitiva real.
     `,
+    solutionTitle: "Cómo el desarrollo web potencia tu empresa con VIA",
   },
   mobile: {
     longDescription: `
@@ -91,6 +92,7 @@ export const serviceContent = {
     viaSolution: `
       En VIA te acompañamos desde la idea hasta la publicación en las tiendas oficiales. Nuestro compromiso es crear apps que impacten y cumplan tus objetivos comerciales.
     `,
+    solutionTitle: "Cómo el Desarrollo Móvil impulsa tu negocio con VIA",
   },
   ai: {
     longDescription: `
@@ -117,6 +119,7 @@ export const serviceContent = {
     viaSolution: `
       En VIA creemos que la inteligencia artificial no es el futuro, es el presente. Nuestras soluciones te ayudan a tomar mejores decisiones, atender más rápido y adelantarte a la competencia.
     `,
+    solutionTitle: "Cómo la Inteligencia Artificial acelera tu crecimiento con VIA",
   },
   chatbots: {
     longDescription: `
@@ -143,6 +146,7 @@ export const serviceContent = {
     viaSolution: `
       En VIA no creamos simples bots, creamos asistentes que ayudan, entienden y fidelizan. Tu atención al cliente nunca más volverá a ser un cuello de botella.
     `,
+    solutionTitle: "Cómo los Chatbots de VIA transforman tu atención al cliente",
   },
   automation: {
     longDescription: `
@@ -169,6 +173,7 @@ export const serviceContent = {
     viaSolution: `
       En VIA convertimos procesos lentos y repetitivos en flujos ágiles y automáticos. Más tiempo para tu equipo, más valor para tus clientes.
     `,
+    solutionTitle: "Cómo la Automatización de Procesos optimiza tu negocio con VIA",
   },
   support: {
     longDescription: `
@@ -195,5 +200,6 @@ export const serviceContent = {
     viaSolution: `
       En VIA cuidamos lo que construimos. Nuestro soporte es tu garantía de que la tecnología siempre estará a tu favor.
     `,
+    solutionTitle: "Cómo el Soporte y Mantenimiento de VIA protegen tu inversión",
   },
 };

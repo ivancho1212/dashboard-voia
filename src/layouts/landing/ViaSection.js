@@ -1,4 +1,4 @@
-// src/layouts/landing/ViaSection.js
+// src/layouts/landing/ViaSection.js (Corregido)
 import React from "react";
 import widgetImg from "../../assets/images/widget-preview.webp";
 import plansImg from "../../assets/images/plans-preview.png";
@@ -6,12 +6,10 @@ import { ReactComponent as AdaptableIcon } from '../../assets/icons/adaptable.sv
 import { ReactComponent as BrainIcon } from '../../assets/icons/brain.svg';
 import { ReactComponent as PanelIcon } from '../../assets/icons/panel.svg';
 
-
 const ViaSection = () => {
   return (
-    <section style={styles.section}>
+    <section id="via" style={styles.section}>
       <div style={styles.container}>
-
         {/* Introducción */}
         <p style={styles.subtitle}>Plataforma de agentes de inteligencia artificial</p>
         <h2 style={styles.title}>¿Por qué elegir VIA?</h2>
@@ -239,6 +237,7 @@ const styles = {
     marginTop: "20px",
     boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
   },
+
 };
 
 export default ViaSection;

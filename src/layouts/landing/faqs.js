@@ -8,7 +8,7 @@ export const faqData = [
     {
         question: "¿Dónde hacer páginas web en Colombia?",
         slug: slugify("¿Dónde hacer páginas web en Colombia?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-paginasweb-banner.webp",
         shortDescription:
             "Via desarrolla páginas web profesionales en Colombia, con diseño a medida, optimización SEO y tecnologías modernas para hacer crecer tu negocio.",
         sectionTitle: "¿Quieres hacer una página web y no sabes dónde empezar?",
@@ -18,7 +18,7 @@ export const faqData = [
     {
         question: "¿Cuánto vale el desarrollo de una página web en Colombia?",
         slug: slugify("¿Cuánto vale el desarrollo de una página web en Colombia?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-precio-web-banner.webp",
         shortDescription:
             "Descubre los factores que influyen en el costo de desarrollar una página web en Colombia y cómo Via ofrece soluciones personalizadas y accesibles.",
         sectionTitle: "¿Cuánto cuesta realmente desarrollar una página web profesional en Colombia?",
@@ -28,7 +28,7 @@ export const faqData = [
     {
         question: "¿Dónde desarrollar mi página web?",
         slug: slugify("¿Dónde desarrollar mi página web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-donde-desarrollar-banner.webp",
         shortDescription:
             "Explora las mejores alternativas para crear tu sitio web y descubre cómo Via ofrece un acompañamiento personalizado para materializar tu proyecto digital.",
         sectionTitle: "Elige el lugar ideal para desarrollar tu página web con expertos en Colombia",
@@ -38,7 +38,7 @@ export const faqData = [
     {
         question: "¿Cómo automatizar la atención al cliente?",
         slug: slugify("¿Cómo automatizar la atención al cliente?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-automatizar-banner.webp",
         shortDescription:
             "Implementa con Via tecnologías inteligentes que transforman la atención a tus clientes, ofreciendo soporte ágil y personalizado las 24 horas.",
         sectionTitle: "Automatiza la atención al cliente con tecnologías inteligentes para mejorar la experiencia y eficiencia",
@@ -58,7 +58,7 @@ export const faqData = [
     {
         question: "¿Cuál es la mejor plataforma para crear páginas web?",
         slug: slugify("¿Cuál es la mejor plataforma para crear páginas web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-plataforma-banner.webp",
         shortDescription:
             "Explora las opciones más eficientes para construir tu sitio web y descubre cómo Via te guía para seleccionar la plataforma ideal.",
         sectionTitle: "Elige la plataforma ideal para crear tu página web y potenciar tu negocio con expertos",
@@ -78,7 +78,7 @@ export const faqData = [
     {
         question: "¿Cómo puedo integrar IA en una aplicación web?",
         slug: slugify("¿Cómo puedo integrar IA en una aplicación web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-integrar-banner.webp",
         shortDescription:
             "Explora cómo Via desarrolla soluciones inteligentes para incorporar IA en tu aplicación web y transformar la experiencia de usuario.",
         sectionTitle: "Soluciones personalizadas para integrar inteligencia artificial en tu aplicación web y potenciar la experiencia de usuario",
@@ -88,7 +88,7 @@ export const faqData = [
     {
         question: "¿Dónde es mejor crear mi página web?",
         slug: slugify("¿Dónde es mejor crear mi página web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-donde-crear-banner.webp",
         shortDescription:
             "Conoce por qué Via es la opción ideal para crear tu página web, combinando experiencia local y tecnología avanzada para resultados efectivos.",
         sectionTitle: "Por qué Via es la mejor opción para crear tu página web en Colombia con calidad y tecnología avanzada",
@@ -98,7 +98,7 @@ export const faqData = [
     {
         question: "¿Dónde puedo crear mi propia página web?",
         slug: slugify("¿Dónde puedo crear mi propia página web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-donde-puedo-crear-banner.webp",
         shortDescription:
             "Explora las opciones para crear tu propia página web y cómo Via te brinda las herramientas y soporte para lograrlo con éxito.",
         sectionTitle: "Opciones efectivas para crear tu propia página web con apoyo experto y tecnología avanzada",
@@ -106,9 +106,9 @@ export const faqData = [
             "Crear tu propia página web puede parecer un reto, pero con el apoyo adecuado es completamente accesible y gratificante. Via ofrece asesoría personalizada y soluciones tecnológicas que facilitan este proceso, ya sea que prefieras una plataforma intuitiva para gestionar tu sitio o un desarrollo a medida con soporte profesional. Además, te acompañamos en cada etapa, desde el diseño hasta la optimización para buscadores, garantizando que tu página web refleje la identidad de tu marca y cumpla con tus objetivos de negocio. Con Via, crear tu propio sitio web es sencillo, eficiente y con resultados profesionales."
     },
     {
-        question: "¿Cómo implementar IA en mi negocio?",
+        question: "¿Cómo implementar implementar en mi negocio?",
         slug: slugify("¿Cómo implementar IA en mi negocio?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-implementar-IA-banner.webp",
         shortDescription:
             "Descubre cómo Via te guía en la integración estratégica de inteligencia artificial para transformar y optimizar tu negocio.",
         sectionTitle: "Cómo implementar inteligencia artificial en tu negocio para optimizar procesos y aumentar productividad",
@@ -118,7 +118,7 @@ export const faqData = [
     {
         question: "¿Puedo agregar un chatbot de IA a mi sitio web?",
         slug: slugify("¿Puedo agregar un chatbot de IA a mi sitio web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-agregar-IA-banner.webp",
         shortDescription:
             "Via desarrolla chatbots inteligentes integrados con IA para mejorar la interacción y soporte en tu sitio web.",
         sectionTitle: "Cómo agregar un chatbot de IA efectivo para optimizar la atención en tu sitio web",
@@ -128,7 +128,7 @@ export const faqData = [
     {
         question: "¿Cuánto cuesta crear una app con IA?",
         slug: slugify("¿Cuánto cuesta crear una app con IA?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-cuesta-app-banner.webp",
         shortDescription:
             "Descubre los factores que influyen en el costo de desarrollar una aplicación con inteligencia artificial y cómo Via ofrece soluciones a medida.",
         sectionTitle: "Factores que determinan el costo de crear una app con inteligencia artificial personalizada",
@@ -138,7 +138,7 @@ export const faqData = [
     {
         question: "¿Puedo publicar contenido de IA en mi sitio web?",
         slug: slugify("¿Puedo publicar contenido de IA en mi sitio web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-publicar-contenido-banner.webp",
         shortDescription:
             "Entiende cómo Via facilita la publicación de contenido generado por inteligencia artificial en tu sitio web para mejorar la experiencia y el alcance.",
         sectionTitle: "Integración de agentes de inteligencia artificial para mejorar la experiencia y soporte en tu web",
@@ -148,7 +148,7 @@ export const faqData = [
     {
         question: "¿Cómo integrar un agente de IA a un sitio web?",
         slug: slugify("¿Cómo integrar un agente de IA a un sitio web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-integrar-agente-banner.webp",
         shortDescription:
             "Aprende cómo Via implementa agentes de inteligencia artificial en sitios web para mejorar la interacción y atención al cliente.",
         sectionTitle: "Integración avanzada de agentes de IA para mejorar la atención y experiencia en tu sitio web",
@@ -158,7 +158,7 @@ export const faqData = [
     {
         question: "¿Cuáles son los 10 tipos de IA?",
         slug: slugify("¿Cuáles son los 10 tipos de IA?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-10-tipos-banner.webp",
         shortDescription:
             "Explora los principales tipos de inteligencia artificial y cómo Via aplica estas tecnologías para transformar tu negocio.",
         sectionTitle: "Conoce los 10 tipos clave de inteligencia artificial y su impacto en la transformación digital",
@@ -168,7 +168,7 @@ export const faqData = [
     {
         question: "¿Cómo puedo incorporar la IA a mi trabajo?",
         slug: slugify("¿Cómo puedo incorporar la IA a mi trabajo?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-puedo-incorporar-banner.webp",
         shortDescription:
             "Descubre cómo Via puede ayudarte a integrar inteligencia artificial en tus tareas laborales para aumentar productividad y eficiencia.",
         sectionTitle: "Cómo incorporar la inteligencia artificial para aumentar tu productividad y eficiencia laboral",
@@ -178,7 +178,7 @@ export const faqData = [
     {
         question: "¿Puedo construir un negocio con IA?",
         slug: slugify("¿Puedo construir un negocio con IA?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-construir-negocio-banner.webp",
         shortDescription:
             "Descubre cómo Via te ayuda a construir un negocio exitoso aprovechando el poder de la inteligencia artificial.",
         sectionTitle: "Construye un negocio innovador y escalable aprovechando la inteligencia artificial con Via",
@@ -188,7 +188,7 @@ export const faqData = [
     {
         question: "¿Cuánto cuesta agregar IA a una aplicación?",
         slug: slugify("¿Cuánto cuesta agregar IA a una aplicación?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-cuesta-agregar-banner.webp",
         shortDescription:
             "Conoce los factores que influyen en el costo de integrar inteligencia artificial en aplicaciones y cómo Via ofrece soluciones personalizadas y accesibles.",
         sectionTitle: "Factores clave que influyen en el costo de agregar IA a tu aplicación",
@@ -198,7 +198,7 @@ export const faqData = [
     {
         question: "¿Puedo utilizar IA para diseñar mi sitio web?",
         slug: slugify("¿Puedo utilizar IA para diseñar mi sitio web?"),
-        image: "/Gemini_Generated_Image_w5knk9w5knk9w5kn.png",
+        image: "/fondo-utilizar-IA-banner.webp",
         shortDescription:
             "Descubre cómo Via integra inteligencia artificial para crear diseños web innovadores y personalizados que potencian tu presencia digital.",
         sectionTitle: "Diseña sitios web innovadores y personalizados utilizando inteligencia artificial",
@@ -208,7 +208,7 @@ export const faqData = [
     {
         question: "¿Puedo agregar chat gpt a mi sitio web?",
         slug: slugify("¿Puedo agregar chat gpt a mi sitio web?"),
-        image: "/Gemini_Generated_Image_nfja0pnfja0pnfja.png",
+        image: "/fondo-agregar-gpt-banner.webp",
         shortDescription:
             "Entérate cómo Via puede integrar ChatGPT en tu sitio web para mejorar la interacción con tus visitantes mediante inteligencia artificial conversacional.",
         sectionTitle: "Integración de ChatGPT para mejorar la interacción conversacional en tu sitio web",
@@ -218,7 +218,7 @@ export const faqData = [
     {
         question: "¿Dónde es recomendable crear una página web?",
         slug: slugify("¿Dónde es recomendable crear una página web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-recomendable-crear-banner.webp",
         shortDescription:
             "Conoce por qué Via es la opción recomendada para crear páginas web profesionales y personalizadas en Colombia.",
         sectionTitle: "Por qué Via es la opción recomendada para crear páginas web profesionales en Colombia",
@@ -228,7 +228,7 @@ export const faqData = [
     {
         question: "¿Cuáles son las mejores agencias de diseño en Colombia?",
         slug: slugify("¿Cuáles son las mejores agencias de diseño en Colombia?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-mejores-agencias-banner.webp",
         shortDescription:
             "Descubre por qué Via se posiciona entre las mejores agencias de diseño en Colombia, ofreciendo innovación y resultados efectivos.",
         sectionTitle: "Descubre las mejores agencias de diseño en Colombia y cómo Via marca la diferencia",
@@ -238,7 +238,7 @@ export const faqData = [
     {
         question: "¿Cuánto cuesta el desarrollo de un sitio web?",
         slug: slugify("¿Cuánto cuesta el desarrollo de un sitio web?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-cuesta-desarrollo-banner.webp",
         shortDescription:
             "Descubre los factores que influyen en el costo de desarrollar un sitio web y cómo Via ofrece soluciones ajustadas a tu presupuesto.",
         sectionTitle: "Factores que afectan el costo del desarrollo de un sitio web profesional",
@@ -248,7 +248,7 @@ export const faqData = [
     {
         question: "¿Cuánto gana un creador de páginas web en Colombia?",
         slug: slugify("¿Cuánto gana un creador de páginas web en Colombia?"),
-        image: "/logo-claude.webp",
+        image: "/fondo-gana-creador-banner.webp",
         shortDescription:
             "Conoce el rango salarial de los creadores de páginas web en Colombia y cómo Via valora el talento especializado para proyectos digitales exitosos.",
         sectionTitle: "Rangos salariales de creadores de páginas web en Colombia y valor del talento digital",

@@ -38,7 +38,7 @@ const ServiceDetail = () => {
           style={{
             width: "100%",
             borderRadius: "12px",
-            marginBottom: "30px",
+            marginBottom: "80px",
             objectFit: "cover",
           }}
         />
@@ -52,7 +52,7 @@ const ServiceDetail = () => {
             style={{
               fontSize: "1.2rem",
               opacity: 0.9,
-              marginBottom: "20px",
+              marginBottom: "100px",
               maxWidth: "700px",
               margin: "0 auto",
             }}
@@ -60,15 +60,13 @@ const ServiceDetail = () => {
             {baseData.description}
           </p>
         </div>
-
-        {/* Contenido largo */}
         {seoData?.longDescription && (
           <div
             style={{
               fontSize: "1rem",
               lineHeight: "1.8",
               opacity: 0.9,
-              marginBottom: "50px",
+              marginBottom: "150px",
               textAlign: "center",
               maxWidth: "800px",
               margin: "0 auto",
@@ -86,12 +84,11 @@ const ServiceDetail = () => {
         )}
       </div>
 
-      {/* Bloque VIA solución - ocupa todo el ancho */}
       {seoData?.viaSolution && (
         <section
           style={{
             marginTop: "80px",
-            padding: "50px 20px",
+            padding: "200px 20px", 
             background: "#111",
             textAlign: "center",
             width: "100%",
@@ -105,7 +102,7 @@ const ServiceDetail = () => {
                 color: "#fff",
               }}
             >
-              Cómo VIA puede ayudarte
+              {`Cómo nuestro servicio de ${baseData.title} puede ayudarte`}
             </h2>
             <p
               style={{

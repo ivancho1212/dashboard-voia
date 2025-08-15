@@ -1,4 +1,7 @@
-import React from "react";
+// src/layouts/landing/LandingPage.js
+import React, { useEffect } from "react";
+import { useLocation } from "react-router-dom";
+import LazySection from "./LazySection"; // Asegúrate de importar LazySection
 import HeroSection from "./HeroSection";
 import ServicesSection from "./ServicesSection";
 import AboutViaSection from "./AboutViaSection";
@@ -7,29 +10,40 @@ import ContactSection from "./ContactSection";
 import TestimonialsSection from "./TestimonialsSection";
 
 const LandingPage = () => {
+  const location = useLocation();
+
+  // Scroll al anchor si viene de Navbar
+  useEffect(() => {
+    if (location.state?.scrollTo) {
+      const scrollTimer = setTimeout(() => {
+        const el = document.getElementById(location.state.scrollTo);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 100);
+      return () => clearTimeout(scrollTimer);
+    }
+  }, [location.state]);
+
   return (
-    <div>
-      {/* ID para scroll a "Inicio" */}
-      <section id="home">
+    <div style={{ backgroundColor: "#000" }}>
+      {/* Envuelve cada sección con LazySection aquí */}
+      <LazySection id="hero">
         <HeroSection />
-      </section>
-      <section id="about">
+      </LazySection>
+      <LazySection id="about">
         <AboutViaSection />
-      </section>
-      {/* ID para scroll a "Servicios" */}
-      <section id="services">
+      </LazySection>
+      <LazySection id="services">
         <ServicesSection />
-      </section>
-      <section id="clients">
+      </LazySection>
+      <LazySection id="clients">
         <ClientsSection />
-      </section>
-      <section id="testimonials">
+      </LazySection>
+      <LazySection id="testimonials">
         <TestimonialsSection />
-      </section>
-      {/* ID para scroll a "Contacto" */}
-      <section id="contact">
+      </LazySection>
+      <LazySection id="contact">
         <ContactSection />
-      </section>
+      </LazySection>
     </div>
   );
 };

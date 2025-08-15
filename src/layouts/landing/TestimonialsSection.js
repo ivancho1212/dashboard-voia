@@ -1,5 +1,7 @@
-// src/layouts/landing/TestimonialsSection.js
-import React from "react";
+// src/layouts/landing/TestimonialsSection.js (Corregido)
+import React, { useEffect } from "react";
+// Ya no es necesario importar LazySection aquí
+// import LazySection from "./LazySection";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay } from "swiper/modules";
 import IvanaImage from "../../assets/images/ivana-square.jpg";
@@ -56,8 +58,12 @@ const testimonials = [
 ];
 
 const TestimonialsSection = () => {
+  useEffect(() => {
+    console.log("TestimonialsSection montada / visible");
+  }, []);
+
   return (
-    <section style={styles.section}>
+    <section id="testimonials" style={styles.section}>
       <p style={styles.subtitle}>Lo que dicen nuestros clientes</p>
       <h3 style={styles.headline}>Testimonios</h3>
 

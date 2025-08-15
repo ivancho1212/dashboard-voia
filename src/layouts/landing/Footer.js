@@ -1,4 +1,6 @@
-import React from "react";
+// src/layouts/landing/Footer.js
+
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 
 const faqLinks = [
@@ -29,18 +31,20 @@ const faqLinks = [
   "¿Cuánto gana un creador de páginas web en Colombia?",
 ];
 
-// Divide preguntas en 5 columnas
 const columns = Array.from({ length: 5 }, (_, i) =>
   faqLinks.slice(i * 5, i * 5 + 5)
 );
 
-// Convierte texto en slug amigable para URL
 const slugify = (text) =>
   text.toLowerCase().replace(/[^\w\s]/gi, "").replace(/\s+/g, "-");
 
 const Footer = () => {
+  useEffect(() => {
+    console.log("Footer montado");
+  }, []);
+
   return (
-    <footer style={styles.footer}>
+    <footer id="footer" style={styles.footer}>
       <div style={styles.columnsContainer}>
         {columns.map((col, idx) => (
           <div key={idx} style={styles.column}>
@@ -48,7 +52,7 @@ const Footer = () => {
               <Link
                 key={i}
                 to={`/pregunta/${slugify(question)}`}
-                title={question} // 👈 Tooltip aquí
+                title={question}
                 style={styles.link}
               >
                 {question}
@@ -58,7 +62,11 @@ const Footer = () => {
         ))}
       </div>
       <p style={styles.text}>
-        © {new Date().getFullYear()} Via | Desarrollado por Ivan Herrera.
+        © {new Date().getFullYear()} Via | Desarrollado por Via Company.
+        
+        <Link to="/politica-de-privacidad" style={styles.footerLink}>
+          Política de Privacidad
+        </Link>
       </p>
     </footer>
   );
@@ -100,6 +108,11 @@ const styles = {
     fontSize: "0.7rem",
     marginTop: "10px",
     color: "#aaa",
+  },
+  footerLink: { // ✅ Estilos para el nuevo enlace
+    color: "#00bfa5",
+    textDecoration: "none",
+    marginLeft: "10px",
   },
 };
 

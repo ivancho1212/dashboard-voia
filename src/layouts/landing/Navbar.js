@@ -5,6 +5,10 @@ import { services } from "../landing/services/services";
 import authRoutes from "routes/auth";
 
 const Navbar = ({ isDarkBackground = false }) => {
+  useEffect(() => {
+    console.log("Navbar montado");
+  }, []);
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -27,16 +31,15 @@ const Navbar = ({ isDarkBackground = false }) => {
   }, []);
 
   const handleNavigateToAnchor = (anchor) => {
-    if (location.pathname !== "/") {
-      navigate("/");
-      setTimeout(() => {
-        const el = document.getElementById(anchor);
-        if (el) el.scrollIntoView({ behavior: "smooth" });
-      }, 300);
-    } else {
+    if (location.pathname === "/") {
+      // Ya estamos en Home, solo scroll
       const el = document.getElementById(anchor);
       if (el) el.scrollIntoView({ behavior: "smooth" });
+    } else {
+      // Navegar a Home y pasar anchor en state
+      navigate("/", { state: { scrollTo: anchor } });
     }
+
     if (isMobile) setMenuOpen(false);
   };
 
@@ -158,44 +161,40 @@ const Navbar = ({ isDarkBackground = false }) => {
               </button>
             </li>
 
-{/* Botones de autenticación */}
-{authLinks.map((link) => (
-  <li key={link.key}>
-    <Link
-      to={link.route}
-      style={{
-        ...styles.navLinkButton,
-        ...(link.key === "sign-up"
-          ? {
-              color: hoveredItem === link.key ? "#fff" : "#00bfa5",
-              borderBottom:
-                hoveredItem === link.key
-                  ? "1px solid #fff"
-                  : "1px solid transparent",
-              backgroundColor: "transparent",
-              transition: "all 0.3s ease",
-            }
-          : {
-              color: hoveredItem === link.key ? "#00bfa5" : textColor,
-              borderBottom:
-                hoveredItem === link.key
-                  ? "1px solid #00bfa5"
-                  : "1px solid transparent",
-              backgroundColor: "transparent",
-            }),
-        textDecoration: "none",
-      }}
-      onMouseEnter={() => setHoveredItem(link.key)}
-      onMouseLeave={() => setHoveredItem(null)}
-    >
-      {link.name}
-    </Link>
-  </li>
-))}
-
-
-
-
+            {/* Botones de autenticación */}
+            {authLinks.map((link) => (
+              <li key={link.key}>
+                <Link
+                  to={link.route}
+                  style={{
+                    ...styles.navLinkButton,
+                    ...(link.key === "sign-up"
+                      ? {
+                        color: hoveredItem === link.key ? "#fff" : "#00bfa5",
+                        borderBottom:
+                          hoveredItem === link.key
+                            ? "1px solid #fff"
+                            : "1px solid transparent",
+                        backgroundColor: "transparent",
+                        transition: "all 0.3s ease",
+                      }
+                      : {
+                        color: hoveredItem === link.key ? "#00bfa5" : textColor,
+                        borderBottom:
+                          hoveredItem === link.key
+                            ? "1px solid #00bfa5"
+                            : "1px solid transparent",
+                        backgroundColor: "transparent",
+                      }),
+                    textDecoration: "none",
+                  }}
+                  onMouseEnter={() => setHoveredItem(link.key)}
+                  onMouseLeave={() => setHoveredItem(null)}
+                >
+                  {link.name}
+                </Link>
+              </li>
+            ))}
 
           </ul>
         </nav>

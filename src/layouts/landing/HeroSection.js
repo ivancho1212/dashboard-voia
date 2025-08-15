@@ -1,59 +1,75 @@
-import React from "react";
+// src/layouts/landing/HeroSection.js
+import React, { useEffect } from "react";
 import PropTypes from "prop-types";
 import { ParallaxBanner } from "react-scroll-parallax";
 
+// El componente HeroSection ahora renderiza directamente el contenido.
+// LazySection se encargará de envolverlo desde LandingPage.js
 const HeroSection = ({ title, subtitle, backgroundImage }) => {
-  const bgImage = backgroundImage || "/Gemini_Generated_Image_4fzbre4fzbre4fzb.jpg";
-  const mainTitle = title || "Desarrollo web, apps móviles e inteligencia artificial para hacer crecer tu negocio";
-  const mainSubtitle = subtitle || "Ofrecemos soluciones digitales personalizadas con desarrollo a la medida, integración de IA y automatización de procesos. Potencia tu empresa con tecnología escalable, segura y diseñada para destacar en el mercado digital actual.";
+  useEffect(() => {
+    console.log("HeroSection montada / visible");
+  }, []);
+
+  const bgImage =
+    backgroundImage || "/Gemini_Generated_Image_4fzbre4fzbre4fzb.jpg";
+  const mainTitle =
+    title ||
+    "Desarrollo web, apps móviles e inteligencia artificial para hacer crecer tu negocio";
+  const mainSubtitle =
+    subtitle ||
+    "Ofrecemos soluciones digitales personalizadas con desarrollo a la medida, integración de IA y automatización de procesos. Potencia tu empresa con tecnología escalable, segura y diseñada para destacar en el mercado digital actual.";
 
   const handleWhatsAppClick = () => {
     window.open("https://wa.me/573178531533", "_blank");
   };
 
   return (
-    <ParallaxBanner
-      layers={[
-        {
-          image: bgImage,
-          speed: -25, // antes -35
-          scale: [1, 1], // evita zoom progresivo
-        },
-        {
-          children: <div style={styles.overlay} />,
-          speed: 0,
-        },
-      ]}
-      style={{ minHeight: "60vh", position: "relative" }}
-    >
+    <section id="hero-section" style={{ minHeight: "60vh" }}>
+      <ParallaxBanner
+        layers={[
+          { image: bgImage, speed: -25, scale: [1, 1] },
+          { children: <div style={styles.overlay} />, speed: 0 },
+        ]}
+        style={{ minHeight: "60vh", position: "relative" }}
+      >
+        <div style={styles.content}>
+          <h1 style={styles.title}>{mainTitle}</h1>
+          <p style={styles.subtitle}>{mainSubtitle}</p>
 
-      <div style={styles.content}>
-        <h1 style={styles.title}>{mainTitle}</h1>
-        <p style={styles.subtitle}>{mainSubtitle}</p>
-
-        <button
-          style={styles.button}
-          onMouseOver={(e) => {
-            e.target.style.backgroundColor = "#00bfa5";
-            e.target.style.color = "#fff";
-          }}
-          onMouseOut={(e) => {
-            e.target.style.backgroundColor = "transparent";
-            e.target.style.color = "#fff";
-          }}
-          onClick={handleWhatsAppClick}
-        >
-          Contáctanos
-        </button>
-      </div>
-    </ParallaxBanner>
+          <button
+            style={styles.button}
+            onMouseOver={(e) => {
+              e.target.style.backgroundColor = "#00bfa5";
+              e.target.style.color = "#fff";
+            }}
+            onMouseOut={(e) => {
+              e.target.style.backgroundColor = "transparent";
+              e.target.style.color = "#fff";
+            }}
+            onClick={handleWhatsAppClick}
+          >
+            Contáctanos
+          </button>
+        </div>
+      </ParallaxBanner>
+    </section>
   );
+};
+
+// Validación de props
+HeroSection.propTypes = {
+  title: PropTypes.string,
+  subtitle: PropTypes.string,
+  backgroundImage: PropTypes.string,
 };
 
 const styles = {
   overlay: {
     position: "absolute",
-    top: 0, right: 0, bottom: 0, left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     background: "linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6))",
     zIndex: 1,
   },
@@ -92,12 +108,6 @@ const styles = {
     cursor: "pointer",
     transition: "all 0.3s ease",
   },
-};
-
-HeroSection.propTypes = {
-  title: PropTypes.string,
-  subtitle: PropTypes.string,
-  backgroundImage: PropTypes.string,
 };
 
 export default HeroSection;

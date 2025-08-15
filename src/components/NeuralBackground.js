@@ -17,7 +17,7 @@ const NeuralBackground = () => {
         fullScreen: { enable: false },
         preset: "links",
         background: {
-          color: "#0e0e0e",
+          color: "#111",
         },
         particles: {
           color: {
