@@ -6,7 +6,7 @@ import SoftTypography from "components/SoftTypography";
 import SoftInput from "components/SoftInput";
 import SoftButton from "components/SoftButton";
 import CoverLayout from "layouts/authentication/components/CoverLayout";
-import curved9 from "assets/images/curved-images/curved-6.jpg";
+import curved9 from "assets/images/curved-images/curved-6.webp";
 import { login } from "services/authService"; // Tu función de login
 
 function SignIn() {
@@ -35,6 +35,15 @@ function SignIn() {
     }
   };
 
+  // 👇 Handlers simulados para Google y Microsoft
+  const handleGoogleLogin = () => {
+    console.log("Login con Google (falta backend)");
+  };
+
+  const handleMicrosoftLogin = () => {
+    console.log("Login con Microsoft (falta backend)");
+  };
+
   return (
     <CoverLayout
       title="Bienvenido de nuevo"
@@ -45,7 +54,7 @@ function SignIn() {
       <SoftBox component="form" role="form" onSubmit={handleSubmit}>
         <SoftBox mb={2}>
           <SoftBox mb={1} ml={0.5}>
-            <SoftTypography component="label" variant="caption" fontWeight="bold">
+            <SoftTypography component="label" variant="caption" fontWeight="bold" color="white">
               Email
             </SoftTypography>
           </SoftBox>
@@ -58,7 +67,7 @@ function SignIn() {
         </SoftBox>
         <SoftBox mb={2}>
           <SoftBox mb={1} ml={0.5}>
-            <SoftTypography component="label" variant="caption" fontWeight="bold">
+            <SoftTypography component="label" variant="caption" fontWeight="bold" color="white">
               Contraseña
             </SoftTypography>
           </SoftBox>
@@ -74,6 +83,7 @@ function SignIn() {
           <SoftTypography
             variant="button"
             fontWeight="regular"
+            color="white"
             onClick={handleSetRememberMe}
             sx={{ cursor: "pointer", userSelect: "none" }}
           >
@@ -92,6 +102,47 @@ function SignIn() {
             Iniciar sesión
           </SoftButton>
         </SoftBox>
+
+        {/* Botones sociales en blanco */}
+        <SoftBox mt={2}>
+          <SoftButton
+            fullWidth
+            sx={{
+              mb: 1,
+              backgroundColor: "white",
+              color: "black",
+              "&:hover": { backgroundColor: "#f0f0f0" },
+            }}
+            onClick={handleGoogleLogin}
+          >
+            <img
+              src="https://developers.google.com/identity/images/g-logo.png"
+              alt="google"
+              width="20"
+              style={{ marginRight: "8px" }}
+            />
+            Iniciar sesión con Google
+          </SoftButton>
+
+          <SoftButton
+            fullWidth
+            sx={{
+              backgroundColor: "white",
+              color: "black",
+              "&:hover": { backgroundColor: "#f0f0f0" },
+            }}
+            onClick={handleMicrosoftLogin}
+          >
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg"
+              alt="microsoft"
+              width="20"
+              style={{ marginRight: "8px" }}
+            />
+            Iniciar sesión con Microsoft
+          </SoftButton>
+        </SoftBox>
+
         <SoftBox mt={3} textAlign="center">
           <SoftTypography variant="button" color="text" fontWeight="regular">
             ¿No tienes una cuenta?{" "}

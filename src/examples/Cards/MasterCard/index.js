@@ -11,7 +11,7 @@ import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 
 // Images
-import curved14 from "assets/images/curved-images/curved14.jpg";
+import curved14 from "assets/images/curved-images/curved14.webp";
 import masterCardLogo from "assets/images/logos/mastercard.png";
 
 function MasterCard({ color, number, holder, expires }) {

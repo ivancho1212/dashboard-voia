@@ -39,14 +39,14 @@ function LandingLayout() {
                     background: "#2B373B",
                     fontSize: "14px",
                     width: "100%",
-                    padding: "10px 250px",
+                    padding: "10px 10px",
                 }}
                 buttonStyle={{
                     color: "#fff",
                     background: "#00bfa5",
                     fontSize: "14px",
                     borderRadius: "4px",
-                    padding: "10px 20px",
+                    padding: "10px 30px",
                 }}
                 expires={150}
                 enableDeclineButton

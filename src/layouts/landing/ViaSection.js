@@ -1,10 +1,11 @@
-// src/layouts/landing/ViaSection.js (Corregido)
+// src/layouts/landing/ViaSection.js
 import React from "react";
 import widgetImg from "../../assets/images/widget-preview.webp";
 import plansImg from "../../assets/images/plans-preview.png";
-import { ReactComponent as AdaptableIcon } from '../../assets/icons/adaptable.svg';
-import { ReactComponent as BrainIcon } from '../../assets/icons/brain.svg';
-import { ReactComponent as PanelIcon } from '../../assets/icons/panel.svg';
+import { ReactComponent as AdaptableIcon } from "../../assets/icons/adaptable.svg";
+import { ReactComponent as InstallIcon } from "../../assets/icons/install.svg";
+import { ReactComponent as BrainIcon } from "../../assets/icons/brain.svg";
+import { ReactComponent as PanelIcon } from "../../assets/icons/panel.svg";
 
 const ViaSection = () => {
   return (
@@ -15,10 +16,9 @@ const ViaSection = () => {
         <h2 style={styles.title}>¿Por qué elegir VIA?</h2>
         <p style={styles.text}>
           VIA es mucho más que un chatbot. Es una plataforma para crear{" "}
-          <strong style={{ color: "#fff" }}>agentes de inteligencia artificial</strong>{" "}
-          totalmente personalizables, listos para trabajar en cualquier área
-          de tu empresa. Desde atención médica hasta soporte técnico, VIA se adapta
-          a tus necesidades.
+          <strong style={{ color: "#fff" }}>agentes de inteligencia artificial</strong> totalmente
+          personalizables, listos para trabajar en cualquier área de tu empresa. Desde atención
+          médica hasta soporte técnico, VIA se adapta a tus necesidades.
         </p>
 
         {/* Beneficios */}
@@ -32,15 +32,15 @@ const ViaSection = () => {
           ))}
         </div>
 
-        {/* Widget con texto al lado */}
+        {/* Widget con texto arriba e imagen abajo */}
         <div style={styles.widgetSection}>
           <div style={styles.widgetText}>
             <p style={styles.subtitle}>Vista previa del widget VIA</p>
             <h2 style={styles.widgetTitle}>Interactúa con tus clientes en tiempo real</h2>
             <p style={styles.futureText}>
-              Nuestro widget de VIA se integra en tu sitio web en minutos, brindando
-              atención automatizada y soporte con IA 24/7. Permite enviar imágenes,
-              documentos y capturar datos clave para que nunca pierdas información valiosa.
+              Nuestro widget de VIA se integra en tu sitio web en minutos, brindando atención
+              automatizada y soporte con IA 24/7. Permite enviar imágenes, documentos y capturar
+              datos clave para que nunca pierdas información valiosa.
             </p>
           </div>
           <div style={styles.widgetImage}>
@@ -53,18 +53,16 @@ const ViaSection = () => {
           <p style={styles.subtitle}>Entrenamiento y personalización</p>
           <h2 style={styles.futureTitle}>Crea, entrena y personaliza tu agente de IA</h2>
           <p style={styles.futureText}>
-            Con VIA puedes partir de plantillas específicas para tu sector y entrenar
-            el agente con{" "}
-            <strong style={{ color: "#fff" }}>la información de tu empresa</strong>.
-            Personaliza el widget con tus colores, fuentes y avatar. Configura
-            la captura de datos clave como{" "}
-            <strong style={{ color: "#00bfa5" }}>nombre, documento o correo etc...</strong>,
-            recibe imágenes y documentos, y conecta con el{" "}
+            Con VIA puedes partir de plantillas específicas para tu sector y entrenar el agente con{" "}
+            <strong style={{ color: "#fff" }}>la información de tu empresa</strong>. Personaliza el
+            widget con tus colores, fuentes y avatar. Configura la captura de datos clave como{" "}
+            <strong style={{ color: "#00bfa5" }}>nombre, documento o correo etc...</strong>, recibe
+            imágenes y documentos, y conecta con el{" "}
             <strong style={{ color: "#fff" }}>proveedor de IA que prefieras</strong>.
           </p>
           <p style={styles.futureText}>
-            Incluso podrás <strong>interrumpir a la IA</strong> para que un operador humano
-            continúe la conversación en tiempo real, manteniendo siempre el control.
+            Incluso podrás <strong>interrumpir a la IA</strong> para que un operador humano continúe
+            la conversación en tiempo real, manteniendo siempre el control.
           </p>
         </section>
 
@@ -73,9 +71,9 @@ const ViaSection = () => {
           <p style={styles.subtitle}>Opciones flexibles para tu negocio</p>
           <h2 style={styles.plansTitle}>Planes para cada necesidad</h2>
           <p style={styles.futureText}>
-            Elige el plan que mejor se adapte a tu negocio, desde pequeñas empresas hasta
-            grandes corporaciones. Accede a estadísticas, exporta datos por{" "}
-            <strong>API o Excel</strong> y optimiza la experiencia de tus clientes.
+            Elige el plan que mejor se adapte a tu negocio, desde pequeñas empresas hasta grandes
+            corporaciones. Accede a estadísticas, exporta datos por <strong>API o Excel</strong> y
+            optimiza la experiencia de tus clientes.
           </p>
           <img src={plansImg} alt="Planes de VIA" style={styles.plansImage} />
         </section>
@@ -88,34 +86,23 @@ const features = [
   {
     title: "Adaptable a sectores",
     description: "Atención médica, ecommerce, soporte técnico, educación y más.",
-    icon: (
-      <AdaptableIcon width={40} height={40} fill="#fff" />
-    ),
+    icon: <AdaptableIcon width={40} height={40} fill="#fff" />,
   },
   {
     title: "Integración rápida",
     description: "Instálalo en minutos en tu web o aplicación.",
-    icon: (
-      <svg width="40" height="40" fill="#fff" viewBox="0 0 24 24">
-        <path d="M10.59 13.41L9.17 12l4.24-4.24 1.41 1.41L12 12l2.83 2.83-1.41 1.41z" />
-      </svg>
-    ),
+    icon: <InstallIcon width={40} height={40} fill="#fff" />,
   },
   {
     title: "Panel de control",
     description: "Monitorea y administra conversaciones en tiempo real.",
-    icon: (
-      <PanelIcon width={40} height={40} fill="#fff" />
-    ),
+    icon: <PanelIcon width={40} height={40} fill="#fff" />,
   },
   {
     title: "IA con contexto",
     description: "Aprende de cada interacción para mejorar respuestas.",
-    icon: (
-      <BrainIcon width={40} height={40} fill="#fff" />
-    ),
+    icon: <BrainIcon width={40} height={40} fill="#fff" />,
   },
-
 ];
 
 const styles = {
@@ -171,17 +158,17 @@ const styles = {
     fontSize: "1rem",
     color: "#ccc",
   },
+  // 🔹 Texto arriba + imagen abajo
   widgetSection: {
-    marginTop: "280px",
+    marginTop: "120px",
     display: "flex",
-    flexWrap: "wrap",
+    flexDirection: "column", // 👉 apila vertical
     alignItems: "center",
-    gap: "40px",
-    textAlign: "left",
+    gap: "6rem",
   },
   widgetText: {
-    flex: "1",
-    minWidth: "300px",
+    maxWidth: "800px",
+    textAlign: "center",
   },
   widgetTitle: {
     fontSize: "2rem",
@@ -189,21 +176,15 @@ const styles = {
     marginBottom: "1rem",
   },
   widgetImage: {
-    flex: "1",
-    minWidth: "280px",
     textAlign: "center",
   },
   image: {
-    width: "60%",
-    maxWidth: "350px",
+    width: "100%",
+    maxWidth: "900px",
+    height: "auto",
     borderRadius: "1rem",
-    filter: `
-    drop-shadow(0 0 10px rgba(0, 191, 165, 0.8))
-    drop-shadow(0 0 20px rgba(0, 191, 165, 0.6))
-    drop-shadow(0 0 30px rgba(0, 191, 165, 0.4))
-  `,
-    transition: "transform 0.3s ease",
   },
+
   futureSection: {
     marginTop: "150px",
     paddingTop: "150px",
@@ -221,8 +202,8 @@ const styles = {
     lineHeight: "1.6",
   },
   plansSection: {
-    marginTop: "150px", // antes 60px
-    paddingTop: "150px", // antes 40px
+    marginTop: "150px",
+    paddingTop: "150px",
     borderTop: "1px solid #222",
   },
   plansTitle: {
@@ -237,7 +218,6 @@ const styles = {
     marginTop: "20px",
     boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
   },
-
 };
 
 export default ViaSection;

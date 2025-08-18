@@ -9,8 +9,8 @@ import SoftButton from "components/SoftButton";
 import BasicLayout from "layouts/authentication/components/BasicLayout";
 import Socials from "layouts/authentication/components/Socials";
 import Separator from "layouts/authentication/components/Separator";
-import curved6 from "assets/images/curved-images/curved14.jpg";
-import { register } from "services/authService";  // Asegúrate de importar la función correctamente
+import curved6 from "assets/images/curved-images/curved14.webp";
+import { register } from "services/authService"; // Asegúrate de importar la función correctamente
 import { Link } from "react-router-dom";
 
 function SignUp() {
@@ -38,13 +38,12 @@ function SignUp() {
   // Manejar el cambio de los inputs del formulario
   const handleChange = (e) => {
     const { name, value } = e.target;
-  
+
     setForm({
       ...form,
       [name]: name === "documentTypeId" ? parseInt(value) || "" : value,
     });
   };
-  
 
   // Validación del formulario
   const validateForm = () => {
@@ -53,12 +52,15 @@ function SignUp() {
     const phoneRegex = /^3\d{9}$/;
     const documentRegex = /^\d{6,12}$/;
 
-    if (!form.name.trim() || form.name.split(" ").length < 2) {errors.name = "Debe ingresar tanto el nombre como el apellido.";}    
+    if (!form.name.trim() || form.name.split(" ").length < 2) {
+      errors.name = "Debe ingresar tanto el nombre como el apellido.";
+    }
     if (!emailRegex.test(form.email)) errors.email = "Correo electrónico inválido.";
     if (form.password.length < 6) errors.password = "Mínimo 6 caracteres.";
     if (!phoneRegex.test(form.phone)) errors.phone = "Teléfono inválido. Ej: 3XXXXXXXXX";
     if (!form.address.trim()) errors.address = "La dirección es obligatoria.";
-    if (!documentRegex.test(form.documentNumber)) errors.documentNumber = "Documento inválido (6-12 dígitos).";
+    if (!documentRegex.test(form.documentNumber))
+      errors.documentNumber = "Documento inválido (6-12 dígitos).";
     if (!agreement) errors.agreement = "Debes aceptar los términos.";
 
     setFormErrors(errors);
@@ -68,8 +70,8 @@ function SignUp() {
   // Manejo del envío del formulario
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError("");     
-    setSuccess("");    
+    setError("");
+    setSuccess("");
 
     const isValid = validateForm();
     if (!isValid) {
@@ -107,182 +109,200 @@ function SignUp() {
       console.error(err);
       setError(err.message || "No se pudo registrar el usuario");
     }
-  };  
-  
+  };
+
   return (
-    <BasicLayout
-      title="¡Bienvenido!"
-      image={curved6}
-    >
-      <Card>
-        <SoftBox p={3} mb={1} textAlign="center">
-          <SoftTypography variant="h5" fontWeight="medium">
+    <BasicLayout title="¡Bienvenido!" image={curved6}>
+      <Card sx={{ mb: { xs: 6, sm: 8, md: 10, lg: 12 } }}>
+        <SoftBox p={3} textAlign="center">
+          <SoftTypography variant="h5" fontWeight="medium" mb={2}>
             Crear cuenta
           </SoftTypography>
         </SoftBox>
-        <SoftBox mb={2}><Socials /></SoftBox>
+        <SoftBox mb={2}>
+          <Socials />
+        </SoftBox>
         <Separator />
         <SoftBox pt={2} pb={3} px={2}>
           <SoftBox component="form" role="form" onSubmit={handleSubmit}>
-          <SoftBox mb={2}>
-            <SoftInput
-              placeholder="Nombre y Apellido"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-            />
-            {formErrors.name && (
-              <SoftTypography color="error" fontSize="small">
-                {formErrors.name}
-              </SoftTypography>
-            )}
-          </SoftBox>
-
-          <SoftBox mb={2}>
-            <SoftInput
-              type="email"
-              placeholder="Email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-            />
-            {formErrors.email && (
-              <SoftTypography color="error" fontSize="small">
-                {formErrors.email}
-              </SoftTypography>
-            )}
-          </SoftBox>
-          <SoftBox mb={2}>
-            <SoftInput
-              type="password"
-              placeholder="Contraseña"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-            />
-            {formErrors.password && (
-              <SoftTypography color="error" fontSize="small">
-                {formErrors.password}
-              </SoftTypography>
-            )}
-          </SoftBox>
-          <SoftBox mb={2}>
-            <SoftInput
-              placeholder="Teléfono"
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-            />
-            {formErrors.phone && (
-              <SoftTypography color="error" fontSize="small">
-                {formErrors.phone}
-              </SoftTypography>
-            )}
-          </SoftBox>
-          <SoftBox mb={2}>
-            <SoftInput
-              placeholder="Dirección"
-              name="address"
-              value={form.address}
-              onChange={handleChange}
-            />
-            {formErrors.address && (
-              <SoftTypography color="error" fontSize="small">
-                {formErrors.address}
-              </SoftTypography>
-            )}
-          </SoftBox>
-          <SoftBox mb={2}>
-            <SoftBox
-              component="select"
-              name="documentTypeId"
-              value={form.documentTypeId}
-              onChange={handleChange}
-              sx={{
-                width: "100%",
-                height: "42px",
-                px: 1.5,
-                py: 1,
-                border: "1px solid #d2d6da",
-                borderRadius: "0.5rem",
-                color: "#495057",
-                fontSize: "0.875rem",
-                backgroundColor: "#fff",
-                fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-                appearance: "none",
-                '&:focus': {
-                  outline: "none",
-                  borderColor: "#344767",
-                  boxShadow: "0 0 0 2px rgba(52, 71, 103, 0.2)",
-                },
-              }}
-            >
-              <option value="">Seleccionar tipo de documento</option>
-              <option value="1">Cédula de Ciudadanía</option>
-              <option value="2">NIT</option>
-              <option value="3">Pasaporte</option>
+            <SoftBox mb={2}>
+              <SoftInput
+                placeholder="Nombre y Apellido"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+              />
+              {formErrors.name && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.name}
+                </SoftTypography>
+              )}
             </SoftBox>
-          </SoftBox>
 
+            <SoftBox mb={2}>
+              <SoftInput
+                type="email"
+                placeholder="Email"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+              />
+              {formErrors.email && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.email}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <SoftInput
+                type="password"
+                placeholder="Contraseña"
+                name="password"
+                value={form.password}
+                onChange={handleChange}
+              />
+              {formErrors.password && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.password}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <SoftInput
+                placeholder="Teléfono"
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+              />
+              {formErrors.phone && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.phone}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <SoftInput
+                placeholder="Dirección"
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+              />
+              {formErrors.address && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.address}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <SoftBox
+                component="select"
+                name="documentTypeId"
+                value={form.documentTypeId}
+                onChange={handleChange}
+                sx={{
+                  width: "100%",
+                  height: "42px",
+                  px: 1.5,
+                  py: 1,
+                  border: "1px solid #d2d6da",
+                  borderRadius: "0.5rem",
+                  color: "#495057",
+                  fontSize: "0.875rem",
+                  backgroundColor: "#fff",
+                  fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+                  appearance: "none",
+                  "&:focus": {
+                    outline: "none",
+                    borderColor: "#344767",
+                    boxShadow: "0 0 0 2px rgba(52, 71, 103, 0.2)",
+                  },
+                }}
+              >
+                <option value="">Seleccionar tipo de documento</option>
+                <option value="1">Cédula de Ciudadanía</option>
+                <option value="2">NIT</option>
+                <option value="3">Pasaporte</option>
+              </SoftBox>
+            </SoftBox>
 
-          <SoftBox mb={2}>
-            <SoftInput
-              placeholder="Número de Documento"
-              name="documentNumber"
-              value={form.documentNumber}
-              onChange={handleChange}
-            />
-            {formErrors.documentNumber && (
-              <SoftTypography color="error" fontSize="small">
-                {formErrors.documentNumber}
+            <SoftBox mb={2}>
+              <SoftInput
+                placeholder="Número de Documento"
+                name="documentNumber"
+                value={form.documentNumber}
+                onChange={handleChange}
+              />
+              {formErrors.documentNumber && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.documentNumber}
+                </SoftTypography>
+              )}
+            </SoftBox>
+
+            {error && (
+              <SoftTypography
+                color="error"
+                fontWeight="regular"
+                variant="caption"
+                sx={{ fontSize: "0.75rem" }}
+              >
+                {error}
               </SoftTypography>
             )}
-          </SoftBox>
 
-          {error && (
-            <SoftTypography color="error" fontWeight="regular" variant="caption" sx={{ fontSize: "0.75rem" }}>
-            {error}
-          </SoftTypography>
-          
-          )}
-
-        <SoftBox display="flex" alignItems="center" mt={1} mb={1}>
-          <Checkbox checked={agreement} onChange={() => setAgreement(!agreement)} sx={{ p: 0.5 }} />
-          <SoftTypography variant="caption" fontWeight="regular" sx={{ fontSize: "0.75rem" }}>
-            &nbsp;Acepto los&nbsp;
-            <SoftTypography component="a" href="#" variant="caption" fontWeight="bold" textGradient>
-              Términos y condiciones
-            </SoftTypography>
-          </SoftTypography>
-        </SoftBox>
-
-          {formErrors.agreement && (
-            <SoftTypography color="error" fontSize="small">
-              {formErrors.agreement}
-            </SoftTypography>
-          )}
-
-          {success && (
-            <SoftTypography color="success" fontWeight="regular" variant="button">
-              {success}
-            </SoftTypography>
-          )}
-
-          <SoftBox mt={4} mb={1}>
-            <SoftButton type="submit" variant="gradient" color="dark" fullWidth>
-              Registrarse
-            </SoftButton>
-          </SoftBox>
-
-          <SoftBox mt={3} textAlign="center">
-            <SoftTypography variant="button" color="text" fontWeight="regular">
-              ¿Ya tienes una cuenta?{" "}
-              <SoftTypography component={Link} to="/authentication/sign-in" variant="button" color="dark" fontWeight="bold" textGradient>
-                Iniciar sesión
+            <SoftBox display="flex" alignItems="center" mt={1} mb={1}>
+              <Checkbox
+                checked={agreement}
+                onChange={() => setAgreement(!agreement)}
+                sx={{ p: 0.5 }}
+              />
+              <SoftTypography variant="caption" fontWeight="regular" sx={{ fontSize: "0.75rem" }}>
+                &nbsp;Acepto los&nbsp;
+                <SoftTypography
+                  component="a"
+                  href="#"
+                  variant="caption"
+                  fontWeight="bold"
+                  textGradient
+                >
+                  Términos y condiciones
+                </SoftTypography>
               </SoftTypography>
-            </SoftTypography>
-          </SoftBox>
+            </SoftBox>
 
+            {formErrors.agreement && (
+              <SoftTypography color="error" fontSize="small">
+                {formErrors.agreement}
+              </SoftTypography>
+            )}
+
+            {success && (
+              <SoftTypography color="success" fontWeight="regular" variant="button">
+                {success}
+              </SoftTypography>
+            )}
+
+            <SoftBox mt={4} mb={1}>
+              <SoftButton type="submit" variant="gradient" color="info" fullWidth>
+                Registrarse
+              </SoftButton>
+            </SoftBox>
+
+            <SoftBox mt={3} textAlign="center">
+              <SoftTypography variant="button" color="text" fontWeight="regular">
+                ¿Ya tienes una cuenta?{" "}
+                <SoftTypography
+                  component={Link}
+                  to="/authentication/sign-in"
+                  variant="button"
+                  color="dark"
+                  fontWeight="bold"
+                  textGradient
+                >
+                  Iniciar sesión
+                </SoftTypography>
+              </SoftTypography>
+            </SoftBox>
           </SoftBox>
         </SoftBox>
       </Card>

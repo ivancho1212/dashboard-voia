@@ -1,6 +1,6 @@
-
 // prop-types is a library for typechecking of props
 import PropTypes from "prop-types";
+import { useNavigate } from "react-router-dom";
 
 // @mui material components
 import Grid from "@mui/material/Grid";
@@ -12,22 +12,26 @@ import SoftTypography from "components/SoftTypography";
 // Soft UI Dashboard React examples
 import PageLayout from "examples/LayoutContainers/PageLayout";
 
-// Authentication layout components
-import Footer from "layouts/authentication/components/Footer";
+// Icono
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 
 function BasicLayout({ title, image, children }) {
+  const navigate = useNavigate();
+
   return (
     <PageLayout>
-
+      {/* Bloque con imagen ocupando la mitad de la pantalla */}
       <SoftBox
         width="calc(100% - 2rem)"
-        minHeight="50vh"
+        height="50vh"
         borderRadius="lg"
         mx={2}
         my={2}
         pt={6}
         pb={2}
         sx={{
+          position: "relative",
+          overflow: "visible",
           backgroundImage: ({ functions: { linearGradient, rgba }, palette: { gradients } }) =>
             image &&
             `${linearGradient(
@@ -39,39 +43,58 @@ function BasicLayout({ title, image, children }) {
           backgroundRepeat: "no-repeat",
         }}
       >
-        <Grid container spacing={2} justifyContent="center" sx={{ textAlign: "center" }}>
-          <Grid item xs={10} lg={4}>
-            <SoftBox >
-              <SoftTypography variant="h1" color="white" fontWeight="bold">
-                {title}
-              </SoftTypography>
-            </SoftBox>
-            
+        {/* 🔙 Flecha de retroceso arriba a la izquierda */}
+        <SoftBox display="flex" alignItems="center" sx={{ position: "absolute", top: "1rem", left: "1rem" }}>
+          <ArrowBackIcon
+            onClick={() => navigate(-1)}
+            sx={{ cursor: "pointer", color: "#fff" }}
+            fontSize="large"
+          />
+        </SoftBox>
+
+        {/* Título centrado */}
+        <Grid container justifyContent="center" sx={{ textAlign: "center" }}>
+          <Grid item xs={10} lg={6}>
+            {title && (
+              <SoftBox mt={1} mb={3}>
+                <SoftTypography variant="h1" color="white" fontWeight="bold">
+                  {title}
+                </SoftTypography>
+              </SoftBox>
+            )}
           </Grid>
         </Grid>
+
+        {/* Formulario o contenido */}
+        <SoftBox
+          sx={{
+            position: "absolute",
+            left: "50%",
+            transform: "translateX(-50%)",
+            top: {
+              xs: "calc(50vh - 110px)",
+              sm: "calc(50vh - 120px)",
+              md: "calc(50vh - 150px)",
+            },
+            width: { xs: "92%", sm: "75%", md: "40%", lg: "32%" },
+            mb: { xs: 6, sm: 8, md: 10, lg: 12 },
+          }}
+        >
+          {children}
+        </SoftBox>
       </SoftBox>
-      <SoftBox mt={{ xs: -26, lg: -44 }}  width="calc(100% - 3rem)" mx="auto">
-        <Grid container spacing={1} justifyContent="center">
-          <Grid item xs={11} sm={9} md={5} lg={4} xl={3}>
-            {children}
-          </Grid>
-        </Grid>
-      </SoftBox>
-      <Footer />
     </PageLayout>
   );
 }
 
-// Setting default values for the props of BasicLayout
+// Valores por defecto
 BasicLayout.defaultProps = {
   title: "",
-  description: "",
 };
 
-// Typechecking props for the BasicLayout
+// Validación de props
 BasicLayout.propTypes = {
   title: PropTypes.string,
-  description: PropTypes.string,
   image: PropTypes.string.isRequired,
   children: PropTypes.node.isRequired,
 };
