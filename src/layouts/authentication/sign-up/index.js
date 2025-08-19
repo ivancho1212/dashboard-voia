@@ -129,7 +129,13 @@ function SignUp() {
 
   return (
     <BasicLayout title="¡Bienvenido!" image={curved6}>
-      <Card sx={{ mb: { xs: 6, sm: 8, md: 10, lg: 12 } }}>
+      <Card
+        sx={{
+          mb: { xs: 6, sm: 8, md: 10, lg: 12 },
+          boxShadow: "0px 8px 25px rgba(0, 0, 0, 0.2)", // 👈 sombra extra
+          borderRadius: "16px", // opcional, para esquinas más suaves
+        }}
+      >
         <SoftBox p={3} textAlign="center">
           <SoftTypography variant="h5" fontWeight="medium" mb={2}>
             Crear cuenta
@@ -370,7 +376,7 @@ function SignUp() {
                   component={Link}
                   to="/authentication/sign-in"
                   variant="button"
-                  color="dark"
+                  color="info"
                   fontWeight="bold"
                   textGradient
                 >
