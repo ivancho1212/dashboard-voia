@@ -94,18 +94,18 @@ function SignUp() {
       return;
     }
 
-    if (!recaptchaToken) {
-      setError("Por favor, confirma que no eres un robot.");
-      return;
-    }
+    // if (!recaptchaToken) {
+    //  setError("Por favor, confirma que no eres un robot.");
+    //  return;
+    //  }
 
     try {
       const newUser = {
         name: form.name,
         email: form.email,
         password: form.password,
-        roleId: 2, // Aquí puedes cambiar si necesitas un rol diferente
-        documentTypeId: parseInt(form.documentTypeId, 10), // Asegura que sea int
+        roleId: 2, // Rol por defecto
+        documentTypeId: parseInt(form.documentTypeId, 10),
         phone: form.phone,
         address: form.address,
         documentNumber: form.documentNumber,
@@ -113,6 +113,18 @@ function SignUp() {
         avatarUrl: form.avatarUrl,
         isVerified: false,
         recaptchaToken,
+
+        // Aquí agregamos los consentimientos
+        consents: [
+          {
+            consent_type: "terms_and_conditions",
+            granted: form.termsAccepted ? 1 : 0,
+          },
+          {
+            consent_type: "privacy_policy",
+            granted: form.privacyAccepted ? 1 : 0,
+          },
+        ],
       };
 
       const res = await register(newUser);
@@ -125,6 +137,7 @@ function SignUp() {
       console.error(err);
       setError(err.message || "No se pudo registrar el usuario");
     }
+
   };
 
   return (
@@ -356,12 +369,13 @@ function SignUp() {
                 {success}
               </SoftTypography>
             )}
+            {/* 
             <SoftBox mt={2} mb={2} textAlign="center">
               <ReCAPTCHA
                 sitekey="TU_SITE_KEY_AQUI" // 👈 el site key de Google reCAPTCHA
                 onChange={(token) => setRecaptchaToken(token)}
               />
-            </SoftBox>
+            </SoftBox>*/}
 
             <SoftBox mt={4} mb={1}>
               <SoftButton type="submit" variant="gradient" color="info" fullWidth>

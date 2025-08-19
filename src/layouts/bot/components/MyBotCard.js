@@ -16,6 +16,7 @@ function capitalizar(texto) {
 }
 
 function MyBotCard({ template, onSelectTemplate }) {
+  if (!template) return null;
   return (
     <Card
       sx={{
