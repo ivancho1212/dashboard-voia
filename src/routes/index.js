@@ -10,6 +10,7 @@ import authRoutes from "./auth";
 import otherRoutes from "./others";
 import widgetRoutes from "./widget";
 import landingRoutes from "./landing";
+import legalRoutes from "./legal";
 
 
 const routes = [
@@ -25,6 +26,7 @@ const routes = [
   ...authRoutes,
   ...otherRoutes, 
   ...widgetRoutes,
+  ...legalRoutes, 
 ];
 
 export default routes;

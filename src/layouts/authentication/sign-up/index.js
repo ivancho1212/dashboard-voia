@@ -12,6 +12,8 @@ import Separator from "layouts/authentication/components/Separator";
 import curved6 from "assets/images/curved-images/curved14.webp";
 import { register } from "services/authService"; // Asegúrate de importar la función correctamente
 import { Link } from "react-router-dom";
+import TermsModal from "../components/TermsModal";
+import ReCAPTCHA from "react-google-recaptcha";
 
 function SignUp() {
   const navigate = useNavigate();
@@ -21,19 +23,24 @@ function SignUp() {
     name: "",
     email: "",
     password: "",
+    confirmPassword: "",
     phone: "",
     address: "",
     documentNumber: "",
     documentPhotoUrl: "",
     avatarUrl: "",
-    documentTypeId: "", // Este campo se añade para almacenar el tipo de documento
+    documentTypeId: "",
+    dataConsent: false,
   });
 
   // Estado de los errores y mensajes
   const [formErrors, setFormErrors] = useState({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [agreement, setAgreement] = useState(true);
+  const [agreement, setAgreement] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [socialProvider, setSocialProvider] = useState(null);
+  const [recaptchaToken, setRecaptchaToken] = useState(null);
 
   // Manejar el cambio de los inputs del formulario
   const handleChange = (e) => {
@@ -57,6 +64,9 @@ function SignUp() {
     }
     if (!emailRegex.test(form.email)) errors.email = "Correo electrónico inválido.";
     if (form.password.length < 6) errors.password = "Mínimo 6 caracteres.";
+    if (form.confirmPassword !== form.password) {
+      errors.confirmPassword = "Las contraseñas no coinciden.";
+    }
     if (!phoneRegex.test(form.phone)) errors.phone = "Teléfono inválido. Ej: 3XXXXXXXXX";
     if (!form.address.trim()) errors.address = "La dirección es obligatoria.";
     if (!documentRegex.test(form.documentNumber))
@@ -84,6 +94,11 @@ function SignUp() {
       return;
     }
 
+    if (!recaptchaToken) {
+      setError("Por favor, confirma que no eres un robot.");
+      return;
+    }
+
     try {
       const newUser = {
         name: form.name,
@@ -97,6 +112,7 @@ function SignUp() {
         documentPhotoUrl: form.documentPhotoUrl,
         avatarUrl: form.avatarUrl,
         isVerified: false,
+        recaptchaToken,
       };
 
       const res = await register(newUser);
@@ -120,8 +136,25 @@ function SignUp() {
           </SoftTypography>
         </SoftBox>
         <SoftBox mb={2}>
-          <Socials />
+          <Socials
+            onSocialClick={(provider) => {
+              setSocialProvider(provider);
+              setShowTermsModal(true); // 👈 abre el modal
+            }}
+          />
         </SoftBox>
+
+        {/* Modal de términos */}
+        <TermsModal
+          open={showTermsModal}
+          onClose={() => setShowTermsModal(false)}
+          onAccept={() => {
+            setShowTermsModal(false);
+            // Aquí ya puedes llamar tu login con Google/Microsoft
+            console.log("Usuario aceptó términos con", socialProvider);
+          }}
+        />
+
         <Separator />
         <SoftBox pt={2} pb={3} px={2}>
           <SoftBox component="form" role="form" onSubmit={handleSubmit}>
@@ -167,6 +200,21 @@ function SignUp() {
                 </SoftTypography>
               )}
             </SoftBox>
+            <SoftBox mb={2}>
+              <SoftInput
+                type="password"
+                placeholder="Confirmar contraseña"
+                name="confirmPassword"
+                value={form.confirmPassword}
+                onChange={handleChange}
+              />
+              {formErrors.confirmPassword && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.confirmPassword}
+                </SoftTypography>
+              )}
+            </SoftBox>
+
             <SoftBox mb={2}>
               <SoftInput
                 placeholder="Teléfono"
@@ -250,7 +298,8 @@ function SignUp() {
               </SoftTypography>
             )}
 
-            <SoftBox display="flex" alignItems="center" mt={1} mb={1}>
+            {/* Check obligatorio: Términos */}
+            <SoftBox display="flex" alignItems="center" mt={1}>
               <Checkbox
                 checked={agreement}
                 onChange={() => setAgreement(!agreement)}
@@ -259,13 +308,33 @@ function SignUp() {
               <SoftTypography variant="caption" fontWeight="regular" sx={{ fontSize: "0.75rem" }}>
                 &nbsp;Acepto los&nbsp;
                 <SoftTypography
-                  component="a"
-                  href="#"
+                  component={Link}
+                  to="/terminos"
                   variant="caption"
                   fontWeight="bold"
                   textGradient
                 >
                   Términos y condiciones
+                </SoftTypography>
+              </SoftTypography>
+            </SoftBox>
+
+            <SoftBox display="flex" alignItems="center" mt={1} mb={2}>
+              <Checkbox
+                checked={form.dataConsent || false}
+                onChange={() => setForm({ ...form, dataConsent: !form.dataConsent })}
+                sx={{ p: 0.5 }}
+              />
+              <SoftTypography variant="caption" fontWeight="regular" sx={{ fontSize: "0.75rem" }}>
+                &nbsp;Autorizo el uso de mis datos para&nbsp;
+                <SoftTypography
+                  component={Link}
+                  to="/autorizacion-datos"
+                  variant="caption"
+                  fontWeight="bold"
+                  textGradient
+                >
+                  Entrenamiento y mejora de Inteligencia Artificial
                 </SoftTypography>
               </SoftTypography>
             </SoftBox>
@@ -281,6 +350,12 @@ function SignUp() {
                 {success}
               </SoftTypography>
             )}
+            <SoftBox mt={2} mb={2} textAlign="center">
+              <ReCAPTCHA
+                sitekey="TU_SITE_KEY_AQUI" // 👈 el site key de Google reCAPTCHA
+                onChange={(token) => setRecaptchaToken(token)}
+              />
+            </SoftBox>
 
             <SoftBox mt={4} mb={1}>
               <SoftButton type="submit" variant="gradient" color="info" fullWidth>
