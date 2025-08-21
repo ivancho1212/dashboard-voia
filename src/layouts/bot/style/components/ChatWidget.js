@@ -9,58 +9,75 @@ import MessageList from "./chat/MessageList";
 import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
 
-
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
+const defaultAvatar = "/VIA.png";
 
 function ChatWidget({
   style = {},
   theme: initialTheme,
   botId: propBotId,
   userId: propUserId,
-  isDemo = false,
+  isDemo: initialDemo = false,
 }) {
   const connectionRef = useRef(null);
-  const botId = propBotId ?? 1;
-  const userId = propUserId ?? 45;
+  const botId = propBotId ?? 2;
+  const userId = propUserId ?? 2;
 
-  // Configuración de temas (debe ir antes de cualquier uso)
+  const [botStyle, setBotStyle] = useState(null);
+  const [isDemo, setIsDemo] = useState(initialDemo);
+
+  useEffect(() => {
+    const fetchBotStyle = async () => {
+      try {
+        const res = await fetch(`http://localhost:5006/api/Bots/${botId}`);
+        const data = await res.json();
+        if (data.style) {
+          setBotStyle(data.style);
+          setIsDemo(false);
+          console.log("✅ Estilos cargados del backend:", data.style);
+        } else {
+          console.warn("⚠️ Este bot no tiene estilos definidos, se usará demo.");
+        }
+      } catch (err) {
+        console.error("❌ Error cargando estilos del bot:", err);
+      }
+    };
+    fetchBotStyle();
+  }, [botId]);
+
+  // Configuración de temas
   const fallbackTextColor = "#1a1a1a";
   const fallbackBgColor = "#f5f5f5";
-
-  // Normalizar claves de estilos desde backend (PascalCase, snake_case, camelCase)
   const normalizedStyle = {
     ...style,
-    primaryColor:
-      style.primaryColor || style.PrimaryColor || style.primary_color || "#000000",
-    secondaryColor:
-      style.secondaryColor || style.SecondaryColor || style.secondary_color || "#ffffff",
-    fontFamily:
-      style.fontFamily || style.FontFamily || style.font_family || "Arial",
-    avatarUrl:
-      style.avatarUrl || style.AvatarUrl || style.avatar_url || "",
-    headerBackgroundColor:
-      style.headerBackgroundColor || style.HeaderBackgroundColor || style.header_background_color || "",
-    allowImageUpload:
-      style.allowImageUpload ?? style.AllowImageUpload ?? style.allow_image_upload ?? false,
-    allowFileUpload:
-      style.allowFileUpload ?? style.AllowFileUpload ?? style.allow_file_upload ?? false,
-    position:
-      style.position || style.Position || "bottom-right",
-    title:
-      style.title || style.Title || "",
-    theme:
-      style.theme || style.Theme || "light",
-    customCss:
-      style.customCss || style.CustomCss || style.custom_css || "",
+    primaryColor: style.primaryColor || style.PrimaryColor || style.primary_color || "#000000",
+    secondaryColor: style.secondaryColor || style.SecondaryColor || style.secondary_color || "#ffffff",
+    fontFamily: style.fontFamily || style.FontFamily || style.font_family || "Arial",
+    avatarUrl: style.avatarUrl || style.AvatarUrl || style.avatar_url || "",
+    headerBackgroundColor: style.headerBackgroundColor || style.HeaderBackgroundColor || style.header_background_color || "",
+    allowImageUpload: style.allowImageUpload ?? style.AllowImageUpload ?? style.allow_image_upload ?? false,
+    allowFileUpload: style.allowFileUpload ?? style.AllowFileUpload ?? style.allow_file_upload ?? false,
+    position: style.position || style.Position || "bottom-right",
+    title: style.title || style.Title || "",
+    theme: style.theme || style.Theme || "light",
+    customCss: style.customCss || style.CustomCss || style.custom_css || "",
   };
+  const effectiveStyle = botStyle || normalizedStyle;
+  const {
+    allowImageUpload,
+    allowFileUpload,
+    theme: themeKeyRaw,
+    primaryColor,
+    secondaryColor,
+    headerBackgroundColor,
+    fontFamily,
+    avatarUrl,
+    position,
+    title,
+    customCss
+  } = effectiveStyle;
 
-  const allowImageUpload = normalizedStyle.allowImageUpload;
-  const allowFileUpload = normalizedStyle.allowFileUpload;
-  const themeKey = normalizedStyle.theme || initialTheme || "light";
-  const primaryColor = normalizedStyle.primaryColor;
-  const secondaryColor = normalizedStyle.secondaryColor;
-  const headerBackgroundColor = normalizedStyle.headerBackgroundColor;
-
+  const themeKey = themeKeyRaw || initialTheme || "light";
   const themeConfig = {
     light: {
       backgroundColor: "#ffffff",
@@ -85,71 +102,153 @@ function ChatWidget({
       buttonColor: "#000000",
     },
     custom: {
-      backgroundColor:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackBgColor
-          : secondaryColor,
+      backgroundColor: primaryColor.toLowerCase() === secondaryColor.toLowerCase() ? fallbackBgColor : secondaryColor,
       headerBackground: headerBackgroundColor?.trim() || secondaryColor,
-      textColor:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackTextColor
-          : primaryColor,
+      textColor: primaryColor.toLowerCase() === secondaryColor.toLowerCase() ? fallbackTextColor : primaryColor,
       borderColor: secondaryColor,
-      inputBg:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackBgColor
-          : secondaryColor,
-      inputText:
-        primaryColor.toLowerCase() === secondaryColor.toLowerCase()
-          ? fallbackTextColor
-          : primaryColor,
+      inputBg: primaryColor.toLowerCase() === secondaryColor.toLowerCase() ? fallbackBgColor : secondaryColor,
+      inputText: primaryColor.toLowerCase() === secondaryColor.toLowerCase() ? fallbackTextColor : primaryColor,
       inputBorder: secondaryColor,
       buttonBg: primaryColor,
-      buttonColor:
-        secondaryColor.toLowerCase() === "#ffffff" || secondaryColor.toLowerCase() === "#fff"
-          ? "#000000"
-          : "#ffffff",
+      buttonColor: secondaryColor.toLowerCase() === "#ffffff" || secondaryColor.toLowerCase() === "#fff" ? "#000000" : "#ffffff",
     },
   };
-
   const themeDefaults = themeConfig[themeKey] || themeConfig.light;
-  const headerBackground = headerBackgroundColor?.trim()
-    ? headerBackgroundColor
-    : themeDefaults.headerBackground;
+  const headerBackground = headerBackgroundColor?.trim() ? headerBackgroundColor : themeDefaults.headerBackground;
   const backgroundColor = themeDefaults.backgroundColor;
   const textColor = themeDefaults.textColor;
   const inputBg = themeDefaults.inputBg;
   const inputText = themeDefaults.inputText;
   const inputBorder = themeDefaults.inputBorder;
-  const fontFamily = normalizedStyle.fontFamily;
-  const avatarUrl = normalizedStyle.avatarUrl;
-  const position = normalizedStyle.position;
-  const title = normalizedStyle.title;
 
+  // Estados React
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
+  const debugSetMessages = (newMessages) => {
+    if (newMessages.length === 0) {
+      console.trace("⚠️ setMessages([]) llamado desde:", new Error().stack);
+    }
+    setMessages(newMessages);
+  };
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
-  const [imageGroup, setImageGroup] = useState([]); // todas las imágenes
-  const [activeImageIndex, setActiveImageIndex] = useState(0); // imagen activa
-
+  const [imageGroup, setImageGroup] = useState([]);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState(null);
-
   const messagesEndRef = useRef(null);
-
   const [iaWarning, setIaWarning] = useState(null);
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
   const typingTimeoutRef = useRef(null);
+  const CACHE_KEY = `chat_${botId}_${userId}`;
+  const CACHE_TIMEOUT = 1 * 60 * 1000;
 
-  // 🧠 Refs para animación individual de mensajes
+  // 🟢 Mueve la función normalizeMessage aquí para que sea accesible
+  const normalizeMessage = (msg) => ({
+    id: msg.id ?? Date.now(),
+    from:
+      msg.from ??
+      (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "ai"),
+    text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
+    file: msg.file ?? null,
+    multipleFiles: msg.multipleFiles ?? msg.files ?? [],
+    images: msg.images ?? msg.imageGroup ?? [],
+    timestamp: msg.timestamp ?? new Date().toISOString(),
+  });
+
+  // ✅ Única lógica de carga de caché al inicio.
+  useEffect(() => {
+    const cached = loadConversationCache();
+    if (cached) {
+      setConversationId(cached.conversationId);
+      setMessages(cached.messages.map(normalizeMessage)); // 🔑 Normalizar siempre
+      console.log("📂 Cargando conversación desde caché:", cached);
+    }
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
+          if (isExpired) {
+            console.log("⏰ Caché expirado en segundo plano, limpiando...");
+            localStorage.removeItem(CACHE_KEY);
+          }
+        } catch (e) {
+          console.error("⚠️ Error parseando caché, limpiando:", e);
+          localStorage.removeItem(CACHE_KEY);
+        }
+      }
+    }, 60 * 1000); // revisar cada minuto
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // ✅ Lógica de guardado de caché que se activa con cada cambio de mensajes.
+  useEffect(() => {
+    if (conversationId && messages.length > 0) {
+      saveConversationCache(conversationId, messages);
+      console.log("💾 Caché de conversación actualizado. Mensajes guardados:", messages.length);
+    }
+  }, [messages, conversationId]);
+
   const messageRefs = useRef([]);
   messageRefs.current = messages.map((_, i) => messageRefs.current[i] ?? React.createRef());
   const typingRef = useRef(null);
 
-  // ✅ USEEFFECT PRINCIPAL CORREGIDO
+  const saveConversationCache = (convId, msgs) => {
+    if (!convId) return;
+    if (!msgs || msgs.length === 0) return;
+
+    // 🔑 Cargar el cache existente
+    const existing = loadConversationCache();
+
+    let mergedMessages = msgs;
+    if (existing && existing.conversationId === convId) {
+      // Fusiona mensajes anteriores con los nuevos (evita duplicados por id)
+      const map = new Map();
+      [...existing.messages, ...msgs].forEach(m => map.set(m.id, m));
+      mergedMessages = Array.from(map.values());
+    }
+
+    const data = { conversationId: convId, messages: mergedMessages, timestamp: Date.now() };
+    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  };
+
+
+  const loadConversationCache = () => {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+
+    try {
+      const data = JSON.parse(raw);
+      const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
+      if (isExpired) {
+        console.log("⏰ Caché expirado, eliminando...");
+
+        // 🔥 Limpiar cache y estado de React
+        localStorage.removeItem(CACHE_KEY);
+        setConversationId(null);
+        setMessages([]);
+
+        return null;
+      }
+      return data;
+    } catch (e) {
+      console.error("⚠️ Error parseando caché, limpiando:", e);
+      localStorage.removeItem(CACHE_KEY);
+      setConversationId(null);
+      setMessages([]);
+      return null;
+    }
+  };
+
+
   useEffect(() => {
     if (isDemo || !isOpen) {
       if (connectionRef.current) {
@@ -162,52 +261,59 @@ function ChatWidget({
     if (!connectionRef.current) {
       connectionRef.current = createHubConnection();
     }
+    const connection = connectionRef.current;
 
-    const connection = connectionRef.current; // ✅ Definir connection aquí
-
-    // --- Definición de Handlers (ahora con acceso a connection) ---
     const handleReceiveMessage = (msg) => {
       console.log("📩 Mensaje recibido:", msg);
-      setMessages((prev) => [...prev, msg]);
-      setIsTyping(false);
+      const normalized = normalizeMessage(msg);
+
+      // Simular escritura antes de mostrar el mensaje
+      setIsTyping(true);
+      setTimeout(() => {
+        setMessages(prev => [...prev, normalized]);
+        setIsTyping(false);
+      }, 1500 + Math.random() * 1000); // 1.5s - 2.5s
     };
 
     const handleTyping = (sender) => {
-      console.log("⌨️ Usuario escribiendo:", sender);
       setTypingSender(sender);
       setIsTyping(true);
-
-      // Limpiar timeout anterior
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-
-      // Ocultar typing después de 3 segundos
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         setIsTyping(false);
         setTypingSender(null);
       }, 3000);
     };
 
-    // --- Lógica de Conexión y Listeners ---
     const setupConnection = async () => {
       try {
+        if (!connection) return;
+
         if (connection.state === "Disconnected") {
           await connection.start();
-          console.log("🟢 Conexión SignalR establecida");
         }
 
+        if (!connection.handlersAttached) {
+          connection.on("ReceiveMessage", handleReceiveMessage);
+          connection.on("Typing", handleTyping);
+          connection.handlersAttached = true; // marca para no volver a adjuntar
+        }
+
+        // ✅ Solo nos unimos si hay conversationId (del caché o del estado).
+        if (conversationId) {
+          await connection.invoke("JoinRoom", conversationId);
+          return;
+        }
+
+        // Si no existe, pedimos uno nuevo
         const convId = await connection.invoke("InitializeContext", { botId, userId });
         if (convId) {
           setConversationId(convId);
           await connection.invoke("JoinRoom", convId);
-          console.log(`🏠 Unido a la sala: ${convId}`);
         }
 
-        connection.on("ReceiveMessage", handleReceiveMessage);
-        connection.on("Typing", handleTyping);
       } catch (err) {
-        console.error("❌ Error conectando a SignalR en Widget:", err);
+        console.error("❌ Error conectando a SignalR:", err);
       }
     };
 
@@ -215,86 +321,66 @@ function ChatWidget({
 
     return () => {
       if (connectionRef.current) {
-        console.log("🧹 Limpiando conexión del widget al cerrar.");
         connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
         connectionRef.current.off("Typing", handleTyping);
       }
-
-      // Limpiar timeout de typing
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
-  }, [isOpen, botId, userId]);
+  }, [isOpen, botId, userId, isDemo, conversationId]);
 
-  // useEffect para hacer scroll hacia abajo con nuevos mensajes
   useEffect(() => {
-    if (messagesEndRef.current) {
+    if (messages.length > 0 && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isTyping]);
+  }, [messages]);
 
-  // ✅ USEEFFECT HEARTBEAT CORREGIDO
   useEffect(() => {
-    // Solo ejecutar si el widget está abierto y ya tenemos un ID de conversación
-    if (isOpen && conversationId) {
-      const connection = connectionRef.current; // ✅ Definir connection localmente
-
-      if (!connection || connection.state !== "Connected") {
-        console.warn("No SignalR connection active for heartbeat.");
-        return;
-      }
-
-      console.log(`❤️ Iniciando heartbeat para conversación ${conversationId}`);
-
-      // 1. Envía una señal inicial inmediata para marcar como activo
-      connection
-        .invoke("UserIsActive", conversationId)
-        .catch((err) => console.error("Error en heartbeat inicial:", err));
-
-      // 2. Configura el heartbeat para que se ejecute cada 30 segundos
-      const intervalId = setInterval(() => {
-        // Nos aseguramos de que la conexión siga activa antes de enviar
-        const currentConnection = connectionRef.current; // ✅ Usar ref actual
-        if (currentConnection && currentConnection.state === "Connected") {
-          currentConnection
-            .invoke("UserIsActive", conversationId)
-            .catch((err) => console.error("Error en heartbeat periódico:", err));
+    if (!isOpen || !conversationId) return;
+    let intervalId = null;
+    let isUnmounted = false;
+    const sendHeartbeat = async () => {
+      try {
+        const conn = connectionRef.current;
+        if (!conn) return;
+        if (conn.state === "Disconnected") {
+          console.log("🔄 Reconectando SignalR para heartbeat...");
+          await conn.start();
         }
-      }, 30000); // 30 segundos
-
-      // 3. La función de limpieza es crucial: se ejecuta si el widget se cierra o cambia el ID
-      return () => {
-        console.log(`💔 Deteniendo heartbeat para ${conversationId}`);
-        clearInterval(intervalId);
-      };
-    }
+        if (conn.state === "Connected") {
+          await conn.invoke("UserIsActive", conversationId);
+          console.log(`❤️ Heartbeat enviado para conversación ${conversationId}`);
+        }
+      } catch (err) {
+        console.error("❌ Error enviando heartbeat:", err);
+      }
+    };
+    sendHeartbeat();
+    intervalId = setInterval(() => {
+      if (!isUnmounted) sendHeartbeat();
+    }, 30000);
+    return () => {
+      isUnmounted = true;
+      if (intervalId) clearInterval(intervalId);
+      console.log(`💔 Heartbeat detenido para conversación ${conversationId}`);
+    };
   }, [isOpen, conversationId]);
 
-  // ✅ USEEFFECT PARA SEÑAL DE DESCONEXIÓN
   useEffect(() => {
     const handlePageClose = () => {
-      // Solo enviar si tenemos un ID de conversación
       if (conversationId) {
+        saveConversationCache(conversationId, messages);
         const url = `http://localhost:5006/api/conversations/${conversationId}/disconnect`;
-
-        // navigator.sendBeacon es la forma más fiable de enviar una
-        // petición final mientras la página se está cerrando.
         if (navigator.sendBeacon) {
           navigator.sendBeacon(url);
           console.log(`🚪 Enviando señal de desconexión beacon para ${conversationId}`);
         }
       }
     };
-
-    // El evento 'beforeunload' se dispara justo antes de que el usuario deje la página
     window.addEventListener("beforeunload", handlePageClose);
-
-    // Limpiamos el evento cuando el componente se desmonte
     return () => {
       window.removeEventListener("beforeunload", handlePageClose);
     };
-  }, [conversationId]); // Se actualiza si cambia el ID de la conversación
+  }, [conversationId]);
 
   const [demoMessageCount, setDemoMessageCount] = useState(0);
   const maxDemoMessages = 5;
@@ -307,34 +393,35 @@ function ChatWidget({
         setIaWarning("Límite de mensajes en modo demo alcanzado.");
         return;
       }
-
-      const userMsg = {
+      const userMsg = normalizeMessage({
         id: Date.now(),
         sender: "user",
         content: message,
         timestamp: new Date().toISOString(),
         type: "text",
-      };
-
-      const botMsg = {
+      });
+      const botMsg = normalizeMessage({
         id: Date.now() + 1,
         sender: "bot",
         content: "Respuesta simulada de la IA en modo demo.",
         timestamp: new Date().toISOString(),
         type: "text",
-      };
-
-      setMessages((prev) => [...prev, userMsg]);
+      });
+      setMessages((prev) => {
+        const newMessages = [...prev, userMsg];
+        return newMessages;
+      });
       setMessage("");
       setTimeout(() => {
-        setMessages((prev) => [...prev, botMsg]);
+        setMessages((prev) => {
+          const newMessages = [...prev, botMsg];
+          return newMessages;
+        });
         setDemoMessageCount((prev) => prev + 1);
-      }, 1000); // simula "pensamiento" de la IA
-
+      }, 1000);
       return;
     }
 
-    // 🔽 lógica real de producción
     if (!conversationId) return;
     const connection = connectionRef.current;
     if (!connection || connection.state !== "Connected") {
@@ -343,15 +430,22 @@ function ChatWidget({
     }
 
     const payload = { botId, userId, question: message.trim() };
+    const userMessageForDisplay = normalizeMessage({ from: "user", text: message });
+
+    setMessages((prev) => [...prev, userMessageForDisplay]);
+    setMessage("");
 
     try {
-      await connection.invoke("SendMessage", conversationId, payload);
-      setMessage("");
+      await connection.invoke("SendMessage", payload);
     } catch (err) {
-      console.error("❌ Error enviando mensaje:", err);
+      console.error("❌ Error enviando mensaje a SignalR:", err);
+      const errorMessage = normalizeMessage({
+        from: "ai",
+        text: "Lo siento, hubo un problema al enviar tu mensaje. Por favor, intenta de nuevo.",
+      });
+      setMessages((prev) => [...prev, errorMessage]);
     }
   };
-
 
   const isColorDark = (hexColor) => {
     if (!hexColor) return false;
@@ -368,13 +462,13 @@ function ChatWidget({
     if (!bgColor) return "#000000";
     let color = bgColor.replace("#", "");
     if (color.length === 3) {
-      color = color[0]+color[0]+color[1]+color[1]+color[2]+color[2];
+      color = color[0] + color[0] + color[1] + color[1] + color[2] + color[2];
     }
     const r = parseInt(color.substring(0, 2), 16);
     const g = parseInt(color.substring(2, 4), 16);
     const b = parseInt(color.substring(4, 6), 16);
     // YIQ formula for contrast
-    const yiq = (r*299 + g*587 + b*114) / 1000;
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
     return yiq >= 180 ? "#000000" : "#ffffff";
   }
   const headerTextColor = getContrastTextColor(headerBackground);
@@ -488,12 +582,12 @@ function ChatWidget({
         { sender: "user", content: "Muchas gracias por la ayuda.", delay: 2500 },
         { sender: "admin", content: "¡Con gusto! Feliz día.", delay: 2500 },
       ];
-  
+
       let totalDelay = 0;
-  
+
       demoSequence.forEach((item, i) => {
         totalDelay += item.delay;
-  
+
         // 🧠 Simula "escribiendo" antes de los mensajes del bot o admin
         if (item.sender === "bot" || item.sender === "admin") {
           setTimeout(() => {
@@ -501,34 +595,37 @@ function ChatWidget({
             setIsTyping(true);
           }, totalDelay - 1500);
         }
-  
+
         // 📨 Mostrar el mensaje real
         setTimeout(() => {
-          const newMsg = {
+          const newMsgRaw = {
             id: Date.now() + i,
-            from: item.sender,
-            text: item.content,
+            sender: item.sender,
+            content: item.content,
             type: item.type || "text",
             timestamp: new Date().toISOString(),
             userId:
               item.sender === "user"
                 ? "demo-user-id"
                 : item.sender === "bot"
-                ? "bot-id"
-                : "admin-id",
-            imageGroup: item.imageGroup || undefined,
-            files: item.files || undefined,
+                  ? "bot-id"
+                  : "admin-id",
+            imageGroup: item.imageGroup || [],
+            files: item.files || [],
           };
-  
+
+          const newMsg = normalizeMessage(newMsgRaw);
+
           setMessages((prev) => [...prev, newMsg]);
+
           setIsTyping(false);
           setTypingSender(null);
         }, totalDelay);
       });
     }
   }, [isDemo, isOpen, messages.length]);
-  
-  const isInputDisabled = isDemo;
+
+  const isInputDisabled = isDemo || !conversationId;
 
   return (
     <div style={wrapperStyle}>
@@ -564,7 +661,7 @@ function ChatWidget({
             }}
           >
             <img
-              src={avatarUrl?.trim() ? avatarUrl : voaiGif}
+              src={avatarUrl?.trim() ? avatarUrl : defaultAvatar}
               alt="Avatar"
               style={{
                 width: "60px",
@@ -602,7 +699,7 @@ function ChatWidget({
               }}
             >
               <img
-                src={avatarUrl?.trim() ? avatarUrl : voaiGif}
+                src={avatarUrl?.trim() ? avatarUrl : defaultAvatar}
                 alt="Avatar"
                 style={{
                   width: "42px",
@@ -702,7 +799,7 @@ function ChatWidget({
 
           {/* 📝 Input + Adjuntar + Enviar */}
           <InputArea
-            key={`${style.allowImageUpload}-${style.allowFileUpload}`} // 🔄 Forzar re-render al cambiar los switches
+            key={`${normalizedStyle.allowImageUpload}-${normalizedStyle.allowFileUpload}`}
             inputText={inputText}
             inputBg={inputBg}
             inputBorder={inputBorder}
@@ -714,9 +811,10 @@ function ChatWidget({
             connectionRef={connectionRef}
             conversationId={conversationId}
             userId={userId}
-            isInputDisabled={isDemo}
-            allowImageUpload={normalizedStyle.allowImageUpload}
-            allowFileUpload={normalizedStyle.allowFileUpload}
+            disabled={isDemo}             // ✅ cambio aquí
+            isDemo={isDemo}               // ✅ pasar demo explícitamente
+            allowImageUpload={effectiveStyle.allowImageUpload}
+            allowFileUpload={effectiveStyle.allowFileUpload}
           />
 
           <div

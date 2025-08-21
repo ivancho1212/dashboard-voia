@@ -62,7 +62,7 @@ function BotTraining() {
   const [botName, setBotName] = useState("");
   const [creatingBot, setCreatingBot] = useState(false);
   const [botDescription, setBotDescription] = useState("");
-  const [sessionId, setSessionId] = useState(null); // ✅ NUEVO
+  const [sessionId, setSessionId] = useState(null); 
 
   const [files, setFiles] = useState([]);
   const [urls, setUrls] = useState([]);
@@ -244,7 +244,7 @@ function BotTraining() {
         } else {
 
           try {
-            await uploadFile(file, parseInt(id), 45, sessionId); // <-- incluir sessionId
+            await uploadFile(file, parseInt(id), 2, sessionId); // <-- incluir sessionId
             hasChanges = true;
           } catch (uploadError) {
             console.error("❌ Error al subir archivo:", uploadError);
@@ -273,7 +273,7 @@ function BotTraining() {
           await createTrainingUrl({
             botTemplateId: parseInt(id),
             url: link,
-            userId: 45,
+            userId: 2,
             templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
           });
 
@@ -291,7 +291,7 @@ function BotTraining() {
           await createTrainingCustomText({
             botTemplateId: parseInt(id),
             content: text.trim(),
-            userId: 45,
+            userId: 2,
             templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
           });
 
@@ -324,7 +324,7 @@ function BotTraining() {
       name,
       description,
       botTemplateId: parseInt(id),
-      apiKey: "test-havevpi-8df16dfksvddffvsh0s430lntvwf-le0df1dasñj7rbgfsgbcjhmkby5gvx5fftirss03sfgrfdrayv", // ✅ OK temporal
+      apiKey: "test-havevpi-8df16dfksvddffvsh0s430lndtvwf-le0df1dasñj7rbgfsgbcjhmkby5gvx5fftirss03sfgrfdrayv", // ✅ OK temporal
       isActive: true,
       templateTrainingSessionId: sessionId,
     };

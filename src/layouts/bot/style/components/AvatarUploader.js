@@ -1,18 +1,11 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
 import PropTypes from "prop-types";
 import SoftBox from "components/SoftBox";
 import SoftButton from "components/SoftButton";
-const voaiGif = "/VIA.png";
 
 export default function AvatarUploader({ style, setStyle }) {
   const inputRef = useRef();
-
-  // Establecer el avatar por defecto si no hay uno definido
-  useEffect(() => {
-    if (!style.avatarUrl) {
-      setStyle((prev) => ({ ...prev, avatarUrl: voaiGif }));
-    }
-  }, [style, setStyle]);
+  const defaultAvatar = "/VIA.png";
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -29,7 +22,7 @@ export default function AvatarUploader({ style, setStyle }) {
     inputRef.current.click();
   };
 
-  const avatarSrc = style.avatarUrl || voaiGif;
+  const avatarSrc = style.avatarUrl || defaultAvatar;
 
   return (
     <SoftBox display="flex" flexDirection="column" alignItems="center" gap={1} mb={2}>

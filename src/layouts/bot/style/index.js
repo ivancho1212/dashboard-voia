@@ -24,7 +24,7 @@ import Loader from "components/Loader";
 function BotStylePage() {
   const { id: botId } = useParams();
   const navigate = useNavigate();
-  const userId = 45;
+  const userId = 2;
 
   const [activeTab, setActiveTab] = useState(0);
   const [viewMode, setViewMode] = useState("list");

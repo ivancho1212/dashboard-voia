@@ -19,7 +19,7 @@ import { getBotsByUserId } from "services/botService";
 import integracionWidgetImg from "assets/images/integracion-widget.png";
 import { createBotIntegration } from "services/botIntegrationService";
 
-const userId = 45;
+const userId = 2;
 
 function capitalizar(texto) {
   if (!texto) return "";

@@ -1,3 +1,4 @@
+// dashboard-voia\src\layouts\widget\WidgetFrame.js
 import React, { useEffect, useState } from "react";
 import ChatWidget from "layouts/bot/style/components/ChatWidget";
 import { getBotStylesByUser } from "services/botStylesService";
@@ -14,39 +15,35 @@ function WidgetFrame() {
       .then((res) => {
         console.log("✅ Estilos recibidos del backend:", res);
 
-        // Elige el último del array
-        const selectedStyle = res[res.length - 1]; // o el que quieras
+        // Selecciona el último estilo o el que prefieras
+        const selectedStyle = res.length > 0 ? res[res.length - 1] : null;
 
-        console.log("🎨 Estilo seleccionado:", selectedStyle);
-        setStyleConfig(selectedStyle);
+        if (selectedStyle) {
+          console.log("🎨 Estilo seleccionado:", selectedStyle);
+          setStyleConfig(selectedStyle);
+        } else {
+          console.warn("⚠️ Este bot no tiene estilos definidos, se usará demo.");
+          setStyleConfig(null);
+        }
+
         setLoading(false);
       })
       .catch((err) => {
         console.error("❌ Error al cargar estilos del bot:", err);
+        setStyleConfig(null);
         setLoading(false);
       });
   }, [botId]);
 
   if (loading) return <div>Cargando widget...</div>;
-  if (!styleConfig) return <div>No se pudieron cargar los estilos del bot.</div>;
 
   return (
     <div style={{ height: "100vh", margin: 0 }}>
       <ChatWidget
         botId={botId}
-        userId={styleConfig.userId}
-        theme={styleConfig.theme}
-        primaryColor={styleConfig.primaryColor}
-        secondaryColor={styleConfig.secondaryColor}
-        fontFamily={styleConfig.fontFamily}
-        headerBackgroundColor={styleConfig.headerBackgroundColor}
-        position={styleConfig.position}
-        avatarUrl={styleConfig.avatarUrl}
-        allowImageUpload={styleConfig.allowImageUpload}
-        allowFileUpload={styleConfig.allowFileUpload}
-        title={styleConfig.title}
-        customCss={styleConfig.customCss}
-        isDemo={true}
+        userId={styleConfig ? styleConfig.userId : 0} // fallback userId
+        style={styleConfig || {}}                      // 🔹 Pasamos todo el objeto style
+        isDemo={!styleConfig}                          // 🔹 Si no hay estilos, cae en demo
       />
     </div>
   );

@@ -100,9 +100,7 @@ const InputArea = ({
         >
           {allowFileUpload && (
             <label style={{ cursor: isInputDisabled ? "not-allowed" : "pointer" }}>
-              <FaPaperclip
-                style={{ color: inputText, fontSize: "18px", }}
-              />
+              <FaPaperclip style={{ color: inputText, fontSize: "18px" }} />
               <input
                 type="file"
                 name="document"
@@ -110,8 +108,10 @@ const InputArea = ({
                 style={{ display: "none" }}
                 onChange={handleUpload}
                 disabled={isInputDisabled}
+                aria-label="Subir documento" // ✅ agregada etiqueta accesible
               />
             </label>
+
           )}
           {allowImageUpload && (
             <label style={{ cursor: isInputDisabled ? "not-allowed" : "pointer" }}>
@@ -191,18 +191,24 @@ const InputArea = ({
       />
 
       {/* 🚀 Icono de enviar */}
-      <FaPaperPlane
+      <button
         onClick={!isInputDisabled ? sendMessage : undefined}
+        disabled={isInputDisabled} // ✅ deshabilitado cuando es demo
         style={{
           position: "absolute",
           right: "20px",
           top: "50%",
           transform: "translateY(-50%)",
-          color: inputText,
-          fontSize: "18px",
+          background: "transparent",
+          border: "none",
           cursor: isInputDisabled ? "not-allowed" : "pointer",
+          padding: 0,
         }}
-      />
+        aria-label="Enviar mensaje" // ✅ accesible
+      >
+        <FaPaperPlane style={{ color: inputText, fontSize: "18px" }} />
+      </button>
+
     </div>
   );
 };
@@ -217,8 +223,8 @@ InputArea.propTypes = {
   textareaRef: PropTypes.object.isRequired,
   sendMessage: PropTypes.func.isRequired,
   connectionRef: PropTypes.object,
-  conversationId: PropTypes.string,
-  userId: PropTypes.string,
+  conversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  userId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   isInputDisabled: PropTypes.bool,
   allowImageUpload: PropTypes.bool,
   allowFileUpload: PropTypes.bool,
