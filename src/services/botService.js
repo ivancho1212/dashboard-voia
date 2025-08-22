@@ -46,3 +46,16 @@ export async function updateBotStyle(botId, styleId) {
     throw error;
   }
 }
+
+export const getBotContext = async (botId) => {
+  try {
+    const response = await fetch(`${API_URL}/${botId}/context`);
+    if (!response.ok) {
+      throw new Error("Error al obtener el contexto del bot");
+    }
+    return await response.json();
+  } catch (error) {
+    console.error("Error en getBotContext:", error);
+    return null;
+  }
+};

@@ -8,6 +8,7 @@ import MessageBubble from "./chat/MessageBubble";
 import MessageList from "./chat/MessageList";
 import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
+import { getBotContext } from "services/botService";
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
@@ -25,10 +26,12 @@ function ChatWidget({
 
   const [botStyle, setBotStyle] = useState(null);
   const [isDemo, setIsDemo] = useState(initialDemo);
+  const [botContext, setBotContext] = useState(null);
 
   useEffect(() => {
-    const fetchBotStyle = async () => {
+    const fetchBotStyleAndContext = async () => {
       try {
+        // 🔹 Estilos
         const res = await fetch(`http://localhost:5006/api/Bots/${botId}`);
         const data = await res.json();
         if (data.style) {
@@ -38,12 +41,41 @@ function ChatWidget({
         } else {
           console.warn("⚠️ Este bot no tiene estilos definidos, se usará demo.");
         }
+
+        // 🔹 Contexto
+        const context = await getBotContext(botId);
+        if (context) {
+          // Preparamos los mensajes para la IA
+          const systemMsg = context.messages.find(m => m.role === "system");
+          const otherMsgs = context.messages.filter(m => m.role !== "system");
+
+          const messagesForAI = [];
+          if (systemMsg) messagesForAI.push(systemMsg);
+          messagesForAI.push(...otherMsgs);
+
+          // Creamos un payload completo que luego usarás al enviar a la IA
+          const aiPayload = {
+            botId: context.botId,
+            name: context.name,
+            description: context.description,
+            provider: context.provider,
+            settings: context.settings,
+            messages: messagesForAI,
+            training: context.training,
+            capture: context.capture,
+          };
+
+          setBotContext(aiPayload);
+          console.log("🧠 Payload preparado para IA:", aiPayload);
+        }
       } catch (err) {
-        console.error("❌ Error cargando estilos del bot:", err);
+        console.error("❌ Error cargando datos del bot:", err);
       }
     };
-    fetchBotStyle();
+
+    fetchBotStyleAndContext();
   }, [botId]);
+
 
   // Configuración de temas
   const fallbackTextColor = "#1a1a1a";
@@ -177,17 +209,24 @@ function ChatWidget({
           const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
           if (isExpired) {
             console.log("⏰ Caché expirado en segundo plano, limpiando...");
+
+            // 🔥 Limpiar cache Y estados React
             localStorage.removeItem(CACHE_KEY);
+            setConversationId(null);
+            setMessages([]);
           }
         } catch (e) {
           console.error("⚠️ Error parseando caché, limpiando:", e);
           localStorage.removeItem(CACHE_KEY);
+          setConversationId(null);
+          setMessages([]);
         }
       }
     }, 60 * 1000); // revisar cada minuto
 
     return () => clearInterval(interval);
   }, []);
+
 
   // ✅ Lógica de guardado de caché que se activa con cada cambio de mensajes.
   useEffect(() => {
