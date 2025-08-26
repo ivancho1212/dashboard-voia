@@ -365,7 +365,7 @@ const MessageBubble = React.forwardRef(
             );
           })}
 
-        {text && files.length === 0 && <div>{text}</div>}
+  {text && <div>{text}</div>}
 
         <div style={{ fontSize: "10px", color: "#555", marginTop: "0.2px", textAlign: "right" }}>
           {formattedTime}

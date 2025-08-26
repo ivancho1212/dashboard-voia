@@ -257,6 +257,8 @@ const ChatPanel = forwardRef(
     const getBlockedIcon = () => <BlockIcon />;
     const processedMessages = useMemo(() => {
       return messages.map((msg) => {
+        // Normaliza el campo 'text' para asegurar que siempre esté presente
+        const normalizedText = msg.text || msg.question || msg.content || "";
         let files = [];
 
         // ✅ Soporte para msg.file (cuando es objeto)
@@ -312,6 +314,7 @@ const ChatPanel = forwardRef(
 
         return {
           ...msg,
+          text: normalizedText,
           fromRole: msg.fromRole || msg.from || "user",
           files: files.length > 0 ? files : undefined,
           replyTo: resolvedReplyTo ?? msg.replyTo ?? null,

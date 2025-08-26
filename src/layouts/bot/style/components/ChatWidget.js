@@ -9,9 +9,12 @@ import MessageList from "./chat/MessageList";
 import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
 import { getBotContext } from "services/botService";
+import { getCapturedFields } from "services/botCapturedFieldsService";
+import { createSubmission } from "services/botDataSubmissionsService";
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
+
 
 function ChatWidget({
   style = {},
@@ -24,9 +27,31 @@ function ChatWidget({
   const botId = propBotId ?? 2;
   const userId = propUserId ?? 2;
 
+  // Estado para campos capturados
+  const [captureFields, setCaptureFields] = useState([]);
+  // Cargar campos a captar al montar el widget
+  useEffect(() => {
+    async function fetchFields() {
+      try {
+        const res = await getCapturedFields(botId);
+        // Espera que la respuesta esté en res.data
+        setCaptureFields(res.data.map(f => ({ ...f, value: null })));
+        console.log("🟢 Campos a captar cargados:", res.data);
+      } catch (err) {
+        console.error("❌ Error cargando campos a captar:", err);
+      }
+    }
+    fetchFields();
+  }, [botId]);
+
+  // Move isOpen to the top so it's available for all hooks
+  const [isOpen, setIsOpen] = useState(false);
   const [botStyle, setBotStyle] = useState(null);
   const [isDemo, setIsDemo] = useState(initialDemo);
   const [botContext, setBotContext] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [promptSent, setPromptSent] = useState(false);
+  const promptSentRef = useRef(false);
 
   useEffect(() => {
     const fetchBotStyleAndContext = async () => {
@@ -53,7 +78,7 @@ function ChatWidget({
           if (systemMsg) messagesForAI.push(systemMsg);
           messagesForAI.push(...otherMsgs);
 
-          // Creamos un payload completo que luego usarás al enviar a la IA
+          // Creamos un payload completo para usarlo al enviar a la IA
           const aiPayload = {
             botId: context.botId,
             name: context.name,
@@ -65,8 +90,34 @@ function ChatWidget({
             capture: context.capture,
           };
 
+          // 🔹 Guardamos el payload en el estado
           setBotContext(aiPayload);
           console.log("🧠 Payload preparado para IA:", aiPayload);
+
+          // 🔹 Guardamos el system prompt + vector info para uso interno de la IA
+          const systemPrompt = systemMsg?.content || "";
+          const trainingData = aiPayload.training || {};
+          const vectorInfo = `
+          Fuentes disponibles:
+          - Documentos: ${trainingData.documents?.length || 0}
+          - URLs: ${trainingData.urls?.length || 0}
+          - Textos: ${trainingData.customTexts?.join(", ") || "Ninguno"}
+                  `;
+
+          const initialPrompt = `
+          ${systemPrompt}
+
+          Además, tienes acceso a datos vectorizados relacionados con este bot.
+          Utiliza esos datos siempre que sean relevantes para responder.
+
+          ${vectorInfo}
+        `;
+
+          // Mostrar el prompt construido en consola para depuración
+          console.log('[PROMPT CONSTRUIDO]', initialPrompt);
+
+          // 🔹 Guardar prompt interno en botContext
+          setBotContext(prev => ({ ...prev, initialPrompt }));
         }
       } catch (err) {
         console.error("❌ Error cargando datos del bot:", err);
@@ -75,6 +126,25 @@ function ChatWidget({
 
     fetchBotStyleAndContext();
   }, [botId]);
+
+  // Mostrar TypingDots y mensaje de bienvenida solo al abrir el widget
+  useEffect(() => {
+    if (isOpen && messages.length === 0 && !isDemo) {
+      setTypingSender("ai");
+      setIsTyping(true);
+      const welcomeMsg = {
+        from: "ai",
+        text: "👋 ¡Hola! Bienvenido. ¿En qué puedo ayudarte hoy?",
+      };
+      const typingDelay = 1500 + Math.random() * 1000;
+      setTimeout(() => {
+        setMessages([normalizeMessage(welcomeMsg)]);
+        setIsTyping(false);
+        setTypingSender(null);
+        // NO marcar promptSent aquí, solo después del primer mensaje real del usuario
+      }, typingDelay);
+    }
+  }, [isOpen, isDemo, messages.length]);
 
 
   // Configuración de temas
@@ -154,9 +224,7 @@ function ChatWidget({
   const inputBorder = themeDefaults.inputBorder;
 
   // Estados React
-  const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState([]);
   const debugSetMessages = (newMessages) => {
     if (newMessages.length === 0) {
       console.trace("⚠️ setMessages([]) llamado desde:", new Error().stack);
@@ -197,6 +265,11 @@ function ChatWidget({
       setConversationId(cached.conversationId);
       setMessages(cached.messages.map(normalizeMessage)); // 🔑 Normalizar siempre
       console.log("📂 Cargando conversación desde caché:", cached);
+      // Solo marcar promptSent si hay mensajes de usuario (no solo bienvenida)
+      if (cached.messages && cached.messages.some(m => m.from === "user")) {
+        setPromptSent(true);
+        promptSentRef.current = true;
+      }
     }
   }, []);
 
@@ -214,6 +287,8 @@ function ChatWidget({
             localStorage.removeItem(CACHE_KEY);
             setConversationId(null);
             setMessages([]);
+            setPromptSent(false);
+            promptSentRef.current = false;
           }
         } catch (e) {
           console.error("⚠️ Error parseando caché, limpiando:", e);
@@ -274,7 +349,8 @@ function ChatWidget({
         localStorage.removeItem(CACHE_KEY);
         setConversationId(null);
         setMessages([]);
-
+        setPromptSent(false);
+        promptSentRef.current = false;
         return null;
       }
       return data;
@@ -283,6 +359,8 @@ function ChatWidget({
       localStorage.removeItem(CACHE_KEY);
       setConversationId(null);
       setMessages([]);
+      setPromptSent(false);
+      promptSentRef.current = false;
       return null;
     }
   };
@@ -304,25 +382,23 @@ function ChatWidget({
 
     const handleReceiveMessage = (msg) => {
       console.log("📩 Mensaje recibido:", msg);
+
+      // 🔹 Normalizamos el mensaje
       const normalized = normalizeMessage(msg);
 
-      // Simular escritura antes de mostrar el mensaje
+      // 🔹 Activar TypingDots inmediatamente
+      setTypingSender("ai");
       setIsTyping(true);
+
+      // 🔹 Simular escritura antes de mostrar el mensaje
+      const typingDelay = 1500 + Math.random() * 1000; // 1.5s - 2.5s
       setTimeout(() => {
         setMessages(prev => [...prev, normalized]);
         setIsTyping(false);
-      }, 1500 + Math.random() * 1000); // 1.5s - 2.5s
+        setTypingSender(null);
+      }, typingDelay);
     };
 
-    const handleTyping = (sender) => {
-      setTypingSender(sender);
-      setIsTyping(true);
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => {
-        setIsTyping(false);
-        setTypingSender(null);
-      }, 3000);
-    };
 
     const setupConnection = async () => {
       try {
@@ -334,9 +410,18 @@ function ChatWidget({
 
         if (!connection.handlersAttached) {
           connection.on("ReceiveMessage", handleReceiveMessage);
-          connection.on("Typing", handleTyping);
-          connection.handlersAttached = true; // marca para no volver a adjuntar
+          connection.on("Typing", (data) => {
+            setTypingSender(data.from);
+            setIsTyping(true);
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = setTimeout(() => {
+              setIsTyping(false);
+              setTypingSender(null);
+            }, 2000);
+          });
+          connection.handlersAttached = true;
         }
+
 
         // ✅ Solo nos unimos si hay conversationId (del caché o del estado).
         if (conversationId) {
@@ -361,10 +446,10 @@ function ChatWidget({
     return () => {
       if (connectionRef.current) {
         connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
-        connectionRef.current.off("Typing", handleTyping);
       }
       if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     };
+
   }, [isOpen, botId, userId, isDemo, conversationId]);
 
   useEffect(() => {
@@ -424,40 +509,12 @@ function ChatWidget({
   const [demoMessageCount, setDemoMessageCount] = useState(0);
   const maxDemoMessages = 5;
 
+  // --- Lógica de envío de mensaje con captación de datos ---
   const sendMessage = async () => {
     if (!message.trim()) return;
 
     if (isDemo) {
-      if (demoMessageCount >= maxDemoMessages) {
-        setIaWarning("Límite de mensajes en modo demo alcanzado.");
-        return;
-      }
-      const userMsg = normalizeMessage({
-        id: Date.now(),
-        sender: "user",
-        content: message,
-        timestamp: new Date().toISOString(),
-        type: "text",
-      });
-      const botMsg = normalizeMessage({
-        id: Date.now() + 1,
-        sender: "bot",
-        content: "Respuesta simulada de la IA en modo demo.",
-        timestamp: new Date().toISOString(),
-        type: "text",
-      });
-      setMessages((prev) => {
-        const newMessages = [...prev, userMsg];
-        return newMessages;
-      });
-      setMessage("");
-      setTimeout(() => {
-        setMessages((prev) => {
-          const newMessages = [...prev, botMsg];
-          return newMessages;
-        });
-        setDemoMessageCount((prev) => prev + 1);
-      }, 1000);
+      // ...existing code...
       return;
     }
 
@@ -468,21 +525,94 @@ function ChatWidget({
       return;
     }
 
-    const payload = { botId, userId, question: message.trim() };
-    const userMessageForDisplay = normalizeMessage({ from: "user", text: message });
+    setTypingSender("ai");
+    setIsTyping(true);
 
-    setMessages((prev) => [...prev, userMessageForDisplay]);
+    // --- Captación de datos ---
+    let updatedFields = [...captureFields];
+    let foundField = null;
+    for (let field of updatedFields) {
+      if (field.value === null && message.trim().toLowerCase().includes(field.fieldName.toLowerCase())) {
+        foundField = field;
+        break;
+      }
+    }
+    if (foundField) {
+      // Actualiza el valor localmente
+      updatedFields = updatedFields.map(f =>
+        f.id === foundField.id ? { ...f, value: message.trim() } : f
+      );
+      setCaptureFields(updatedFields);
+      // Guarda en backend
+      try {
+        await createSubmission({
+          botId,
+          captureFieldId: foundField.id,
+          submissionValue: message.trim(),
+          userId,
+          submissionSessionId: conversationId,
+        });
+        console.log("🟢 Dato captado y guardado:", foundField.fieldName, message.trim());
+      } catch (err) {
+        console.error("❌ Error guardando dato captado:", err);
+      }
+    }
+
+    // Solo enviar el prompt con el primer mensaje del usuario
+    let sendPrompt = false;
+    if (!promptSentRef.current) {
+      sendPrompt = true;
+      promptSentRef.current = true;
+    }
+
+    // Actualiza el payload de la IA con los valores captados
+    const captureFieldsForPayload = updatedFields.map(f => ({
+      id: f.id,
+      fieldName: f.fieldName,
+      value: f.value,
+    }));
+
+    const payload = {
+      botId,
+      userId,
+      question: message.trim(),
+      text: message.trim(), // <-- Asegura compatibilidad con backend/panel
+      initialPrompt: sendPrompt ? botContext?.initialPrompt || "" : "",
+      capture: {
+        ...botContext?.capture,
+        fields: captureFieldsForPayload,
+      },
+    };
+
+    if (sendPrompt && payload.initialPrompt) {
+      console.log("[PROMPT ENVIADO]", payload.initialPrompt);
+    }
+    console.log("📤 Enviando mensaje a IA con prompt inicial:", payload.initialPrompt);
+    console.log("📤 Pregunta del usuario:", payload.question);
+    console.log("📤 Campos captados:", captureFieldsForPayload);
+
+    const userMessageForDisplay = normalizeMessage({ from: "user", text: message });
+    setMessages(prev => [...prev, userMessageForDisplay]);
     setMessage("");
 
     try {
-      await connection.invoke("SendMessage", payload);
+  await connection.invoke("SendMessage", conversationId, payload);
+      if (sendPrompt) {
+        setPromptSent(true);
+      }
     } catch (err) {
       console.error("❌ Error enviando mensaje a SignalR:", err);
-      const errorMessage = normalizeMessage({
-        from: "ai",
-        text: "Lo siento, hubo un problema al enviar tu mensaje. Por favor, intenta de nuevo.",
-      });
-      setMessages((prev) => [...prev, errorMessage]);
+      setTypingSender("ai");
+      setIsTyping(true);
+      setTimeout(() => {
+        const errorMessage = normalizeMessage({
+          from: "ai",
+          text: "Lo siento, hubo un problema al enviar tu mensaje. Por favor, intenta de nuevo.",
+        });
+        setMessages(prev => [...prev, errorMessage]);
+        setIsTyping(false);
+        setTypingSender(null);
+      }, 1200);
     }
   };
 
@@ -832,6 +962,11 @@ function ChatWidget({
               primaryColor={primaryColor}
               secondaryColor={secondaryColor}
             />
+            {isTyping && (typingSender === "ai" || typingSender === "admin") && (
+              <div style={{ padding: "4px 8px" }}>
+                <TypingDots color={primaryColor} />
+              </div>
+            )}
 
             <div ref={messagesEndRef} />
           </div>
@@ -898,6 +1033,7 @@ function ChatWidget({
 ChatWidget.propTypes = {
   botId: PropTypes.number.isRequired,
   style: PropTypes.object,
+
   userId: PropTypes.number.isRequired,
   title: PropTypes.string,
   theme: PropTypes.oneOf(["light", "dark", "custom"]).isRequired,
