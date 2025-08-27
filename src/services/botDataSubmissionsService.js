@@ -11,6 +11,7 @@ export const getCapturedSubmissionsByBot = async (botId) => {
       sessionId: entry.sessionId,
       userId: entry.userId,
       values: entry.values ?? {}, // 👈 asegúrate de que siempre haya values
+      createdAt: entry.createdAt,
     })),
   };
 };
@@ -27,13 +28,14 @@ export const getSubmissionById = (id) => {
 
 // Crear una nueva captura de dato
 export const createSubmission = (submissionData) => {
-  return axios.post(API_URL, {
+  const payload = {
     botId: submissionData.botId,
     captureFieldId: submissionData.captureFieldId,
-    submissionValue: submissionData.submissionValue,
-    userId: submissionData.userId ?? null,
-    submissionSessionId: submissionData.submissionSessionId ?? null,
-  });
+    submissionValue: submissionData.submissionValue ?? "",
+  };
+  if (submissionData.userId != null && submissionData.userId !== undefined) payload.userId = submissionData.userId;
+  if (submissionData.submissionSessionId != null && submissionData.submissionSessionId !== undefined) payload.submissionSessionId = submissionData.submissionSessionId;
+  return axios.post(API_URL, payload);
 };
 
 // Actualizar una captura existente

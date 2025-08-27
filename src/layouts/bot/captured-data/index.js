@@ -72,7 +72,31 @@ function CapturedData() {
   const handleContinue = () => {
     navigate(`/bots/style/${id}`);
   };
+  
+  const pivotData = (data) => {
+    const rows = [];
 
+    data.forEach((item) => {
+      const nombres = item.values?.nombre || [];
+      const direcciones = item.values?.direccion || [];
+      const fechas = item.createdAt ? [item.createdAt] : [];
+
+      // aseguramos que siempre sean arrays
+      const max = Math.max(nombres.length, direcciones.length, fechas.length);
+
+      for (let i = 0; i < max; i++) {
+        rows.push({
+          sessionId: item.sessionId,
+          userId: item.userId,
+          nombre: nombres[i] || "N/A",
+          direccion: direcciones[i] || "N/A",
+          createdAt: fechas[i] || item.createdAt,
+        });
+      }
+    });
+
+    return rows;
+  };
   // 👉 Obtener campos configurados para el bot
   useEffect(() => {
     const fetchFields = async () => {
@@ -107,11 +131,17 @@ function CapturedData() {
   }, [id, useApi]); // asegúrate de incluir useApi en las dependencias
 
   // 🔍 Filtrar datos por texto
-  const filteredData = capturedData.filter((item) =>
-    Object.values(item.values || {}).some((val) =>
-      val?.toLowerCase().includes(searchTerm.toLowerCase())
+  // 1️⃣ Pivotar primero
+  const pivotedData = pivotData(capturedData);
+
+  // 2️⃣ Luego aplicar el filtro sobre lo pivotado
+  const filteredData = pivotedData.filter((row) =>
+    Object.values(row).some((val) =>
+      val?.toString().toLowerCase().includes(searchTerm.toLowerCase())
     )
   );
+
+
 
   // ➕ Agregar nuevo campo
   const handleAddField = async () => {
@@ -133,19 +163,14 @@ function CapturedData() {
     }
   };
 
-  // 📤 Simular exportación
+  // 📤 Exportar en formato pivotado
   const handleExportExcel = () => {
-    const exportData = capturedData.map((item) => {
-      const values = item.values || {};
-      return {
-        Usuario: item.userId || item.sessionId || "N/A",
-        Fecha: item.createdAt ? new Date(item.createdAt).toLocaleString() : "N/A", // ✅ fecha formateada
-        ...fields.reduce((acc, field) => {
-          acc[field.fieldName] = values[field.fieldName] || "-";
-          return acc;
-        }, {}),
-      };
-    });
+    const exportData = pivotData(capturedData).map((row) => ({
+      Usuario: row.sessionId || row.userId || "N/A",
+      Nombre: row.nombre || "-",
+      Dirección: row.direccion || "-",
+      Fecha: row.createdAt ? new Date(row.createdAt).toLocaleString() : "N/A",
+    }));
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
@@ -194,7 +219,7 @@ function CapturedData() {
               />
             </Grid>
             <Grid item xs={4}>
-              <SoftButton color="success" fullWidth onClick={handleAddField}>
+              <SoftButton color="info" fullWidth onClick={handleAddField}>
                 Agregar Campo
               </SoftButton>
             </Grid>
@@ -314,29 +339,27 @@ function CapturedData() {
                 >
                   <TableHead>
                     <TableRow>
-                      <FixedCell width={columnWidth}>Usuario/Sesión</FixedCell>
+                      <FixedCell>Usuario/Sesión</FixedCell>
                       {fields.map((field, i) => (
-                        <FixedCell key={i} width={columnWidth}>
-                          {field.fieldName}
-                        </FixedCell>
+                        <FixedCell key={i}>{field.fieldName}</FixedCell>
                       ))}
+                      <FixedCell>Fecha</FixedCell>
                     </TableRow>
                   </TableHead>
 
                   <TableBody>
-                    {filteredData.map((data, i) => (
-                      <TableRow key={i}>
-                        <BodyCell width={columnWidth}>
-                          {data.sessionId || data.userId || "-"}
+                    {filteredData.map((row, idx) => (
+                      <TableRow key={idx}>
+                        <BodyCell>{row.sessionId || row.userId || "-"}</BodyCell>
+                        <BodyCell>{row.nombre}</BodyCell>
+                        <BodyCell>{row.direccion}</BodyCell>
+                        <BodyCell>
+                          {row.createdAt ? new Date(row.createdAt).toLocaleString() : "N/A"}
                         </BodyCell>
-                        {fields.map((field, j) => (
-                          <BodyCell key={j} width={columnWidth}>
-                            {data.values?.[field.fieldName] ?? "-"}
-                          </BodyCell>
-                        ))}
                       </TableRow>
                     ))}
                   </TableBody>
+
                 </Table>
               </SoftBox>
               <SoftBox mt={4} display="flex" justifyContent="space-between" alignItems="center">
@@ -344,7 +367,7 @@ function CapturedData() {
                   Continuar
                 </SoftButton>
 
-                <SoftButton color="primary" onClick={handleExportExcel}>
+                <SoftButton color="black" onClick={handleExportExcel}>
                   <Icon sx={{ mr: 1 }}>download</Icon>
                   Exportar Excel
                 </SoftButton>

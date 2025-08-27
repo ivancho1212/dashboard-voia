@@ -530,33 +530,170 @@ function ChatWidget({
 
     // --- Captación de datos ---
     let updatedFields = [...captureFields];
-    let foundField = null;
+    const normalize = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const clean = (str) => str.trim().replace(/\s+/g, " ");
+    const msgNorm = normalize(message);
+
+    // Coincidencia difusa avanzada usando distancia de Levenshtein
+    const levenshtein = (a, b) => {
+      const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
+      for (let i = 0; i <= a.length; i++) matrix[i][0] = i;
+      for (let j = 0; j <= b.length; j++) matrix[0][j] = j;
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + cost
+          );
+        }
+      }
+      return matrix[a.length][b.length];
+    };
+    const fuzzyMatch = (input, target) => {
+      return levenshtein(input, target) <= 2;
+    };
+
+    // 1. Extraer valores para todos los campos definidos, soportando frases combinadas y variantes
+    // Construir dinámicamente patrones para todos los campos
+    const fieldPatterns = updatedFields
+      .filter(f => !f.value)
+      .map(f => {
+        const norm = normalize(f.fieldName);
+        // Frases tipo "mi campo es", "campo:", "campo=" y variantes con errores ortográficos
+        return {
+          id: f.id,
+          fieldName: f.fieldName,
+          norm,
+          regex: new RegExp(`(?:mi [a-záéíóúüñ]{3,15} es|[a-záéíóúüñ]{3,15}:|[a-záéíóúüñ]{3,15}=)\\s*([^,;\n]+)`, 'i'),
+        };
+      });
+
+    // 2. Buscar frases combinadas y extraer en orden, evitando que el mismo texto se asigne a varios campos
+    let foundAny = false;
+    let tempMsg = message;
+    for (let pat of fieldPatterns) {
+      // Patrón normal: "mi nombre es X", "nombre: X", "nombre= X"
+      const match = pat.regex.exec(tempMsg);
+      if (match && match[1]) {
+        const fieldWordMatch = match[0].match(/[a-záéíóúüñ]{3,15}/i);
+        let fieldWord = fieldWordMatch ? normalize(fieldWordMatch[0]) : "";
+        if (fuzzyMatch(fieldWord, pat.norm)) {
+          let val = match[1];
+          // Elimina artículos y posesivos comunes al inicio del valor
+          val = val.replace(/^(mi|el|la|un|una|su|sus|de|del|al)\s+/i, "");
+          for (let other of fieldPatterns) {
+            if (other.id !== pat.id) {
+              const idx = normalize(val).indexOf(other.norm);
+              if (idx > 0) val = val.substring(0, idx).trim();
+            }
+          }
+          updatedFields = updatedFields.map(f =>
+            f.id === pat.id ? { ...f, value: clean(val) } : f
+          );
+          tempMsg = tempMsg.replace(match[0], '');
+          foundAny = true;
+        }
+      }
+      // Patrón inverso: "X es mi nombre", "Y es mi direccion"
+      const inverseRegex = new RegExp(`([^,;\n]+) es mi ([a-záéíóúüñ]{3,15})`, 'i');
+      const invMatch = inverseRegex.exec(tempMsg);
+      if (invMatch && invMatch[2]) {
+        let fieldWord = normalize(invMatch[2]);
+        if (fuzzyMatch(fieldWord, pat.norm)) {
+          let val = invMatch[1].trim();
+          val = val.replace(/^(mi|el|la|un|una|su|sus|de|del|al)\s+/i, "");
+          for (let other of fieldPatterns) {
+            if (other.id !== pat.id) {
+              const idx = normalize(val).indexOf(other.norm);
+              if (idx > 0) val = val.substring(0, idx).trim();
+            }
+          }
+          updatedFields = updatedFields.map(f =>
+            f.id === pat.id ? { ...f, value: clean(val) } : f
+          );
+          tempMsg = tempMsg.replace(invMatch[0], '');
+          foundAny = true;
+        }
+      }
+    }
+
+    // 3. Si no se encontró nada, intentar heurística: si solo hay un campo pendiente y el mensaje es corto, asumir que es el dato
+    const pending = updatedFields.filter(f => !f.value);
+    if (!foundAny && pending.length === 1) {
+      const field = pending[0];
+      // Solo asignar si el mensaje menciona explícitamente el nombre del campo pendiente
+      const normMsg = normalize(message);
+      const normField = normalize(field.fieldName);
+      // Busca el nombre del campo en el mensaje (palabra completa)
+      const fieldMentioned = new RegExp(`\\b${normField}\\b`, 'i').test(normMsg);
+      if (fieldMentioned && /^[a-z0-9áéíóúüñ\s,#.\-]{2,60}$/i.test(message.trim())) {
+        updatedFields = updatedFields.map(f =>
+          f.id === field.id ? { ...f, value: clean(message) } : f
+        );
+        foundAny = true;
+      }
+    }
+
+    // 4. Si no se encontró nada, intentar separar por delimitadores comunes (coma, y, punto y coma)
+    if (!foundAny && fieldPatterns.length > 1) {
+      // Ejemplo: "campo1 valor1, campo2 valor2"
+      const delimiters = /,| y |;|\n/gi;
+      const parts = message.split(delimiters).map(clean);
+      let used = [];
+      for (let part of parts) {
+        // Detecta el nombre de campo en la parte
+        const fieldWordMatch = part.match(/[a-záéíóúüñ]{3,15}/i);
+        let fieldWord = fieldWordMatch ? normalize(fieldWordMatch[0]) : "";
+        for (let pat of fieldPatterns) {
+          if (!used.includes(pat.id) && fuzzyMatch(fieldWord, pat.norm)) {
+            // Extraer el valor después del nombre de campo
+            let val = part.replace(new RegExp(`${fieldWord}[:=]?`, 'i'), '').trim();
+            // Recorta si contiene el nombre de otro campo
+            for (let other of fieldPatterns) {
+              if (other.id !== pat.id) {
+                const idx = normalize(val).indexOf(other.norm);
+                if (idx > 0) val = val.substring(0, idx).trim();
+              }
+            }
+            if (val.length > 1) {
+              updatedFields = updatedFields.map(f =>
+                f.id === pat.id ? { ...f, value: clean(val) } : f
+              );
+              used.push(pat.id);
+            }
+          }
+        }
+      }
+    }
+
+    // Guardar en backend los campos captados
     for (let field of updatedFields) {
-      if (field.value === null && message.trim().toLowerCase().includes(field.fieldName.toLowerCase())) {
-        foundField = field;
-        break;
+      if (field.value && !captureFields.find(f => f.id === field.id && f.value === field.value)) {
+        // Enviar camelCase para máxima compatibilidad con backend .NET
+        const payload = {
+          botId: botId,
+          captureFieldId: field.id,
+          submissionValue: field.value,
+        };
+        if (userId != null && userId !== undefined) payload.userId = userId;
+        if (conversationId != null && conversationId !== undefined) payload.submissionSessionId = String(conversationId);
+        if (!payload.userId && !payload.submissionSessionId) {
+          console.error("❌ No se puede enviar submission: falta userId y submissionSessionId");
+          continue;
+        }
+        // Log detallado del payload antes de enviar
+        console.log("[DEBUG] Payload enviado a createSubmission:", JSON.stringify(payload));
+        try {
+          await createSubmission(payload);
+          console.log("🟢 Dato captado y guardado:", field.fieldName, field.value);
+        } catch (err) {
+          console.error("❌ Error guardando dato captado:", err);
+        }
       }
     }
-    if (foundField) {
-      // Actualiza el valor localmente
-      updatedFields = updatedFields.map(f =>
-        f.id === foundField.id ? { ...f, value: message.trim() } : f
-      );
-      setCaptureFields(updatedFields);
-      // Guarda en backend
-      try {
-        await createSubmission({
-          botId,
-          captureFieldId: foundField.id,
-          submissionValue: message.trim(),
-          userId,
-          submissionSessionId: conversationId,
-        });
-        console.log("🟢 Dato captado y guardado:", foundField.fieldName, message.trim());
-      } catch (err) {
-        console.error("❌ Error guardando dato captado:", err);
-      }
-    }
+    setCaptureFields(updatedFields);
 
     // Solo enviar el prompt con el primer mensaje del usuario
     let sendPrompt = false;

@@ -26,7 +26,7 @@ export default function StylePreview({ style }) {
   return (
     <div>
       <ChatWidget
-        botId={1}
+        botId={2} // Cambiado a un botId válido
         userId={9999}
         style={normalized}
         title={normalized.title}
