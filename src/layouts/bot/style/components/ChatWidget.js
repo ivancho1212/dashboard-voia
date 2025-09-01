@@ -389,29 +389,21 @@ function ChatWidget({
 
     const handleReceiveMessage = (msg) => {
       console.log("📩 Mensaje recibido:", msg);
+
+      // 🔹 Normalizamos el mensaje
       const normalized = normalizeMessage(msg);
 
-      if (normalized.from === "user") {
-        // ✅ Confirmación del server: marcar como enviado
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.tempId && m.text === normalized.text
-              ? { ...m, status: "sent" } // cambia sending → sent
-              : m
-          )
-        );
-      } else {
-        // 🤖 Mensaje de la IA
-        setTypingSender("ai");
-        setIsTyping(true);
+      // 🔹 Activar TypingDots inmediatamente
+      setTypingSender("ai");
+      setIsTyping(true);
 
-        const typingDelay = 1500 + Math.random() * 1000;
-        setTimeout(() => {
-          setMessages((prev) => [...prev, normalized]);
-          setIsTyping(false);
-          setTypingSender(null);
-        }, typingDelay);
-      }
+      // 🔹 Simular escritura antes de mostrar el mensaje
+      const typingDelay = 1500 + Math.random() * 1000; // 1.5s - 2.5s
+      setTimeout(() => {
+        setMessages(prev => [...prev, normalized]);
+        setIsTyping(false);
+        setTypingSender(null);
+      }, typingDelay);
     };
 
     const handleDataCaptureUpdate = (update) => {
@@ -563,15 +555,8 @@ function ChatWidget({
     setTypingSender("ai");
     setIsTyping(true);
 
-    const tempId = Date.now(); // id temporal único
-    const userMessageForDisplay = normalizeMessage({
-      from: "user",
-      text: message,
-      status: "sending",  // 👈 estado inicial
-      tempId,             // 👈 identificador temporal
-    });
-    setMessages((prev) => [...prev, userMessageForDisplay]);
-
+    const userMessageForDisplay = normalizeMessage({ from: "user", text: message });
+    //setMessages((prev) => [...prev, userMessageForDisplay]);
     const currentMessage = message;
     setMessage("");
 
