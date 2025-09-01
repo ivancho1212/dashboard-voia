@@ -13,6 +13,14 @@ import { getCapturedFields } from "services/botCapturedFieldsService";
 import { createSubmission } from "services/botDataSubmissionsService";
 import { searchVector } from "services/vectorSearchService";
 import { findBestMatch } from "string-similarity";
+import {
+  buildDynamicPrompt,
+  searchInPayload,
+  formatVectorContext,
+} from "../../../../utils/promptBuilder";
+
+import { extractAndSubmitData } from "../../../../utils/dataExtractor";
+
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
@@ -381,21 +389,29 @@ function ChatWidget({
 
     const handleReceiveMessage = (msg) => {
       console.log("📩 Mensaje recibido:", msg);
-
-      // 🔹 Normalizamos el mensaje
       const normalized = normalizeMessage(msg);
 
-      // 🔹 Activar TypingDots inmediatamente
-      setTypingSender("ai");
-      setIsTyping(true);
+      if (normalized.from === "user") {
+        // ✅ Confirmación del server: marcar como enviado
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.tempId && m.text === normalized.text
+              ? { ...m, status: "sent" } // cambia sending → sent
+              : m
+          )
+        );
+      } else {
+        // 🤖 Mensaje de la IA
+        setTypingSender("ai");
+        setIsTyping(true);
 
-      // 🔹 Simular escritura antes de mostrar el mensaje
-      const typingDelay = 1500 + Math.random() * 1000; // 1.5s - 2.5s
-      setTimeout(() => {
-        setMessages(prev => [...prev, normalized]);
-        setIsTyping(false);
-        setTypingSender(null);
-      }, typingDelay);
+        const typingDelay = 1500 + Math.random() * 1000;
+        setTimeout(() => {
+          setMessages((prev) => [...prev, normalized]);
+          setIsTyping(false);
+          setTypingSender(null);
+        }, typingDelay);
+      }
     };
 
     const handleDataCaptureUpdate = (update) => {
@@ -526,272 +542,6 @@ function ChatWidget({
   const [demoMessageCount, setDemoMessageCount] = useState(0);
   const maxDemoMessages = 5;
 
-  // --- Nueva lógica de construcción de prompt y envío de mensaje ---
-
-  /**
-   * Genera un fragmento de prompt que informa a la IA sobre el estado de la captura de datos.
-   * @param {Array} fields - El estado actual de los campos a capturar.
-   * @returns {string} Un texto de instrucción para la IA.
-   */
-  const buildDataCaptureStatusPrompt = (fields) => {
-    // Si no hay campos definidos para capturar, no se añade nada.
-    if (!fields || fields.length === 0) {
-      return "";
-    }
-
-    const captured = fields.filter(f => f.value);
-    const missing = fields.filter(f => !f.value);
-
-    // Si ya se capturaron todos los datos, la instrucción es continuar normalmente.
-    if (missing.length === 0) {
-      return "--- GESTIÓN DE DATOS ---\nACCIÓN: Todos los datos requeridos han sido capturados. Ignora las instrucciones de captura y responde a la solicitud del usuario de forma normal.\n-----------------------\n";
-    }
-
-    // Construir el prompt de estado
-    let statusPrompt = "--- GESTIÓN DE DATOS ---\n";
-    if (captured.length > 0) {
-      statusPrompt += `DATOS CAPTURADOS: ${captured.map(f => `${f.fieldName}='${f.value}'`).join(', ')}.\n`;
-    } else {
-      statusPrompt += "DATOS CAPTURADOS: Ninguno.\n";
-    }
-    statusPrompt += `DATOS PENDIENTES: ${missing.map(f => f.fieldName).join(', ')}.\n`;
-    const nextFieldToCapture = missing[0].fieldName;
-    statusPrompt += `ACCIÓN INMEDIATA: Tu única y prioritaria tarea es preguntar por el siguiente dato pendiente: '${nextFieldToCapture}'. Formula una pregunta corta y natural. No saludes, no confirmes datos anteriores, solo haz la pregunta.\n`;
-    statusPrompt += "-----------------------\n";
-
-    return statusPrompt;
-  };
-
-  /**
-   * Construye el prompt dinámico para la IA.
-   * @param {string} userMessage - El mensaje actual del usuario.
-   * @param {string} relevantContext - Contexto recuperado de bases de datos (Qdrant/MySQL).
-   * @param {string} conversationSummary - Un resumen del historial de la conversación.
-   * @param {Array} capturedFields - El estado de los campos de datos capturados.
-   * @returns {string} El prompt completo y formateado.
-   */
-  const buildDynamicPrompt = (userMessage, relevantContext, conversationSummary, capturedFields) => {
-    const systemMessage =
-      botContext?.initialPrompt ||
-      "Eres un asistente virtual de Voia, experto en atención al cliente. Sé amable, directo y conciso.";
-
-    const contextInfo =
-      relevantContext?.trim() || "No se encontró información específica en la base de conocimiento.";
-
-    const historyInfo =
-      conversationSummary?.trim() || "No hay historial previo en esta conversación.";
-
-    // Generar el estado de captura de datos para inyectar en el prompt.
-    const dataCaptureStatus = buildDataCaptureStatusPrompt(capturedFields);
-
-    // Plantilla del prompt dinámico
-    const prompt = `
-      ${systemMessage}
-      ${dataCaptureStatus}
-
-      ---
-      **Contexto Relevante (de Qdrant/MySQL):**
-      ${contextInfo}
-      ---
-      **Historial Resumido de la Conversación:**
-      ${historyInfo}
-      ---
-      **Pregunta del Usuario:**
-      ${userMessage}
-    `;
-
-    console.log("[PROMPT CONSTRUIDO DINÁMICAMENTE]", prompt);
-    return prompt;
-  };
-
-  /**
-   * Busca una coincidencia en el payload de FAQs precargado usando similitud de texto.
-   * @param {string} userMessage - El mensaje del usuario.
-   * @param {Array} faqPayload - El array de mensajes { role, content } del botContext.
-   * @returns {string|null} El contenido de la respuesta si hay un match, o null.
-   */
-  const searchInPayload = (userMessage, faqPayload) => {
-    if (!faqPayload || faqPayload.length === 0) {
-      return null;
-    }
-
-    // 1. Extraer solo las preguntas (role: 'user') del payload.
-    const questions = faqPayload
-      .filter((m) => m.role === "user" && m.content)
-      .map((m) => m.content);
-
-    if (questions.length === 0) {
-      return null;
-    }
-
-    // 2. Encontrar la mejor coincidencia usando la librería de similitud.
-    const bestMatch = findBestMatch(userMessage.toLowerCase(), questions.map(q => q.toLowerCase()));
-
-    console.log(`🔎 Coincidencia en payload: '${bestMatch.bestMatch.target}' con score: ${bestMatch.bestMatch.rating}`);
-
-    // 3. Si la similitud es alta, buscar la respuesta correspondiente.
-    // Puedes ajustar este umbral según tus necesidades.
-    const SIMILARITY_THRESHOLD = 0.8;
-    if (bestMatch.bestMatch.rating > SIMILARITY_THRESHOLD) {
-      const matchedQuestionIndex = faqPayload.findIndex(
-        (m) => m.role === "user" && m.content.toLowerCase() === bestMatch.bestMatch.target
-      );
-
-      // La respuesta es el siguiente mensaje en el payload (debe ser del asistente)
-      if (matchedQuestionIndex !== -1 && faqPayload[matchedQuestionIndex + 1]?.role === "assistant") {
-        const answer = faqPayload[matchedQuestionIndex + 1].content;
-        console.log("✅ Match de alta similitud encontrado en payload. Usando respuesta directa:", answer);
-        return `Respuesta directa de la guía rápida: ${answer}`;
-      }
-    }
-
-    return null;
-  };
-
-  /**
-   * Formatea los resultados de la búsqueda vectorial en un string legible.
-   * @param {Array} contextResults - Array de objetos de Qdrant.
-   * @returns {string} Contexto formateado.
-   */
-  const formatVectorContext = (contextResults) => {
-    if (!contextResults || contextResults.length === 0) {
-      return "No se encontró información específica en la base de conocimiento.";
-    }
-    return contextResults
-      .map(
-        (hit, index) =>
-          `Fragmento ${index + 1}: "${hit.text || 'N/A'}" (Fuente: ${hit.source || 'Desconocida'})`
-      )
-      .join('\n\n');
-  };
-
-  const validateFieldValue = (value, field) => {
-    if (!value || !field) return false;
-
-    // ✅ FIX: Use fieldType, but if it's missing, fall back to fieldName.
-    // This makes the function robust against missing fieldType properties and prevents the TypeError.
-    const type = (field.fieldType || field.fieldName || "").toLowerCase();
-
-    console.log(`[VALIDATION] Validando valor='${value}' para campo='${field.fieldName}' con tipo inferido='${type}'`);
-
-    if (type.includes('telefono') || type.includes('phone')) {
-      // Validates that it contains at least 7 digits, ignoring non-digit characters.
-      const digitCount = (value.match(/\d/g) || []).length;
-      const isValid = digitCount >= 7;
-      console.log(`[VALIDATION] Resultado para Telefono: ${isValid} (dígitos encontrados: ${digitCount})`);
-      return isValid;
-    }
-    // You can add more validations here (e.g., for email, date, etc.)
-
-    // Generic validation for other text fields (e.g., Nombre, Direccion).
-    return value.length > 2;
-  };
-
-  const extractAndSubmitData = async (userMessage, currentFields, conversationHistory) => {
-    let updatedFields = [...currentFields];
-    const pendingFields = currentFields.filter(f => !f.value);
-    if (pendingFields.length === 0) {
-      return currentFields; // No fields to capture, return immediately.
-    }
-
-    const normalize = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-    const clean = (str) => str.trim().replace(/\s+/g, " ");
-
-    const lastAiMessage = conversationHistory.filter(m => m.from === 'ai').pop()?.text || "";
-    const lastAiMessageNorm = normalize(lastAiMessage);
-    let dataExtracted = false;
-
-    // --- STRATEGY 1: Contextual Heuristic (Direct Answer to a Question) ---
-    for (const field of pendingFields) {
-      const fieldNorm = normalize(field.fieldName);
-      if (lastAiMessageNorm.includes(fieldNorm)) {
-        const trimmedMsg = userMessage.trim();
-        if (trimmedMsg.length > 1 && trimmedMsg.length < 100 && !/^(si|no|ok|vale|gracias|de acuerdo)$/i.test(trimmedMsg)) {
-          let extractedValue = clean(trimmedMsg);
-          const introPhrases = ['soy', 'me llamo', 'mi nombre es', 'es', 'mi direccion es', 'mi dirección es', 'vivo en', 'mi telefono es', 'mi teléfono es'];
-          const introRegex = new RegExp(`^(${introPhrases.join('|')})\\s+`, 'i');
-          extractedValue = extractedValue.replace(introRegex, '');
-
-          // ✅ FIX: Pass the entire field object to the validation function.
-          if (validateFieldValue(extractedValue, field)) {
-            updatedFields = updatedFields.map(f => f.id === field.id ? { ...f, value: extractedValue } : f);
-            dataExtracted = true;
-            break; // Dato válido capturado, salimos del bucle.
-          } else {
-            console.warn(`⚠️ Valor contextual RECHAZADO para '${field.fieldName}': '${extractedValue}' no es un formato válido para el tipo '${field.fieldType || 'indefinido'}'.`);
-          }
-        }
-      }
-    }
-
-    // --- STRATEGY 2: Explicit Key-Value Extraction (if contextual fails or for multi-data input) ---
-    if (!dataExtracted) {
-      let tempMsg = ` ${userMessage} `;
-      for (const field of pendingFields) {
-        if (updatedFields.find(f => f.id === field.id)?.value) continue;
-
-        const fieldNorm = normalize(field.fieldName);
-        // ✅ FIX: Use a "greedy" quantifier (+) instead of a "lazy" one (+?) to capture the full value.
-        const valuePattern = `([^,;.\\n]+)`; 
-        let patterns = [
-          new RegExp(`(?:mi\\s+)?${fieldNorm}\\s*(?:es|:|=)\\s*${valuePattern}`, 'i'), // "nombre es ivan" or "mi nombre es ivan"
-          new RegExp(`${valuePattern}\\s*es\\s+mi\\s+${fieldNorm}`, 'i') // "ivan es mi nombre"
-        ];
-
-        // Add field-type specific patterns for more natural language
-        if (fieldNorm.includes("nombre")) {
-          patterns.push(new RegExp(`(?:soy|me\\s+llamo)\\s*${valuePattern}`, 'i'));
-        }
-        if (fieldNorm.includes("direccion")) {
-          patterns.push(new RegExp(`(?:vivo\\s+en|resido\\s+en)\\s*${valuePattern}`, 'i'));
-        }
-        if (fieldNorm.includes("telefono")) {
-          patterns.push(new RegExp(`(?:mi\\s+numero\\s+es|mi\\s+celular\\s+es)\\s*${valuePattern}`, 'i'));
-        }
-
-        for (const regex of patterns) {
-          const match = regex.exec(tempMsg);
-          if (match && match[1]) {
-            const extractedValue = match[1].trim();
-            // ✅ FIX: Pass the entire field object to the validation function.
-            if (validateFieldValue(extractedValue, field)) {
-              updatedFields = updatedFields.map(f => f.id === field.id ? { ...f, value: extractedValue } : f);
-              tempMsg = tempMsg.replace(match[0], ' '); // Consume la parte del mensaje
-              dataExtracted = true;
-              break; // Dato válido capturado, salimos del bucle de patrones.
-            } else {
-              console.warn(`⚠️ Valor explícito RECHAZADO para '${field.fieldName}': '${extractedValue}' no es un formato válido para el tipo '${field.fieldType || 'indefinido'}'.`);
-            }
-          }
-        }
-      }
-    }
-
-    const submissions = [];
-    for (const field of updatedFields) {
-      const originalField = currentFields.find(f => f.id === field.id);
-      if (field.value && (!originalField || originalField.value !== field.value)) {
-        submissions.push(
-          createSubmission({
-            botId,
-            captureFieldId: field.id,
-            submissionValue: field.value,
-            userId,
-            submissionSessionId: conversationId.toString(),
-          })
-        );
-        console.log(`🟢 Dato captado y preparado para guardar: ${field.fieldName} = ${field.value}`);
-      }
-    }
-
-    if (submissions.length > 0) {
-      await Promise.all(submissions);
-      console.log("✅ Todos los datos captados fueron guardados en el backend.");
-    }
-
-    return updatedFields;
-  };
-
   const sendMessage = async () => {
     if (!message.trim()) return;
 
@@ -813,8 +563,15 @@ function ChatWidget({
     setTypingSender("ai");
     setIsTyping(true);
 
-    const userMessageForDisplay = normalizeMessage({ from: "user", text: message });
+    const tempId = Date.now(); // id temporal único
+    const userMessageForDisplay = normalizeMessage({
+      from: "user",
+      text: message,
+      status: "sending",  // 👈 estado inicial
+      tempId,             // 👈 identificador temporal
+    });
     setMessages((prev) => [...prev, userMessageForDisplay]);
+
     const currentMessage = message;
     setMessage("");
 
@@ -822,7 +579,14 @@ function ChatWidget({
     try {
       // --- 1. Lógica de Captura de Datos ---
       // Extrae datos del mensaje actual, los guarda en la DB y nos devuelve el estado actualizado.
-      const updatedFields = await extractAndSubmitData(currentMessage, captureFields, messages);
+      const updatedFields = await extractAndSubmitData({
+        userMessage: currentMessage,
+        currentFields: captureFields,
+        conversationHistory: messages,
+        botId,
+        userId,
+        conversationId,
+      });
       // Actualizamos el estado de React para el siguiente renderizado.
       setCaptureFields(updatedFields);
 
@@ -852,21 +616,28 @@ function ChatWidget({
         .join("\n");
 
       // 4. Construir el prompt dinámico USANDO LOS DATOS RECIÉN ACTUALIZADOS
-      const dynamicPrompt = buildDynamicPrompt(currentMessage, relevantContext, conversationSummary, updatedFields);
+      const dynamicPrompt = buildDynamicPrompt(
+        botContext?.initialPrompt || "", // systemMessage (prompt base del bot)
+        currentMessage,                  // userMessage (lo que acaba de escribir el usuario)
+        relevantContext,                 // contexto (FAQ/Qdrant)
+        conversationSummary,             // resumen del historial
+        updatedFields                    // datos capturados (ej: nombre, email, etc.)
+      );
 
-      // 3. Preparar el payload para la IA
+      // 5. Preparar el payload para la IA
       const payload = {
         botId,
         userId,
         question: currentMessage.trim(), // La pregunta original del usuario
-        text: currentMessage.trim(), // Compatibilidad con backend
-        initialPrompt: dynamicPrompt, // El prompt dinámico completo
+        text: currentMessage.trim(),     // Compatibilidad con backend
+        initialPrompt: dynamicPrompt,    // El prompt dinámico completo
         // Incluir otros parámetros de configuración si es necesario
         modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
         temperature: botContext?.settings?.temperature || 0.7,
         maxTokens: botContext?.settings?.maxTokens || 150,
         // ... otros campos del botContext que sean necesarios
       };
+
 
       console.log("📤 Enviando payload a la IA:", payload);
 

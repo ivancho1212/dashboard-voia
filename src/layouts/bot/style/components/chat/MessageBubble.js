@@ -6,15 +6,34 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
   const isAI = message.from === "ai";
   const isAdmin = message.from === "admin";
 
+  // 👇 antes de containerStyle
+  const getBubbleColor = ({ isUser, isAI, isAdmin, status, isDemo }) => {
+    if (isDemo) {
+      // En demo siempre los colores finales
+      if (isUser) return "#e1f0ff";  // Azul claro usuario
+      if (isAI) return "#f5eaff";    // Lila IA
+      if (isAdmin) return "#e9fce9"; // Verde admin
+      return "#f0f0f0";              // Default
+    }
+
+    // En producción aplicamos el efecto tenue → final
+    if (isUser) {
+      return status === "sending" ? "#cfe4ff" : "#e1f0ff"; // Tenue → Azul claro
+    }
+    if (isAI) return "#f5eaff";
+    if (isAdmin) return "#e9fce9";
+    return "#f0f0f0";
+  };
+
   const containerStyle = {
     alignSelf: isUser ? "flex-end" : "flex-start",
-    backgroundColor: isUser
-      ? "#e1f0ff"     // Azul claro (usuario)
-      : isAI
-      ? "#f5eaff"     // Lila suave (IA)
-      : isAdmin
-      ? "#e9fce9"     // Verde claro (admin)
-      : "#f0f0f0",    // Por defecto
+    backgroundColor: getBubbleColor({
+      isUser,
+      isAI,
+      isAdmin,
+      status: message.status,
+      isDemo: process.env.NODE_ENV !== "production", // 👈 Solo aplica tenue en producción
+    }),
     color: "#1a1a1a",
     padding: "10px",
     borderRadius: "12px",
@@ -27,7 +46,9 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
     display: "flex",
     flexDirection: "column",
     boxSizing: "border-box",
+    opacity: 1, // 👈 ya no controlamos opacidad, solo color
   };
+
 
   const renderImages = (images) =>
     images?.slice(0, 4).map((img, i) => {
@@ -210,6 +231,8 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
           })}
         </span>
       )}
+
+
     </div>
   );
 }
@@ -219,6 +242,7 @@ MessageBubble.propTypes = {
     from: PropTypes.string,
     text: PropTypes.string,
     timestamp: PropTypes.string,
+    status: PropTypes.oneOf(["sending", "sent"]),
     file: PropTypes.shape({
       fileType: PropTypes.string,
       fileUrl: PropTypes.string,
