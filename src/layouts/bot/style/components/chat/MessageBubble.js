@@ -1,21 +1,49 @@
 import React from "react";
 import PropTypes from "prop-types";
+import { FaClock, FaExclamationCircle } from "react-icons/fa";
 
 function MessageBubble({ message, index, messageRef, fontFamily, openImageModal }) {
   const isUser = message.from === "user";
   const isAI = message.from === "ai";
   const isAdmin = message.from === "admin";
+  const isSending = isUser && message.status === "sending";
+  const isError = isUser && message.status === "error";
+
+  // Helper function to determine text color based on background luminance
+  const getContrastTextColor = (hexColor) => {
+    if (!hexColor) return "#1a1a1a"; // Default dark text
+    let color = hexColor.startsWith("#") ? hexColor.slice(1) : hexColor;
+    if (color.length === 3) {
+      color = color[0] + color[0] + color[1] + color[1] + color[2] + color[2];
+    }
+    const r = parseInt(color.substring(0, 2), 16);
+    const g = parseInt(color.substring(2, 4), 16);
+    const b = parseInt(color.substring(4, 6), 16);
+    // YIQ formula for contrast
+    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+    return yiq >= 150 ? "#1a1a1a" : "#ffffff";
+  };
+
+  const backgroundColor = (() => {
+    if (isUser) {
+      if (isSending) return "#d6ecfc"; // Azul pastel muy claro (enviando)
+      if (isError) return "#fcd6d6"; // Rojo pastel claro (error)
+      return "#b3d4fc"; // Azul pastel (enviado)
+    }
+    if (isAI) return "#f0e6fa"; // Lila pastel muy suave
+    if (isAdmin) return "#e6f7e6"; // Verde pastel muy suave
+    return "#f5f5f5"; // Gris pastel claro por defecto
+  })();
 
   const containerStyle = {
     alignSelf: isUser ? "flex-end" : "flex-start",
-    backgroundColor: isUser
-      ? "#e1f0ff"     // Azul claro (usuario)
-      : isAI
-      ? "#f5eaff"     // Lila suave (IA)
-      : isAdmin
-      ? "#e9fce9"     // Verde claro (admin)
-      : "#f0f0f0",    // Por defecto
-    color: "#1a1a1a",
+
+    // 🎨 Colores de la burbuja según el estado y remitente
+    backgroundColor,
+
+    // 👤 Color del texto
+    color: getContrastTextColor(backgroundColor),
+
     padding: "10px",
     borderRadius: "12px",
     maxWidth: "62%",
@@ -27,7 +55,17 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
     display: "flex",
     flexDirection: "column",
     boxSizing: "border-box",
+
+    // 🔄 Opacidad para estado "sending"
+    opacity: isSending ? 0.6 : 1,
   };
+
+  // 2. Log para inspección como solicitaste
+  console.log(
+    `[MessageBubble #${index}]`,
+    { from: message.from, status: message.status },
+    { backgroundColor: containerStyle.backgroundColor, color: containerStyle.color }
+  );
 
   const renderImages = (images) =>
     images?.slice(0, 4).map((img, i) => {
@@ -194,22 +232,29 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
       {/* Texto */}
       {message.text && <span>{message.text}</span>}
 
-      {/* Timestamp */}
-      {message.timestamp && (
-        <span
-          style={{
-            fontSize: "9px",
-            color: "#555",
-            alignSelf: "flex-end",
-            opacity: 0.7,
-          }}
-        >
-          {new Date(message.timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </span>
-      )}
+      {/* Timestamp y Status */}
+      <div style={{ display: "flex", alignSelf: "flex-end", alignItems: "center", gap: "5px", marginTop: "4px" }}>
+        {isUser && message.status === 'sending' && (
+          <span style={{ fontSize: '10px', color: '#888' }} title="Enviando...">...</span>
+        )}
+        {isUser && message.status === 'error' && (
+          <FaExclamationCircle style={{ fontSize: "10px", color: "red" }} title="Error al enviar" />
+        )}
+        {message.timestamp && (
+          <span
+            style={{
+              fontSize: "9px",
+              color: "#555",
+              opacity: 0.7,
+            }}
+          >
+            {new Date(message.timestamp).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -217,6 +262,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
 MessageBubble.propTypes = {
   message: PropTypes.shape({
     from: PropTypes.string,
+    status: PropTypes.string, // 'sending', 'sent', 'error'
     text: PropTypes.string,
     timestamp: PropTypes.string,
     file: PropTypes.shape({

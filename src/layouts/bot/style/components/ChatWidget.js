@@ -1,5 +1,6 @@
 import { TransitionGroup, CSSTransition } from "react-transition-group";
 import React, { useState, useEffect, useRef } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
 import { createHubConnection } from "services/signalr";
@@ -24,6 +25,20 @@ import { extractAndSubmitData } from "../../../../utils/dataExtractor";
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
+
+const normalizeMessage = (msg) => ({
+  id: msg.id ?? Date.now(),
+  tempId: msg.tempId ?? null,
+  status: msg.status ?? "sent", // 'sending', 'sent', 'error'
+  from:
+    msg.from ??
+    (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "ai"),
+  text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
+  file: msg.file ?? null,
+  multipleFiles: msg.multipleFiles ?? msg.files ?? [],
+  images: msg.images ?? msg.imageGroup ?? [],
+  timestamp: msg.timestamp ?? new Date().toISOString(),
+});
 
 
 function ChatWidget({
@@ -60,8 +75,10 @@ function ChatWidget({
   const [isDemo, setIsDemo] = useState(initialDemo);
   const [botContext, setBotContext] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [isBotReady, setIsBotReady] = useState(false);
   const [promptSent, setPromptSent] = useState(false);
   const promptSentRef = useRef(false);
+  const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
     const fetchBotStyleAndContext = async () => {
@@ -102,6 +119,7 @@ function ChatWidget({
 
           // 🔹 Guardamos el payload en el estado
           setBotContext(aiPayload);
+          setIsBotReady(true); // ✅ El bot está listo para recibir mensajes
           console.log("🧠 Payload preparado para IA:", aiPayload);
 
           // 🔹 Guardamos el system prompt + vector info para uso interno de la IA
@@ -128,6 +146,7 @@ function ChatWidget({
         }
       } catch (err) {
         console.error("❌ Error cargando datos del bot:", err);
+        setIsBotReady(false); // Asegurarse de que no esté listo si falla
       }
     };
 
@@ -238,6 +257,7 @@ function ChatWidget({
     }
     setMessages(newMessages);
   };
+
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [imageGroup, setImageGroup] = useState([]);
@@ -251,19 +271,6 @@ function ChatWidget({
   const typingTimeoutRef = useRef(null);
   const CACHE_KEY = `chat_${botId}_${userId}`;
   const CACHE_TIMEOUT = 1 * 60 * 1000;
-
-  // 🟢 Mueve la función normalizeMessage aquí para que sea accesible
-  const normalizeMessage = (msg) => ({
-    id: msg.id ?? Date.now(),
-    from:
-      msg.from ??
-      (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "ai"),
-    text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
-    file: msg.file ?? null,
-    multipleFiles: msg.multipleFiles ?? msg.files ?? [],
-    images: msg.images ?? msg.imageGroup ?? [],
-    timestamp: msg.timestamp ?? new Date().toISOString(),
-  });
 
   // ✅ Única lógica de carga de caché al inicio.
   useEffect(() => {
@@ -372,7 +379,6 @@ function ChatWidget({
     }
   };
 
-
   useEffect(() => {
     if (isDemo || !isOpen) {
       if (connectionRef.current) {
@@ -388,22 +394,43 @@ function ChatWidget({
     const connection = connectionRef.current;
 
     const handleReceiveMessage = (msg) => {
-      console.log("📩 Mensaje recibido:", msg);
+      const newMessage = normalizeMessage(msg);
+      console.log("📩 Mensaje recibido y normalizado:", newMessage);
 
-      // 🔹 Normalizamos el mensaje
-      const normalized = normalizeMessage(msg);
+      // Case 1: This is a confirmation for an optimistic message.
+      if (newMessage.tempId && newMessage.from === "user") {
+        console.log(`✅ Confirmación de usuario detectada para tempId: ${newMessage.tempId}`);
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === newMessage.tempId
+              ? { ...newMessage, status: "sent" } // Replace optimistic with confirmed
+              : m
+          )
+        );
+        console.log("🔄 Reemplazo de mensaje optimista:", newMessage.tempId, newMessage.id);
+        return; // Stop processing here
+      }
 
-      // 🔹 Activar TypingDots inmediatamente
-      setTypingSender("ai");
-      setIsTyping(true);
+      // Case 2: It's a new message (from bot/admin) or a duplicate broadcast.
+      setMessages(prev => {
+        // Prevent adding a duplicate message if it already exists by its final ID.
+        if (prev.some(m => m.id === newMessage.id)) {
+          console.warn(`⚠️ Mensaje duplicado detectado con id: ${newMessage.id}. Ignorando.`);
+          return prev;
+        }
+        return [...prev, newMessage];
+      });
 
-      // 🔹 Simular escritura antes de mostrar el mensaje
-      const typingDelay = 1500 + Math.random() * 1000; // 1.5s - 2.5s
-      setTimeout(() => {
-        setMessages(prev => [...prev, normalized]);
-        setIsTyping(false);
-        setTypingSender(null);
-      }, typingDelay);
+      // Handle typing indicator for bot/admin messages
+      if (newMessage.from !== 'user') {
+        setTypingSender(newMessage.from === "bot" ? "ai" : newMessage.from);
+        setIsTyping(true);
+        const typingDelay = 1500 + Math.random() * 1000;
+        setTimeout(() => {
+          setIsTyping(false);
+          setTypingSender(null);
+        }, typingDelay);
+      }
     };
 
     const handleDataCaptureUpdate = (update) => {
@@ -431,29 +458,19 @@ function ChatWidget({
           await connection.start();
         }
 
+        setIsConnected(true); // 🔹 Bloqueamos que el usuario envíe mensajes hasta que la conexión esté lista
+
         if (!connection.handlersAttached) {
-          connection.on("ReceiveMessage", handleReceiveMessage);
+          connection.on("receivemessage", handleReceiveMessage);
           connection.on("DataCaptureUpdate", handleDataCaptureUpdate);
-          connection.on("Typing", (data) => {
-            setTypingSender(data.from);
-            setIsTyping(true);
-            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-            typingTimeoutRef.current = setTimeout(() => {
-              setIsTyping(false);
-              setTypingSender(null);
-            }, 2000);
-          });
           connection.handlersAttached = true;
         }
 
-
-        // ✅ Solo nos unimos si hay conversationId (del caché o del estado).
         if (conversationId) {
           await connection.invoke("JoinRoom", conversationId);
           return;
         }
 
-        // Si no existe, pedimos uno nuevo
         const convId = await connection.invoke("InitializeContext", { botId, userId });
         if (convId) {
           setConversationId(convId);
@@ -462,10 +479,12 @@ function ChatWidget({
 
       } catch (err) {
         console.error("❌ Error conectando a SignalR:", err);
+        setIsConnected(false); // ⚠️ Si falla, el estado indica que no se puede enviar
       }
     };
 
     setupConnection();
+
 
     return () => {
       if (connectionRef.current) {
@@ -501,6 +520,7 @@ function ChatWidget({
         }
       } catch (err) {
         console.error("❌ Error enviando heartbeat:", err);
+        setIsBotReady(false); // Asegurarse de que no esté listo si falla
       }
     };
     sendHeartbeat();
@@ -538,32 +558,51 @@ function ChatWidget({
     if (!message.trim()) return;
 
     if (isDemo) {
-      // ... (código de modo demo sin cambios)
+      // Mantener el código de demo sin cambios
+      // ...
       return;
     }
 
-    if (!conversationId) {
-      console.error("Error: ID de conversación no disponible.");
-      return;
-    }
     const connection = connectionRef.current;
-    if (!connection || connection.state !== "Connected") {
-      console.error("Error: La conexión de SignalR no está activa.");
+
+    // Esperar hasta que la conexión y conversationId estén listos (max 10 intentos)
+    let retries = 0;
+    while ((!isConnected || !conversationId || !connection || connection.state !== "Connected") && retries < 10) {
+      console.log("⏳ Esperando conexión y conversationId...");
+      await new Promise(res => setTimeout(res, 200)); // espera 200ms
+      retries++;
+    }
+
+    if (!isConnected || !conversationId || !connection || connection.state !== "Connected") {
+      console.warn("🚫 No se pudo enviar el mensaje, SignalR no está listo");
+      const tempId = uuidv4();
+      setMessages(prev =>
+        [...prev, { id: tempId, tempId, from: "user", text: message, status: "error", timestamp: new Date().toISOString() }]
+      );
+      setMessage("");
       return;
     }
+
+    // Se usa un ID temporal como string para evitar problemas de tipo
+    const tempId = uuidv4();
+    const userMessageForDisplay = normalizeMessage({
+      id: tempId,
+      tempId,
+      from: "user",
+      text: message,
+      status: "sending",
+      timestamp: new Date().toISOString(),
+    });
+    setMessages((prev) => [...prev, userMessageForDisplay]);
+
+    const currentMessage = message;
+    setMessage("");
 
     setTypingSender("ai");
     setIsTyping(true);
 
-    const userMessageForDisplay = normalizeMessage({ from: "user", text: message });
-    //setMessages((prev) => [...prev, userMessageForDisplay]);
-    const currentMessage = message;
-    setMessage("");
-
-
     try {
       // --- 1. Lógica de Captura de Datos ---
-      // Extrae datos del mensaje actual, los guarda en la DB y nos devuelve el estado actualizado.
       const updatedFields = await extractAndSubmitData({
         userMessage: currentMessage,
         currentFields: captureFields,
@@ -572,16 +611,11 @@ function ChatWidget({
         userId,
         conversationId,
       });
-      // Actualizamos el estado de React para el siguiente renderizado.
       setCaptureFields(updatedFields);
 
-      // --- 🟢 INICIO: Lógica de Búsqueda Híbrida ---
-      let relevantContext = null;
+      // --- 2. Lógica de Búsqueda Híbrida ---
+      let relevantContext = searchInPayload(currentMessage, botContext?.messages);
 
-      // 2. Buscar en el payload de FAQs (en memoria) primero.
-      relevantContext = searchInPayload(currentMessage, botContext?.messages);
-
-      // 3. Si no hay match en el payload, buscar en Qdrant (vía backend).
       if (!relevantContext) {
         console.log("ℹ️ No hubo match en payload. Procediendo con búsqueda en Qdrant...");
         try {
@@ -594,59 +628,52 @@ function ChatWidget({
         }
       }
 
-      // TODO: Implementar la lógica para resumir el historial de `messages`
+      // --- 3. Resumen del historial ---
       const conversationSummary = messages
-        .slice(-5) // Tomar los últimos 5 mensajes como ejemplo
+        .slice(-5)
         .map((msg) => `${msg.from}: ${msg.text}`)
         .join("\n");
 
-      // 4. Construir el prompt dinámico USANDO LOS DATOS RECIÉN ACTUALIZADOS
+      // --- 4. Construir prompt dinámico ---
       const dynamicPrompt = buildDynamicPrompt(
-        botContext?.initialPrompt || "", // systemMessage (prompt base del bot)
-        currentMessage,                  // userMessage (lo que acaba de escribir el usuario)
-        relevantContext,                 // contexto (FAQ/Qdrant)
-        conversationSummary,             // resumen del historial
-        updatedFields                    // datos capturados (ej: nombre, email, etc.)
+        botContext?.initialPrompt || "",
+        currentMessage,
+        relevantContext,
+        conversationSummary,
+        updatedFields
       );
 
-      // 5. Preparar el payload para la IA
+      // --- 5. Preparar payload para la IA ---
       const payload = {
         botId,
         userId,
-        question: currentMessage.trim(), // La pregunta original del usuario
-        text: currentMessage.trim(),     // Compatibilidad con backend
-        initialPrompt: dynamicPrompt,    // El prompt dinámico completo
-        // Incluir otros parámetros de configuración si es necesario
+        question: currentMessage.trim(),
+        text: currentMessage.trim(),
+        initialPrompt: dynamicPrompt,
+        tempId,
         modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
         temperature: botContext?.settings?.temperature || 0.7,
         maxTokens: botContext?.settings?.maxTokens || 150,
-        // ... otros campos del botContext que sean necesarios
+        capturedFields: updatedFields, // 🔹 Agregado
       };
 
 
       console.log("📤 Enviando payload a la IA:", payload);
 
-      // 4. Enviar a través de SignalR
+      // --- 6. Enviar a través de SignalR ---
       await connection.invoke("SendMessage", conversationId, payload);
 
-      // Marcar que el prompt inicial (ahora dinámico) ha sido enviado
       if (!promptSent) {
         setPromptSent(true);
         promptSentRef.current = true;
       }
     } catch (err) {
       console.error("❌ Error en el flujo de envío de mensaje:", err);
-      setTypingSender("ai");
-      setIsTyping(true);
-      setTimeout(() => {
-        const errorMessage = normalizeMessage({
-          from: "ai",
-          text: "Lo siento, hubo un problema al procesar tu mensaje. Por favor, intenta de nuevo.",
-        });
-        setMessages((prev) => [...prev, errorMessage]);
-        setIsTyping(false);
-        setTypingSender(null);
-      }, 1200);
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === tempId ? { ...m, status: "error" } : m
+        )
+      );
     }
   };
 
@@ -1007,7 +1034,7 @@ function ChatWidget({
 
           {/* 📝 Input + Adjuntar + Enviar */}
           <InputArea
-            key={`${normalizedStyle.allowImageUpload}-${normalizedStyle.allowFileUpload}`}
+            key={`${effectiveStyle.allowImageUpload}-${effectiveStyle.allowFileUpload}`}
             inputText={inputText}
             inputBg={inputBg}
             inputBorder={inputBorder}
@@ -1019,8 +1046,7 @@ function ChatWidget({
             connectionRef={connectionRef}
             conversationId={conversationId}
             userId={userId}
-            disabled={isDemo}             // ✅ cambio aquí
-            isDemo={isDemo}               // ✅ pasar demo explícitamente
+            isInputDisabled={!isConnected || isDemo} // 🔹 Deshabilitar si demo o sin conexión
             allowImageUpload={effectiveStyle.allowImageUpload}
             allowFileUpload={effectiveStyle.allowFileUpload}
           />
