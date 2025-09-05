@@ -10,36 +10,30 @@ import MessageList from "./chat/MessageList";
 import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
 import { getBotContext } from "services/botService";
-import { getCapturedFields } from "services/botCapturedFieldsService";
-import { createSubmission } from "services/botDataSubmissionsService";
-import { searchVector } from "services/vectorSearchService";
-import { findBestMatch } from "string-similarity";
-import {
-  buildDynamicPrompt,
-  searchInPayload,
-  formatVectorContext,
-} from "../../../../utils/promptBuilder";
-
-import { extractAndSubmitData } from "../../../../utils/dataExtractor";
+import { createConversation } from "services/chatService";
+import { generateColor } from "../../../../utils/colors";
 
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
 
-const normalizeMessage = (msg) => ({
-  id: msg.id ?? Date.now(),
-  tempId: msg.tempId ?? null,
-  status: msg.status ?? "sent", // 'sending', 'sent', 'error'
-  from:
-    msg.from ??
-    (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "ai"),
-  text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
-  file: msg.file ?? null,
-  multipleFiles: msg.multipleFiles ?? msg.files ?? [],
-  images: msg.images ?? msg.imageGroup ?? [],
-  timestamp: msg.timestamp ?? new Date().toISOString(),
-});
-
+const normalizeMessage = (msg) => {
+  const id = msg.id ?? msg.tempId ?? uuidv4(); // 🔹 Siempre tener un id
+  return {
+    ...msg,
+    id,
+    tempId: msg.tempId ?? id,
+    status: msg.status ?? "sent",
+    from: msg.from ?? (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "ai"),
+    text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
+    file: msg.file ?? null,
+    multipleFiles: msg.multipleFiles ?? msg.files ?? [],
+    images: msg.images ?? msg.imageGroup ?? [],
+    timestamp: msg.timestamp ?? new Date().toISOString(),
+    color: msg.color ?? generateColor(id),
+    uniqueKey: id, // 🔹 clave persistente para eliminar duplicados
+  };
+};
 
 function ChatWidget({
   style = {},
@@ -51,23 +45,7 @@ function ChatWidget({
   const connectionRef = useRef(null);
   const botId = propBotId ?? 2;
   const userId = propUserId ?? 2;
-
-  // Estado para campos capturados
-  const [captureFields, setCaptureFields] = useState([]);
-  // Cargar campos a captar al montar el widget
-  useEffect(() => {
-    async function fetchFields() {
-      try {
-        const res = await getCapturedFields(botId);
-        // Espera que la respuesta esté en res.data
-        setCaptureFields(res.data.map(f => ({ ...f, value: null })));
-        console.log("🟢 Campos a captar cargados:", res.data);
-      } catch (err) {
-        console.error("❌ Error cargando campos a captar:", err);
-      }
-    }
-    fetchFields();
-  }, [botId]);
+  const conversationIdRef = useRef(null);
 
   // Move isOpen to the top so it's available for all hooks
   const [isOpen, setIsOpen] = useState(false);
@@ -88,11 +66,13 @@ function ChatWidget({
         const data = await res.json();
         if (data.style) {
           setBotStyle(data.style);
-          setIsDemo(false);
+          - setIsDemo(false);
           console.log("✅ Estilos cargados del backend:", data.style);
         } else {
           console.warn("⚠️ Este bot no tiene estilos definidos, se usará demo.");
+          - setIsDemo(true);
         }
+
 
         // 🔹 Contexto
         const context = await getBotContext(botId);
@@ -155,23 +135,34 @@ function ChatWidget({
 
   // Mostrar TypingDots y mensaje de bienvenida solo al abrir el widget
   useEffect(() => {
-    if (isOpen && messages.length === 0 && !isDemo) {
+    if (!isOpen || isDemo) return;
+
+    // Verificar si ya existe el mensaje de bienvenida
+    const welcomeId = "welcome-message";
+    const hasWelcome = messages.some(m => m.id === welcomeId);
+
+    if (!hasWelcome) {
       setTypingSender("ai");
       setIsTyping(true);
+
       const welcomeMsg = {
+        id: welcomeId, // 🔹 ID fijo para evitar duplicados
         from: "ai",
         text: "👋 ¡Hola! Bienvenido. ¿En qué puedo ayudarte hoy?",
+        status: "sent", // 🔹 ya considerado enviado
+        timestamp: new Date().toISOString(),
       };
+
       const typingDelay = 1500 + Math.random() * 1000;
       setTimeout(() => {
-        setMessages([normalizeMessage(welcomeMsg)]);
+        setMessages(prev => [...prev, normalizeMessage(welcomeMsg)]);
         setIsTyping(false);
         setTypingSender(null);
-        setPromptSent(true); // Prompt is considered sent after welcome
+        setPromptSent(true);
+        promptSentRef.current = true; // 🔹 mantener referencia
       }, typingDelay);
     }
-  }, [isOpen, isDemo, messages.length]);
-
+  }, [isOpen, isDemo, messages]);
 
   // Configuración de temas
   const fallbackTextColor = "#1a1a1a";
@@ -272,20 +263,31 @@ function ChatWidget({
   const CACHE_KEY = `chat_${botId}_${userId}`;
   const CACHE_TIMEOUT = 1 * 60 * 1000;
 
-  // ✅ Única lógica de carga de caché al inicio.
+  // ✅ Única lógica de carga de caché al inicio, evitando duplicados
   useEffect(() => {
     const cached = loadConversationCache();
     if (cached) {
       setConversationId(cached.conversationId);
-      setMessages(cached.messages.map(normalizeMessage)); // 🔑 Normalizar siempre
-      console.log("📂 Cargando conversación desde caché:", cached);
-      // Solo marcar promptSent si hay mensajes de usuario (no solo bienvenida)
-      if (cached.messages && cached.messages.some(m => m.from === "user")) {
+
+      // 🔹 eliminar duplicados por uniqueKey
+      const uniqueMessages = Array.from(
+        new Map(
+          cached.messages.map(msg => {
+            const normalized = normalizeMessage(msg);
+            return [normalized.uniqueKey, normalized];
+          })
+        ).values()
+      );
+
+      setMessages(uniqueMessages);
+
+      if (uniqueMessages.some(m => m.from === "user")) {
         setPromptSent(true);
         promptSentRef.current = true;
       }
     }
   }, []);
+
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -330,24 +332,33 @@ function ChatWidget({
   const typingRef = useRef(null);
 
   const saveConversationCache = (convId, msgs) => {
-    if (!convId) return;
-    if (!msgs || msgs.length === 0) return;
+    if (!convId || !msgs || msgs.length === 0) return;
 
-    // 🔑 Cargar el cache existente
+    // 🔹 Solo mensajes confirmados
+    const confirmedMessages = msgs.filter(m => m.id && m.status === "sent");
+    if (confirmedMessages.length === 0) return;
+
     const existing = loadConversationCache();
+    let mergedMessages = confirmedMessages;
 
-    let mergedMessages = msgs;
     if (existing && existing.conversationId === convId) {
-      // Fusiona mensajes anteriores con los nuevos (evita duplicados por id)
       const map = new Map();
-      [...existing.messages, ...msgs].forEach(m => map.set(m.id, m));
+      // 🔹 Fusionar mensajes existentes + confirmados y mantener color
+      [...existing.messages, ...confirmedMessages].forEach(m => {
+        const key = m.id ?? m.tempId;
+        if (!m.color) m.color = generateColor(key);
+        map.set(key, m);
+      });
       mergedMessages = Array.from(map.values());
+    } else {
+      mergedMessages = confirmedMessages.map(m => ({ ...m, color: m.color ?? generateColor(m.id ?? m.tempId) }));
     }
 
-    const data = { conversationId: convId, messages: mergedMessages, timestamp: Date.now() };
-    localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({ conversationId: convId, messages: mergedMessages, timestamp: Date.now() })
+    );
   };
-
 
   const loadConversationCache = () => {
     const raw = localStorage.getItem(CACHE_KEY);
@@ -388,119 +399,90 @@ function ChatWidget({
       return;
     }
 
-    if (!connectionRef.current) {
-      connectionRef.current = createHubConnection();
-    }
-    const connection = connectionRef.current;
-
     const handleReceiveMessage = (msg) => {
-      const newMessage = normalizeMessage(msg);
-      console.log("📩 Mensaje recibido y normalizado:", newMessage);
+      console.log("📩 Mensaje recibido:", msg);
 
-      // Case 1: This is a confirmation for an optimistic message.
+      const newMessage = normalizeMessage(msg);
+      if (!newMessage.color) newMessage.color = generateColor(newMessage.id);
+
+      // Confirmación optimista
       if (newMessage.tempId && newMessage.from === "user") {
-        console.log(`✅ Confirmación de usuario detectada para tempId: ${newMessage.tempId}`);
         setMessages(prev =>
           prev.map(m =>
-            m.id === newMessage.tempId
-              ? { ...newMessage, status: "sent" } // Replace optimistic with confirmed
-              : m
+            m.id === newMessage.tempId ? { ...newMessage, status: "sent" } : m
           )
         );
-        console.log("🔄 Reemplazo de mensaje optimista:", newMessage.tempId, newMessage.id);
-        return; // Stop processing here
+        return;
       }
 
-      // Case 2: It's a new message (from bot/admin) or a duplicate broadcast.
-      setMessages(prev => {
-        // Prevent adding a duplicate message if it already exists by its final ID.
-        if (prev.some(m => m.id === newMessage.id)) {
-          console.warn(`⚠️ Mensaje duplicado detectado con id: ${newMessage.id}. Ignorando.`);
-          return prev;
-        }
-        return [...prev, newMessage];
-      });
+      if (newMessage.from !== "user") {
+        // Simulación typing
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
-      // Handle typing indicator for bot/admin messages
-      if (newMessage.from !== 'user') {
         setTypingSender(newMessage.from === "bot" ? "ai" : newMessage.from);
         setIsTyping(true);
-        const typingDelay = 1500 + Math.random() * 1000;
-        setTimeout(() => {
+
+        const typingDelay = Math.min(
+          3000,
+          500 + (newMessage.text?.length || 0) * 50
+        );
+
+        typingTimeoutRef.current = setTimeout(() => {
+          setMessages(prev => {
+            const all = [...prev, newMessage];
+            const map = new Map();
+            all.forEach(m => map.set(m.id ?? m.tempId, m));
+            return Array.from(map.values());
+          });
+
           setIsTyping(false);
           setTypingSender(null);
         }, typingDelay);
-      }
-    };
-
-    const handleDataCaptureUpdate = (update) => {
-      if (update && typeof update === 'object') {
-        console.log("🔄 Actualizando datos capturados desde el backend:", update);
-        setCaptureFields(prevFields => {
-          return prevFields.map(field => {
-            // Use a case-insensitive check for the field name
-            const fieldNameInUpdate = Object.keys(update).find(key => key.toLowerCase() === field.fieldName.toLowerCase());
-            if (fieldNameInUpdate) {
-              return { ...field, value: update[fieldNameInUpdate] };
-            }
-            return field;
-          });
+      } else {
+        setMessages(prev => {
+          const all = [...prev, newMessage];
+          const map = new Map();
+          all.forEach(m => map.set(m.id ?? m.tempId, m));
+          return Array.from(map.values());
         });
       }
     };
 
+    const initConnection = async () => {
+      if (!connectionRef.current) {
+        console.log("🟡 Inicializando chat vía servicio:", { botId, userId });
 
-    const setupConnection = async () => {
-      try {
-        if (!connection) return;
-
-        if (connection.state === "Disconnected") {
-          await connection.start();
-        }
-
-        setIsConnected(true); // 🔹 Bloqueamos que el usuario envíe mensajes hasta que la conexión esté lista
-
-        if (!connection.handlersAttached) {
-          connection.on("receivemessage", handleReceiveMessage);
-          connection.on("DataCaptureUpdate", handleDataCaptureUpdate);
-          connection.handlersAttached = true;
-        }
-
-        if (conversationId) {
-          await connection.invoke("JoinRoom", conversationId);
+        const conversationId = await createConversation(userId, botId);
+        if (!conversationId) {
+          setIsConnected(false);
           return;
         }
 
-        const convId = await connection.invoke("InitializeContext", { botId, userId });
-        if (convId) {
-          setConversationId(convId);
-          await connection.invoke("JoinRoom", convId);
-        }
+        const connection = createHubConnection(conversationId);
+        await connection.start();
 
-      } catch (err) {
-        console.error("❌ Error conectando a SignalR:", err);
-        setIsConnected(false); // ⚠️ Si falla, el estado indica que no se puede enviar
+        connection.on("ReceiveMessage", handleReceiveMessage);
+
+        connectionRef.current = connection;
+        conversationIdRef.current = conversationId;
+        setConversationId(conversationId);
+        setIsConnected(true);
+
+        console.log("✅ Conexión lista con convId:", conversationId);
       }
     };
 
-    setupConnection();
+    initConnection();
+  }, [isDemo, isOpen, userId, botId]);
 
-
-    return () => {
-      if (connectionRef.current) {
-        connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
-        connectionRef.current.off("DataCaptureUpdate", handleDataCaptureUpdate);
-      }
-      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    };
-
-  }, [isOpen, botId, userId, isDemo, conversationId]);
 
   useEffect(() => {
-    if (messages.length > 0 && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
+    return () => clearTimeout(timer);
   }, [messages]);
+
 
   useEffect(() => {
     if (!isOpen || !conversationId) return;
@@ -555,6 +537,11 @@ function ChatWidget({
   const maxDemoMessages = 5;
 
   const sendMessage = async () => {
+    if (!isBotReady) {
+      console.warn("🚫 Bot no listo aún. Mensaje no enviado");
+      return;
+    }
+
     if (!message.trim()) return;
 
     if (isDemo) {
@@ -564,26 +551,35 @@ function ChatWidget({
     }
 
     const connection = connectionRef.current;
+    const convId = conversationIdRef.current; // ✅ usamos el ref, no el estado
 
-    // Esperar hasta que la conexión y conversationId estén listos (max 10 intentos)
+    // Esperar hasta que la conexión y convId estén listos (máx 10 intentos)
     let retries = 0;
-    while ((!isConnected || !conversationId || !connection || connection.state !== "Connected") && retries < 10) {
+    while ((!isConnected || !convId || !connection || connection.state !== "Connected") && retries < 10) {
       console.log("⏳ Esperando conexión y conversationId...");
-      await new Promise(res => setTimeout(res, 200)); // espera 200ms
+      await new Promise(res => setTimeout(res, 200));
       retries++;
     }
 
-    if (!isConnected || !conversationId || !connection || connection.state !== "Connected") {
+    if (!isConnected || !convId || !connection || connection.state !== "Connected") {
       console.warn("🚫 No se pudo enviar el mensaje, SignalR no está listo");
       const tempId = uuidv4();
-      setMessages(prev =>
-        [...prev, { id: tempId, tempId, from: "user", text: message, status: "error", timestamp: new Date().toISOString() }]
-      );
+      setMessages(prev => [
+        ...prev,
+        {
+          id: tempId,
+          tempId,
+          from: "user",
+          text: message,
+          status: "error",
+          timestamp: new Date().toISOString()
+        }
+      ]);
       setMessage("");
       return;
     }
 
-    // Se usa un ID temporal como string para evitar problemas de tipo
+    // ID temporal para render inmediato
     const tempId = uuidv4();
     const userMessageForDisplay = normalizeMessage({
       id: tempId,
@@ -591,9 +587,15 @@ function ChatWidget({
       from: "user",
       text: message,
       status: "sending",
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString()
     });
-    setMessages((prev) => [...prev, userMessageForDisplay]);
+
+    setMessages(prev => {
+      const all = [...prev, userMessageForDisplay];
+      const map = new Map();
+      all.forEach(m => map.set(m.id ?? m.tempId, m));
+      return Array.from(map.values());
+    });
 
     const currentMessage = message;
     setMessage("");
@@ -602,66 +604,21 @@ function ChatWidget({
     setIsTyping(true);
 
     try {
-      // --- 1. Lógica de Captura de Datos ---
-      const updatedFields = await extractAndSubmitData({
-        userMessage: currentMessage,
-        currentFields: captureFields,
-        conversationHistory: messages,
-        botId,
-        userId,
-        conversationId,
-      });
-      setCaptureFields(updatedFields);
-
-      // --- 2. Lógica de Búsqueda Híbrida ---
-      let relevantContext = searchInPayload(currentMessage, botContext?.messages);
-
-      if (!relevantContext) {
-        console.log("ℹ️ No hubo match en payload. Procediendo con búsqueda en Qdrant...");
-        try {
-          const data = await searchVector(currentMessage, botId, 3);
-          if (data.results && data.results.length > 0) {
-            relevantContext = formatVectorContext(data.results);
-          }
-        } catch (err) {
-          console.warn("⚠️ No se pudo obtener contexto de Qdrant:", err);
-        }
-      }
-
-      // --- 3. Resumen del historial ---
-      const conversationSummary = messages
-        .slice(-5)
-        .map((msg) => `${msg.from}: ${msg.text}`)
-        .join("\n");
-
-      // --- 4. Construir prompt dinámico ---
-      const dynamicPrompt = buildDynamicPrompt(
-        botContext?.initialPrompt || "",
-        currentMessage,
-        relevantContext,
-        conversationSummary,
-        updatedFields
-      );
-
-      // --- 5. Preparar payload para la IA ---
       const payload = {
         botId,
         userId,
         question: currentMessage.trim(),
         text: currentMessage.trim(),
-        initialPrompt: dynamicPrompt,
         tempId,
         modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
         temperature: botContext?.settings?.temperature || 0.7,
-        maxTokens: botContext?.settings?.maxTokens || 150,
-        capturedFields: updatedFields, // 🔹 Agregado
+        maxTokens: botContext?.settings?.maxTokens || 150
       };
-
 
       console.log("📤 Enviando payload a la IA:", payload);
 
-      // --- 6. Enviar a través de SignalR ---
-      await connection.invoke("SendMessage", conversationId, payload);
+      // --- Enviar a través de SignalR ---
+      await connection.invoke("SendMessage", convId, payload);
 
       if (!promptSent) {
         setPromptSent(true);
@@ -676,6 +633,7 @@ function ChatWidget({
       );
     }
   };
+
 
   const isColorDark = (hexColor) => {
     if (!hexColor) return false;
@@ -757,105 +715,100 @@ function ChatWidget({
   };
 
   useEffect(() => {
-    if (isDemo && messages.length === 0 && isOpen) {
-      const demoSequence = [
-        { sender: "user", content: "Hola", delay: 2000 },
-        { sender: "bot", content: "Hola, ¿en qué puedo ayudarte hoy?", delay: 3000 },
-        {
-          sender: "user",
-          content: "Quisiera saber en qué horario puedo acercarme a la oficina de ustedes.",
-          delay: 3000,
-        },
-        {
-          sender: "bot",
-          content:
-            "Nuestro horario es de lunes a viernes, de 8 a.m. a 5 p.m. ¿Te gustaría agendar una cita?",
-          delay: 3500,
-        },
-        {
-          sender: "user",
-          content:
-            "Ah, ok ¿pero puedo saber contigo directamente si tienen solución para el arreglo de este logo?",
-          delay: 3000,
-        },
-        {
-          sender: "bot",
-          content:
-            "Claro, puedo orientarte. Cuéntame un poco más o comparte la imagen del logo que necesitas arreglar",
-          delay: 3500,
-        },
-        { sender: "user", content: "O sea, ¿te puedo enviar esta imagen?", delay: 3000 },
-        {
-          sender: "user",
-          content: "",
-          type: "image",
-          imageGroup: [
-            {
-              url: "public/VIA.png",
-              name: "logo-via.png",
-            },
-          ],
-          delay: 2000,
-        },
-        {
-          sender: "bot",
-          content:
-            "Recibí tu archivo. Será revisado por un Usuario administrativo que te contactará en breve.",
-          delay: 3000,
-        },
-        {
-          sender: "admin",
-          content:
-            "Hola, habla Jeronimo Herrera. Estoy viendo la imagen que acabas de enviar. Con esto ya procedemos a ayudarte con la correción del logo",
-          delay: 3500,
-        },
-        { sender: "user", content: "Muchas gracias por la ayuda.", delay: 2500 },
-        { sender: "admin", content: "¡Con gusto! Feliz día.", delay: 2500 },
-      ];
+    if (!isDemo || !isOpen) return;
 
-      let totalDelay = 0;
+    const getTypingDuration = (text) => {
+      const base = 500;   // mínimo 0.5s
+      const perChar = 40; // 40ms por caracter
+      const max = 2500;   // tope 2.5s
+      return Math.min(max, base + text.length * perChar);
+    };
 
-      demoSequence.forEach((item, i) => {
-        totalDelay += item.delay;
+    const demoSequence = [
+      { sender: "bot", content: "¡Hola! Soy tu asistente virtual. ¿Cómo puedo ayudarte hoy?", typing: 1200, after: 800 },
+      { sender: "user", content: "Hola, quiero información sobre sus servicios.", after: 1500 },
+      { sender: "bot", content: "Claro, ofrecemos consultoría y desarrollo de software a medida.", typing: 1500, after: 1000 },
+      { sender: "user", content: "¿Y cuál es su horario de atención?", after: 1800 },
+      { sender: "bot", content: "Nuestro horario es de lunes a viernes de 8:00 a.m. a 5:00 p.m.", typing: 1800, after: 800 },
+    ];
 
-        // 🧠 Simula "escribiendo" antes de los mensajes del bot o admin
-        if (item.sender === "bot" || item.sender === "admin") {
-          setTimeout(() => {
-            setTypingSender(item.sender);
-            setIsTyping(true);
-          }, totalDelay - 1500);
-        }
+    let totalDelay = 0;
+    const timeoutIds = [];
+    let counter = 0;
 
-        // 📨 Mostrar el mensaje real
-        setTimeout(() => {
-          const newMsgRaw = {
-            id: Date.now() + i,
+    demoSequence.forEach((item) => {
+      if (item.sender === "bot") {
+        // 1. Calcular duración del "typing"
+        const typingDuration = item.typing ?? getTypingDuration(item.content);
+
+        // 2. Programar el inicio del "typing"
+        const typingOnId = setTimeout(() => {
+          console.log(`✍️ [TYPING ON] ${item.sender}`);
+          setTypingSender(item.sender);
+          setIsTyping(true);
+        }, totalDelay);
+        timeoutIds.push(typingOnId);
+
+        // 3. Incrementar el delay por la duración del typing
+        totalDelay += typingDuration;
+
+        // 4. Programar la llegada del mensaje
+        const messageId = setTimeout(() => {
+          console.log(`💬 [MESSAGE] ${item.sender}: ${item.content}`);
+          const newMsg = normalizeMessage({
+            id: `demo-${counter++}-${Date.now()}`,
             sender: item.sender,
             content: item.content,
-            type: item.type || "text",
+            type: "text",
             timestamp: new Date().toISOString(),
-            userId:
-              item.sender === "user"
-                ? "demo-user-id"
-                : item.sender === "bot"
-                  ? "bot-id"
-                  : "admin-id",
-            imageGroup: item.imageGroup || [],
-            files: item.files || [],
-          };
-
-          const newMsg = normalizeMessage(newMsgRaw);
-
+            userId: "bot-id",
+            imageGroup: [],
+            files: [],
+          });
           setMessages((prev) => [...prev, newMsg]);
-
+          // Apagamos el typing justo después de que el mensaje se renderiza
           setIsTyping(false);
           setTypingSender(null);
         }, totalDelay);
-      });
-    }
-  }, [isDemo, isOpen, messages.length]);
+        timeoutIds.push(messageId);
+
+        // 5. Añadir el delay posterior antes del siguiente mensaje
+        totalDelay += item.after ?? 0;
+
+      } else { // Mensajes del usuario
+        // 1. Añadir el delay antes del mensaje del usuario
+        totalDelay += item.after ?? 0;
+
+        // 2. Programar la llegada del mensaje del usuario
+        const messageId = setTimeout(() => {
+          console.log(`🙋 [USER MESSAGE]: ${item.content}`);
+          const newMsg = normalizeMessage({
+            id: `demo-${counter++}-${Date.now()}`,
+            sender: "user",
+            content: item.content,
+            type: "text",
+            timestamp: new Date().toISOString(),
+            userId: "demo-user-id",
+            imageGroup: [],
+            files: [],
+          });
+          setMessages((prev) => [...prev, newMsg]);
+        }, totalDelay);
+        timeoutIds.push(messageId);
+      }
+    });
+
+    // Función de limpieza para todos los timeouts
+    return () => {
+      timeoutIds.forEach((id) => clearTimeout(id));
+      console.log("♻️ Cleanup demo: typing OFF");
+      setIsTyping(false);
+      setTypingSender(null);
+    };
+  }, [isDemo, isOpen]);
 
   const isInputDisabled = isDemo || !conversationId;
+
 
   return (
     <div style={wrapperStyle}>

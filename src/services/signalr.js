@@ -1,11 +1,10 @@
+// dashboard-voia/src/services/signalr.js
 import * as signalR from "@microsoft/signalr";
 
-const SIGNALR_URL = "http://localhost:5006/chatHub";
-
-// Exportamos una función que crea y devuelve una nueva conexión
-export const createHubConnection = () => {
+// Recibe el conversationId para asociar la conexión
+export const createHubConnection = (conversationId) => {
   return new signalR.HubConnectionBuilder()
-    .withUrl(SIGNALR_URL, {
+    .withUrl(`http://localhost:5006/chatHub?conversationId=${conversationId}`, {
       withCredentials: true,
     })
     .withAutomaticReconnect()

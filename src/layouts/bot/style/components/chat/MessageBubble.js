@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useEffect } from "react";
 import PropTypes from "prop-types";
 import { FaClock, FaExclamationCircle } from "react-icons/fa";
+import { generateColor } from "../../../../../utils/colors";
 
 function MessageBubble({ message, index, messageRef, fontFamily, openImageModal }) {
   const isUser = message.from === "user";
@@ -9,41 +10,25 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
   const isSending = isUser && message.status === "sending";
   const isError = isUser && message.status === "error";
 
-  // Helper function to determine text color based on background luminance
-  const getContrastTextColor = (hexColor) => {
-    if (!hexColor) return "#1a1a1a"; // Default dark text
-    let color = hexColor.startsWith("#") ? hexColor.slice(1) : hexColor;
-    if (color.length === 3) {
-      color = color[0] + color[0] + color[1] + color[1] + color[2] + color[2];
-    }
-    const r = parseInt(color.substring(0, 2), 16);
-    const g = parseInt(color.substring(2, 4), 16);
-    const b = parseInt(color.substring(4, 6), 16);
-    // YIQ formula for contrast
-    const yiq = (r * 299 + g * 587 + b * 114) / 1000;
-    return yiq >= 150 ? "#1a1a1a" : "#ffffff";
-  };
+  // Por esto:
+  let backgroundColor = "#f5f5f5";
+  let textColor = "#1a1a1a";
 
-  const backgroundColor = (() => {
-    if (isUser) {
-      if (isSending) return "#d6ecfc"; // Azul pastel muy claro (enviando)
-      if (isError) return "#fcd6d6"; // Rojo pastel claro (error)
-      return "#b3d4fc"; // Azul pastel (enviado)
-    }
-    if (isAI) return "#f0e6fa"; // Lila pastel muy suave
-    if (isAdmin) return "#e6f7e6"; // Verde pastel muy suave
-    return "#f5f5f5"; // Gris pastel claro por defecto
-  })();
+  if (isUser) {
+    if (isSending) backgroundColor = "#d6ecfc";
+    else if (isError) backgroundColor = "#fcd6d6";
+    else backgroundColor = "#b8d0ecff";
+    textColor = "#1a1a1a"; // texto de usuario siempre oscuro
+  } else if (isAI || isAdmin) {
+    const colors = generateColor(message.id || message.tempId);
+    backgroundColor = colors.backgroundColor;
+    textColor = colors.textColor;
+  }
 
   const containerStyle = {
     alignSelf: isUser ? "flex-end" : "flex-start",
-
-    // 🎨 Colores de la burbuja según el estado y remitente
     backgroundColor,
-
-    // 👤 Color del texto
-    color: getContrastTextColor(backgroundColor),
-
+    color: textColor,
     padding: "10px",
     borderRadius: "12px",
     maxWidth: "62%",
@@ -55,17 +40,17 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
     display: "flex",
     flexDirection: "column",
     boxSizing: "border-box",
-
-    // 🔄 Opacidad para estado "sending"
     opacity: isSending ? 0.6 : 1,
   };
 
-  // 2. Log para inspección como solicitaste
-  console.log(
-    `[MessageBubble #${index}]`,
-    { from: message.from, status: message.status },
-    { backgroundColor: containerStyle.backgroundColor, color: containerStyle.color }
-  );
+  // 🔹 Log cada vez que renderiza este bubble
+  useEffect(() => {
+    console.log(
+      `[MessageBubble Render #${index}]`,
+      { from: message.from, status: message.status, text: message.text },
+      { backgroundColor: containerStyle.backgroundColor, color: containerStyle.color }
+    );
+  }, [message, index, containerStyle.backgroundColor, containerStyle.color]);
 
   const renderImages = (images) =>
     images?.slice(0, 4).map((img, i) => {
@@ -261,8 +246,10 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
 
 MessageBubble.propTypes = {
   message: PropTypes.shape({
+    id: PropTypes.string,
+    tempId: PropTypes.string,
     from: PropTypes.string,
-    status: PropTypes.string, // 'sending', 'sent', 'error'
+    status: PropTypes.string,
     text: PropTypes.string,
     timestamp: PropTypes.string,
     file: PropTypes.shape({
