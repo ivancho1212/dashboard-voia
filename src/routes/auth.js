@@ -14,7 +14,7 @@ const authRoutes = [
     key: "sign-in",
     route: "/authentication/sign-in",
     icon: <FaLock size="12px" />,  // Usando FaLock
-    component: <SignIn />,
+    component: SignIn,
     noCollapse: true,
   },
   {
@@ -23,7 +23,7 @@ const authRoutes = [
     key: "sign-up",
     route: "/authentication/sign-up",
     icon: <FaUserEdit size="12px" />,  // Usando FaUserEdit
-    component: <SignUp />,
+    component: SignUp,
     noCollapse: true,
   },
 ];

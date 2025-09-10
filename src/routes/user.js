@@ -29,7 +29,7 @@ const userRoutes = [
     key: "user-profile",
     route: "/profile", // Ruta base actualizada
     icon: <FaUserCircle size={14} />,
-    component: <UserProfile />, // Ahora apunta a 'layouts/profile'
+    component: UserProfile,
     noCollapse: true,
   },
   {
@@ -38,7 +38,7 @@ const userRoutes = [
     key: "user-consents",
     route: "/profile/consents", // Ruta actualizada
     icon: <FaFileSignature size={14} />,
-    component: <Consents />, // Ahora apunta a 'layouts/profile/consents'
+    component: Consents, // Ahora apunta a 'layouts/profile/consents'
     noCollapse: true,
   },
   {
@@ -47,7 +47,7 @@ const userRoutes = [
     key: "admin-user-panel",
     route: "/admin/users",
     icon: <FaUsers size={14} />,
-    component: <AdminUserPanel />,
+    component: AdminUserPanel,   // 👈 sin <>
     noCollapse: true,
   },
   {
@@ -55,7 +55,7 @@ const userRoutes = [
     key: "user-management",
     route: "/admin/users/info",
     icon: <FaUserCircle size={14} />,
-    component: <UserProfileList />,
+    component: UserProfileList,  // 👈 sin <>
     noCollapse: true,
   },
   {
@@ -63,7 +63,7 @@ const userRoutes = [
     key: "bots-associated",
     route: "/admin/users/bots",
     icon: <FaRobot size={14} />,
-    component: <BotsAssociated />,
+    component: BotsAssociated,
     noCollapse: true,
   },
   {
@@ -71,7 +71,7 @@ const userRoutes = [
     key: "user-plan-suscriptions",
     route: "/admin/users/planSuscripcion",
     icon: <FaFileInvoiceDollar size={14} />,
-    component: <PlanSuscriptionList />,
+    component: PlanSuscriptionList,
     noCollapse: true,
   },
   {
@@ -79,7 +79,7 @@ const userRoutes = [
     key: "user-tokens",
     route: "/admin/users/tokens",
     icon: <FaCoins size={14} />, // o cualquier icono que quieras usar
-    component: <Tokens />, // importado desde src/layouts/user/tokens/index.js
+    component: Tokens, // importado desde src/layouts/user/tokens/index.js
     noCollapse: true,
   },
   {
@@ -87,7 +87,7 @@ const userRoutes = [
     key: "user-pagos",
     route: "/admin/users/pagos",
     icon: <FaCreditCard size={14} />,
-    component: <Pagos />,
+    component: Pagos,
     noCollapse: true,
   },
 ];

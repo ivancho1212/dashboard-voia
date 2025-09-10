@@ -15,7 +15,7 @@ const configRoutes = [
     key: "config-ai-models",
     route: "/config/ai-models",
     icon: <FaBrain size={14} />,
-    component: <AIModels />,
+    component: AIModels,
     noCollapse: true,
   },
 

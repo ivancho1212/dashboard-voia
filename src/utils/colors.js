@@ -6,19 +6,21 @@ export const generateColor = (id) => {
     hash = str.charCodeAt(i) + ((hash << 5) - hash);
   }
 
-  const h = hash % 360;
-  const saturation = 35 + (hash % 20); // 35% - 55%
-  const lightness = 75 + (hash % 10);  // 75% - 85%
+  const h = Math.abs(hash) % 360;
+
+  // Pasteles suaves: saturación baja/moderada, luminosidad alta
+  const saturation = 30 + (Math.abs(hash) % 20); // 30% - 50%
+  const lightness = 75 + (Math.abs(hash) % 15); // 75% - 90%
 
   const backgroundColor = `hsl(${h}, ${saturation}%, ${lightness}%)`;
 
-  // ⚡ Contraste: calcular color de texto según luminosidad
-  // Si es muy claro, texto negro; si es medio, gris oscuro; si es muy oscuro, blanco
-  const textColor = lightness > 80
-    ? "#111"         // negro oscuro para fondos muy claros
-    : lightness > 70
-      ? "#333"       // gris oscuro para fondos medios
-      : "#fff";      // blanco para fondos oscuros (aunque en pastel difícil)
+  // Contraste más amigable:
+  // Si es muy claro (>=85%), texto gris oscuro
+  // Si es claro-medio (75-85%), texto blanco
+  // Si es medio-oscuro (<75%), texto blanco
+  let textColor;
+  if (lightness >= 85) textColor = "#444"; // gris oscuro
+  else textColor = "#fff"; // blanco para la mayoría de pasteles
 
   return { backgroundColor, textColor };
 };

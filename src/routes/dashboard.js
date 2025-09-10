@@ -13,7 +13,7 @@ const dashboardRoutes = [
     key: "dashboard",
     route: "/dashboard",
     icon: <SpaceShipIcon size="12px" />,
-    component: <Dashboard />,
+    component: Dashboard,
     noCollapse: true,
   },
 ];

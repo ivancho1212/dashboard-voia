@@ -48,9 +48,10 @@ function WidgetFrame() {
       <ChatWidget
         botId={botId}
         userId={userId}
-        style={styleConfig || {}}
-        isDemo={!styleConfig}
+        style={styleConfig || {}}   // 👈 aquí pasas todo el objeto
+        isDemo={!styleConfig}       // ✅ bool válido
       />
+
     </div>
   );
 }

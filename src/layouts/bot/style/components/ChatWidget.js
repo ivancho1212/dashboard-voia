@@ -49,14 +49,40 @@ function ChatWidget({
 
   // Move isOpen to the top so it's available for all hooks
   const [isOpen, setIsOpen] = useState(false);
-  const [botStyle, setBotStyle] = useState(null);
-  const [isDemo, setIsDemo] = useState(initialDemo);
+  const [botStyle, setBotStyle] = useState(style || null);
+  const [isDemo, setIsDemo] = useState(!style);
   const [botContext, setBotContext] = useState(null);
   const [messages, setMessages] = useState([]);
   const [isBotReady, setIsBotReady] = useState(false);
   const [promptSent, setPromptSent] = useState(false);
   const promptSentRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
+  // Para animación del mensaje de debug
+  const [connectionStatus, setConnectionStatus] = useState("desconocido");
+
+  const [showConnectionDebug, setShowConnectionDebug] = useState(false);
+  const previousConnectionStatusRef = useRef(connectionStatus);
+  const nodeRef = useRef(null);
+  // Estado de debug
+  useEffect(() => {
+    if (connectionStatus !== previousConnectionStatusRef.current) {
+      // Mostrar mensaje temporal al cambiar el estado
+      setShowConnectionDebug(true);
+
+      const timeout = setTimeout(() => setShowConnectionDebug(false), 3000);
+
+      previousConnectionStatusRef.current = connectionStatus;
+      return () => clearTimeout(timeout);
+    }
+  }, [connectionStatus]);
+
+  const pastelColors = {
+    conectado: "#b3e5fc",     // azul pastel actual
+    reconectando: "#fff9c4",  // amarillo pastel
+    error: "#ffcdd2",         // rosa pastel
+    desconectado: "#ffcc80",  // naranja pastel
+    conectadoVerde: "#b9fbc0" // verde pastel que quieres usar
+  };
 
   useEffect(() => {
     const fetchBotStyleAndContext = async () => {
@@ -64,13 +90,9 @@ function ChatWidget({
         // 🔹 Estilos
         const res = await fetch(`http://localhost:5006/api/Bots/${botId}`);
         const data = await res.json();
-        if (data.style) {
+        if (!style && data.style) {
           setBotStyle(data.style);
-          - setIsDemo(false);
-          console.log("✅ Estilos cargados del backend:", data.style);
-        } else {
-          console.warn("⚠️ Este bot no tiene estilos definidos, se usará demo.");
-          - setIsDemo(true);
+          setIsDemo(false);
         }
 
 
@@ -132,6 +154,30 @@ function ChatWidget({
 
     fetchBotStyleAndContext();
   }, [botId]);
+
+  // 🔹 Escuchar cambios de estado de la conexión
+  useEffect(() => {
+    const connection = connectionRef.current;
+    if (!connection) return;
+
+    const handleReconnecting = () => setConnectionStatus("reconectando...");
+    const handleReconnected = () => setConnectionStatus("conectado a SignalR");
+    const handleClosed = () => setConnectionStatus("desconectado");
+
+    // Suscribir eventos
+    connection.onreconnecting(handleReconnecting);
+    connection.onreconnected(handleReconnected);
+    connection.onclose(handleClosed);
+
+    return () => {
+      // ❌ Antes: connection.offreconnecting(...)
+      // ✅ Ahora se usa connection.off("eventName", handler)
+      connection.off("reconnecting", handleReconnecting);
+      connection.off("reconnected", handleReconnected);
+      connection.off("close", handleClosed);
+    };
+  }, [connectionRef.current]);
+
 
   // Mostrar TypingDots y mensaje de bienvenida solo al abrir el widget
   useEffect(() => {
@@ -332,26 +378,27 @@ function ChatWidget({
   const typingRef = useRef(null);
 
   const saveConversationCache = (convId, msgs) => {
-    if (!convId || !msgs || msgs.length === 0) return;
+    if (!convId || !msgs?.length) return;
 
-    // 🔹 Solo mensajes confirmados
     const confirmedMessages = msgs.filter(m => m.id && m.status === "sent");
-    if (confirmedMessages.length === 0) return;
+    if (!confirmedMessages.length) return;
 
     const existing = loadConversationCache();
-    let mergedMessages = confirmedMessages;
+    let mergedMessages;
 
     if (existing && existing.conversationId === convId) {
       const map = new Map();
-      // 🔹 Fusionar mensajes existentes + confirmados y mantener color
       [...existing.messages, ...confirmedMessages].forEach(m => {
         const key = m.id ?? m.tempId;
-        if (!m.color) m.color = generateColor(key);
-        map.set(key, m);
+        const withColor = { ...m, color: m.color ?? generateColor(key) }; // ✅ no se muta
+        map.set(key, withColor);
       });
       mergedMessages = Array.from(map.values());
     } else {
-      mergedMessages = confirmedMessages.map(m => ({ ...m, color: m.color ?? generateColor(m.id ?? m.tempId) }));
+      mergedMessages = confirmedMessages.map(m => ({
+        ...m,
+        color: m.color ?? generateColor(m.id ?? m.tempId),
+      }));
     }
 
     localStorage.setItem(
@@ -391,7 +438,7 @@ function ChatWidget({
   };
 
   useEffect(() => {
-    if (isDemo || !isOpen) {
+    if (!isOpen) { // 🔹 solo bloquear si el chat no está abierto
       if (connectionRef.current) {
         connectionRef.current.stop();
         connectionRef.current = null;
@@ -429,11 +476,15 @@ function ChatWidget({
 
         typingTimeoutRef.current = setTimeout(() => {
           setMessages(prev => {
-            const all = [...prev, newMessage];
+            const all = [...prev, newMessage].filter(Boolean); // ✅ filtramos nulos
             const map = new Map();
-            all.forEach(m => map.set(m.id ?? m.tempId, m));
+            all.forEach(m => {
+              const key = m.id ?? m.tempId ?? uuidv4(); // ✅ garantizamos key
+              map.set(key, { ...m, color: m.color ?? generateColor(key) }); // ✅ garantizamos estructura
+            });
             return Array.from(map.values());
           });
+
 
           setIsTyping(false);
           setTypingSender(null);
@@ -449,26 +500,39 @@ function ChatWidget({
     };
 
     const initConnection = async () => {
-      if (!connectionRef.current) {
-        console.log("🟡 Inicializando chat vía servicio:", { botId, userId });
+      if (isDemo) return;
 
-        const conversationId = await createConversation(userId, botId);
-        if (!conversationId) {
-          setIsConnected(false);
-          return;
-        }
+      if (connectionRef.current) return;
 
-        const connection = createHubConnection(conversationId);
+      console.log("🟡 Inicializando chat vía servicio:", { botId, userId });
+
+      let conversationId;
+      try {
+        conversationId = await createConversation(userId, botId);
+        if (!conversationId) throw new Error("No se recibió conversationId");
+      } catch (err) {
+        console.error("❌ Error creando conversación:", err);
+        setConnectionStatus("fallida");
+        setIsConnected(false);
+        return;
+      }
+
+      conversationIdRef.current = conversationId;
+      setConversationId(conversationId);
+
+      let connection;
+      try {
+        connection = createHubConnection(conversationId);
         await connection.start();
-
-        connection.on("ReceiveMessage", handleReceiveMessage);
-
-        connectionRef.current = connection;
-        conversationIdRef.current = conversationId;
-        setConversationId(conversationId);
+        setConnectionStatus("conectado a SignalR");
         setIsConnected(true);
-
+        connection.on("ReceiveMessage", handleReceiveMessage);
+        connectionRef.current = connection;
         console.log("✅ Conexión lista con convId:", conversationId);
+      } catch (err) {
+        console.error("❌ Error iniciando SignalR:", err);
+        setConnectionStatus("error en SignalR");
+        setIsConnected(false);
       }
     };
 
@@ -542,7 +606,8 @@ function ChatWidget({
       return;
     }
 
-    if (!message.trim()) return;
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) return;
 
     if (isDemo) {
       // Mantener el código de demo sin cambios
@@ -551,7 +616,7 @@ function ChatWidget({
     }
 
     const connection = connectionRef.current;
-    const convId = conversationIdRef.current; // ✅ usamos el ref, no el estado
+    const convId = conversationIdRef.current; // ✅ usamos el ref
 
     // Esperar hasta que la conexión y convId estén listos (máx 10 intentos)
     let retries = 0;
@@ -570,7 +635,7 @@ function ChatWidget({
           id: tempId,
           tempId,
           from: "user",
-          text: message,
+          text: trimmedMessage,
           status: "error",
           timestamp: new Date().toISOString()
         }
@@ -585,7 +650,7 @@ function ChatWidget({
       id: tempId,
       tempId,
       from: "user",
-      text: message,
+      text: trimmedMessage,
       status: "sending",
       timestamp: new Date().toISOString()
     });
@@ -597,9 +662,7 @@ function ChatWidget({
       return Array.from(map.values());
     });
 
-    const currentMessage = message;
     setMessage("");
-
     setTypingSender("ai");
     setIsTyping(true);
 
@@ -607,8 +670,8 @@ function ChatWidget({
       const payload = {
         botId,
         userId,
-        question: currentMessage.trim(),
-        text: currentMessage.trim(),
+        question: trimmedMessage,
+        text: trimmedMessage,
         tempId,
         modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
         temperature: botContext?.settings?.temperature || 0.7,
@@ -617,23 +680,33 @@ function ChatWidget({
 
       console.log("📤 Enviando payload a la IA:", payload);
 
-      // --- Enviar a través de SignalR ---
       await connection.invoke("SendMessage", convId, payload);
 
+      // Marcar que el prompt inicial se envió
       if (!promptSent) {
         setPromptSent(true);
         promptSentRef.current = true;
       }
+
+      // Actualizar mensaje a "sent"
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === tempId ? { ...m, status: "sent" } : m
+        )
+      );
+
     } catch (err) {
-      console.error("❌ Error en el flujo de envío de mensaje:", err);
+      console.error("❌ Error enviando mensaje:", err);
       setMessages(prev =>
         prev.map(m =>
           m.id === tempId ? { ...m, status: "error" } : m
         )
       );
+    } finally {
+      setIsTyping(false);
+      setTypingSender(null);
     }
   };
-
 
   const isColorDark = (hexColor) => {
     if (!hexColor) return false;
@@ -807,8 +880,13 @@ function ChatWidget({
     };
   }, [isDemo, isOpen]);
 
-  const isInputDisabled = isDemo || !conversationId;
+  useEffect(() => {
+    if (botStyle || style) {
+      setIsDemo(false);
+    }
+  }, [botStyle, style]);
 
+  const isInputDisabled = !isDemo && (!conversationId && connectionStatus !== "fallida");
 
   return (
     <div style={wrapperStyle}>
@@ -920,20 +998,79 @@ function ChatWidget({
               ✕
             </button>
           </div>
+          <TransitionGroup>
+            {(showConnectionDebug || connectionStatus === "desconectado") && (
+              <CSSTransition
+                key={connectionStatus}
+                timeout={300}
+                nodeRef={nodeRef} // 🔹 ref estable
+                onEnter={() => {
+                  const node = nodeRef.current;
+                  if (!node) return;
+                  node.style.opacity = 0;
+                  node.style.transform = "translateY(-5px)";
+                  requestAnimationFrame(() => {
+                    node.style.transition = "all 0.3s ease";
+                    node.style.opacity = 1;
+                    node.style.transform = "translateY(0)";
+                  });
+                }}
+                onExit={() => {
+                  const node = nodeRef.current;
+                  if (!node) return;
+                  node.style.opacity = 1;
+                  node.style.transform = "translateY(0)";
+                  requestAnimationFrame(() => {
+                    node.style.transition = "all 0.3s ease";
+                    node.style.opacity = 0;
+                    node.style.transform = "translateY(-5px)";
+                  });
+                }}
+              >
+                <div
+                  ref={nodeRef}
+                  style={{
+                    fontSize: "12px",
+                    color: "#000",
+                    backgroundColor:
+                      connectionStatus === "conectado a SignalR"
+                        ? pastelColors.conectadoVerde
+                        : connectionStatus.includes("reconectando")
+                          ? pastelColors.reconectando
+                          : connectionStatus.includes("error")
+                            ? pastelColors.error
+                            : pastelColors.desconectado,
+                    padding: "4px 8px",
+                    textAlign: "center",
+                    borderRadius: "6px",
+                    marginBottom: "4px",
+                  }}
+                >
+                  Estado de conexión: {connectionStatus}
+                </div>
+              </CSSTransition>
+            )}
+          </TransitionGroup>
+
+
           {iaWarning && (
             <div
               style={{
-                color: "white",
-                backgroundColor: "red",
+                color: "#333",
+                backgroundColor: "#ffe0b2",
                 padding: "10px",
                 textAlign: "center",
                 fontSize: "13px",
                 fontWeight: "500",
+                borderRadius: "6px",
+                marginBottom: "4px",
+                transition: "all 0.3s ease",
               }}
             >
               {iaWarning}
             </div>
           )}
+
 
           {/* 📜 Mensajes */}
           <div
@@ -999,7 +1136,7 @@ function ChatWidget({
             connectionRef={connectionRef}
             conversationId={conversationId}
             userId={userId}
-            isInputDisabled={!isConnected || isDemo} // 🔹 Deshabilitar si demo o sin conexión
+            isInputDisabled={!isConnected} // 🔹 Deshabilitar si demo o sin conexión
             allowImageUpload={effectiveStyle.allowImageUpload}
             allowFileUpload={effectiveStyle.allowFileUpload}
           />
@@ -1049,7 +1186,7 @@ ChatWidget.propTypes = {
 
   userId: PropTypes.number.isRequired,
   title: PropTypes.string,
-  theme: PropTypes.oneOf(["light", "dark", "custom"]).isRequired,
+  theme: PropTypes.oneOf(["light", "dark", "custom"]),
   primaryColor: PropTypes.string,
   secondaryColor: PropTypes.string,
   headerBackgroundColor: PropTypes.string,

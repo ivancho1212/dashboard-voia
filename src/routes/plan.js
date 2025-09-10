@@ -22,7 +22,7 @@ if (!userHasPlan) {
       key: "plans",
       route: "/plans",
       icon: <FaListAlt size={14} />,
-      component: <Plans />,
+      component: Plans,
       noCollapse: true,
     },
     {
@@ -31,7 +31,7 @@ if (!userHasPlan) {
       key: "plans-admin",
       route: "/admin/plans",
       icon: <FaTools size={14} />,
-      component: <PlansAdmin />,
+      component: PlansAdmin,
       noCollapse: true,
     }
   );
@@ -42,7 +42,7 @@ planRoutes.push({
   key: "plan-change",
   route: "/plans/change",
   name: "Cambiar de Plan",
-  component: <PlanChange />,
+  component: PlanChange,
 });
 
 export default planRoutes;

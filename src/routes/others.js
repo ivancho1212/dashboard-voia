@@ -14,7 +14,7 @@ const otherRoutes = [
     key: "documentation",
     route: "/documentation",
     icon: <FaBook size="12px" />,
-    component: <Documentation />,
+    component: Documentation,
     noCollapse: true,
   },
   {
@@ -23,7 +23,7 @@ const otherRoutes = [
     key: "notifications",
     route: "/notifications",
     icon: <FaBell size="12px" />,
-    component: <Notifications />,
+    component: Notifications,
     noCollapse: true,
   },
 ];

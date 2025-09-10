@@ -7,14 +7,14 @@ const legalRoutes = [
     name: "Términos y Condiciones",
     key: "terminos",
     route: "/terminos",
-    component: <Terminos />,
+    component: Terminos,
   },
   {
     type: "collapse",
     name: "Autorización de Datos de Entrenamiento",
     key: "autorizacion-datos",
     route: "/autorizacion-datos",
-    component: <AutorizacionDatos />,
+    component: AutorizacionDatos,
   },
 ];
 

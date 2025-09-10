@@ -30,7 +30,7 @@ const botRoutes = [
     key: "bots-list",
     route: "/bots",
     icon: <FaRobot size={14} />,
-    component: <BotsList />,
+    component: BotsList, // ✅ corregido
     noCollapse: true,
   },
   {
@@ -39,25 +39,25 @@ const botRoutes = [
     route: "/bots/training/:id",
     name: "Entrenamiento",
     icon: <FaBrain size={14} />,
-    component: <BotTraining />,
+    component: BotTraining, // ✅ corregido
     noCollapse: true,
   },
   {
     type: "collapse",
     name: "Datos Captados",
     key: "bot-captured-data",
-    route: "/bots/captured-data/:id", // ✅ IMPORTANTE: con :id
+    route: "/bots/captured-data/:id",
     icon: <FaClipboardList size={14} />,
-    component: <CapturedData />,
-    noCollapse: true // ← opcional, pero recomendable
-  },  
+    component: CapturedData, // ✅ corregido
+    noCollapse: true,
+  },
   {
     type: "collapse",
-    name: "Estilos", // Cambia esto si quieres mostrar solo "Estilos"
-    key: "bot-style", // clave única más descriptiva
-    route: "/bots/style/:id", // ← acepta un ID
+    name: "Estilos",
+    key: "bot-style",
+    route: "/bots/style/:id",
     icon: <FaPalette size={14} />,
-    component: <BotStyle />, // renómbralo si vas a cambiar el nombre del componente también
+    component: BotStyle, // ✅ corregido
     noCollapse: true,
   },
   {
@@ -66,7 +66,7 @@ const botRoutes = [
     route: "/bots/integration",
     name: "Integración",
     icon: <FaPlug size={14} />,
-    component: <BotIntegration />,
+    component: BotIntegration, // ✅ corregido
   },
   {
     type: "collapse",
@@ -74,7 +74,7 @@ const botRoutes = [
     key: "bots-admin",
     route: "/admin/bots",
     icon: <FaCogs size={14} />,
-    component: <BotsAdmin />,
+    component: BotsAdmin, // ✅ corregido
     noCollapse: true,
   },
   {
@@ -82,14 +82,14 @@ const botRoutes = [
     route: "/bots/preview",
     name: "Vista previa del Bot",
     icon: <FaEye size={14} />,
-    component: <BotPreview />,
+    component: BotPreview, // ✅ corregido
   },
   {
     key: "bot-usage-logs",
     route: "/bots/usage-logs",
     name: "Historial de uso del Bot",
     icon: <FaHistory size={14} />,
-    component: <BotUsageLogs />,
+    component: BotUsageLogs, // ✅ corregido
   },
 ];
 

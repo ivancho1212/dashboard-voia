@@ -20,7 +20,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
     else backgroundColor = "#b8d0ecff";
     textColor = "#1a1a1a"; // texto de usuario siempre oscuro
   } else if (isAI || isAdmin) {
-    const colors = generateColor(message.id || message.tempId);
+    const colors = generateColor((message.id || message.tempId).toString());
     backgroundColor = colors.backgroundColor;
     textColor = colors.textColor;
   }
@@ -246,7 +246,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
 
 MessageBubble.propTypes = {
   message: PropTypes.shape({
-    id: PropTypes.string,
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     tempId: PropTypes.string,
     from: PropTypes.string,
     status: PropTypes.string,

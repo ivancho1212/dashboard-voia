@@ -13,7 +13,7 @@ const billingRoutes = [
     key: "billing",
     route: "/billing",
     icon: <FaMoneyBillWave size={14} />,
-    component: <Billing />,
+    component: Billing,
     noCollapse: true,
   },
 ];

@@ -15,7 +15,7 @@ const dataRoutes = [
     key: "data-conversations",
     route: "/data/conversations",
     icon: <FaComments size={14} />,
-    component: <Conversations />,
+    component: Conversations,
     noCollapse: true,
   },
   {
@@ -24,7 +24,7 @@ const dataRoutes = [
     key: "data-documents",
     route: "/data/documents",
     icon: <FaFileAlt size={14} />,
-    component: <Documents />,
+    component: Documents,
     noCollapse: true,
   },
   {
@@ -33,7 +33,7 @@ const dataRoutes = [
     key: "data-resources",
     route: "/data/resources",
     icon: <FaFolderOpen size={14} />,
-    component: <Resources />,
+    component: Resources,
     noCollapse: true,
   },
 ];
