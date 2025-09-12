@@ -1,26 +1,42 @@
-// src/utils/colors.js
-export const generateColor = (id) => {
-  let hash = 0;
-  const str = id?.toString() || Math.random().toString();
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+const COMPATIBLE_COLORS = [
+  "#ffe9d6ff", // durazno
+  "#bcf1bcff", // verde pastel
+  "#ffd4dcff", // rosa claro
+  "#FFFACD", // amarillo claro
+  "#E6E6FA", // lavanda
+  "#c2e1e6ff", // azul pastel distinto
+  "#fcedd3ff", // trigo pastel
+  "#e0cfe0ff", // lila
+];
+
+function getTextColor(bgColor) {
+  const r = parseInt(bgColor.substr(1, 2), 16);
+  const g = parseInt(bgColor.substr(3, 2), 16);
+  const b = parseInt(bgColor.substr(5, 2), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  if (luminance > 0.8) return "#111";
+  if (luminance > 0.6) return "#333";
+  if (luminance > 0.4) return "#555";
+  return "#fff";
+}
+
+const senderColors = {}; // 🔹 cache por remitente
+
+export const getSenderColor = (sender) => {
+  // Usuario → color fijo
+  if (sender === "user") {
+    return { backgroundColor: "#b8d0ecff", textColor: "#111" };
   }
 
-  const h = Math.abs(hash) % 360;
+  // Si ya tiene color, devolverlo
+  if (senderColors[sender]) return senderColors[sender];
 
-  // Pasteles suaves: saturación baja/moderada, luminosidad alta
-  const saturation = 30 + (Math.abs(hash) % 20); // 30% - 50%
-  const lightness = 75 + (Math.abs(hash) % 15); // 75% - 90%
+  // Sino, generar uno y guardarlo
+  const index = Math.floor(Math.random() * COMPATIBLE_COLORS.length);
+  const backgroundColor = COMPATIBLE_COLORS[index];
+  const textColor = getTextColor(backgroundColor);
 
-  const backgroundColor = `hsl(${h}, ${saturation}%, ${lightness}%)`;
-
-  // Contraste más amigable:
-  // Si es muy claro (>=85%), texto gris oscuro
-  // Si es claro-medio (75-85%), texto blanco
-  // Si es medio-oscuro (<75%), texto blanco
-  let textColor;
-  if (lightness >= 85) textColor = "#444"; // gris oscuro
-  else textColor = "#fff"; // blanco para la mayoría de pasteles
-
-  return { backgroundColor, textColor };
+  senderColors[sender] = { backgroundColor, textColor };
+  return senderColors[sender];
 };

@@ -19,8 +19,8 @@ function BotPreview({ templates, onSelectTemplate }) {
 }
 
 BotPreview.propTypes = {
-  templates: PropTypes.array.isRequired,
-  onSelectTemplate: PropTypes.func.isRequired,
+  templates: PropTypes.array,
+  onSelectTemplate: PropTypes.func, // Ahora es opcional
 };
 
 export default BotPreview;

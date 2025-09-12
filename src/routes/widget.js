@@ -5,7 +5,7 @@ const widgetRoutes = [
     key: "widget-frame",
     route: "/widget-frame",
     name: "WidgetFrame",
-    component: <WidgetFrame />,
+    component: WidgetFrame,
   },
 ];
 

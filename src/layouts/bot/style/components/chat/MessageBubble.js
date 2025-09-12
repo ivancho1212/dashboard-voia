@@ -1,11 +1,11 @@
 import React, { useEffect } from "react";
 import PropTypes from "prop-types";
 import { FaClock, FaExclamationCircle } from "react-icons/fa";
-import { generateColor } from "../../../../../utils/colors";
+import { getSenderColor } from "utils/colors";
 
 function MessageBubble({ message, index, messageRef, fontFamily, openImageModal }) {
   const isUser = message.from === "user";
-  const isAI = message.from === "ai";
+  const isAI = message.from === "ai" || message.from === "bot";
   const isAdmin = message.from === "admin";
   const isSending = isUser && message.status === "sending";
   const isError = isUser && message.status === "error";
@@ -20,9 +20,9 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
     else backgroundColor = "#b8d0ecff";
     textColor = "#1a1a1a"; // texto de usuario siempre oscuro
   } else if (isAI || isAdmin) {
-    const colors = generateColor((message.id || message.tempId).toString());
-    backgroundColor = colors.backgroundColor;
-    textColor = colors.textColor;
+    const { backgroundColor: bg, textColor: tc } = getSenderColor(message.from);
+    backgroundColor = bg;
+    textColor = tc;
   }
 
   const containerStyle = {
@@ -247,7 +247,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
 MessageBubble.propTypes = {
   message: PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
-    tempId: PropTypes.string,
+    tempId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     from: PropTypes.string,
     status: PropTypes.string,
     text: PropTypes.string,

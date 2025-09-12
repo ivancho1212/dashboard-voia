@@ -1,4 +1,4 @@
-import { TransitionGroup, CSSTransition } from "react-transition-group";
+import { CSSTransition, SwitchTransition } from "react-transition-group";
 import React, { useState, useEffect, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
@@ -11,7 +11,7 @@ import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
 import { getBotContext } from "services/botService";
 import { createConversation } from "services/chatService";
-import { generateColor } from "../../../../utils/colors";
+import { getSenderColor } from "../../../../utils/colors";
 
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
@@ -23,14 +23,14 @@ const normalizeMessage = (msg) => {
     ...msg,
     id,
     tempId: msg.tempId ?? id,
-    status: msg.status ?? "sent",
-    from: msg.from ?? (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "ai"),
+    status: msg.status ?? "sent", // ✅ Normaliza el estado
+    from: msg.from ?? (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "bot"),
     text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
     file: msg.file ?? null,
     multipleFiles: msg.multipleFiles ?? msg.files ?? [],
     images: msg.images ?? msg.imageGroup ?? [],
     timestamp: msg.timestamp ?? new Date().toISOString(),
-    color: msg.color ?? generateColor(id),
+    color: msg.color ?? getSenderColor(msg.from),
     uniqueKey: id, // 🔹 clave persistente para eliminar duplicados
   };
 };
@@ -160,24 +160,33 @@ function ChatWidget({
     const connection = connectionRef.current;
     if (!connection) return;
 
-    const handleReconnecting = () => setConnectionStatus("reconectando...");
-    const handleReconnected = () => setConnectionStatus("conectado a SignalR");
-    const handleClosed = () => setConnectionStatus("desconectado");
+    const handleReconnecting = () => {
+      setConnectionStatus("reconectando...");
+      setShowConnectionDebug(true);
+    };
 
-    // Suscribir eventos
+    const handleReconnected = () => {
+      setConnectionStatus("conectado");
+      setShowConnectionDebug(true);
+      // 🔹 ocultar después de 2s
+      setTimeout(() => setShowConnectionDebug(false), 2000);
+    };
+
+    const handleClosed = () => {
+      setConnectionStatus("desconectado");
+      setShowConnectionDebug(true);
+    };
+
     connection.onreconnecting(handleReconnecting);
     connection.onreconnected(handleReconnected);
     connection.onclose(handleClosed);
 
     return () => {
-      // ❌ Antes: connection.offreconnecting(...)
-      // ✅ Ahora se usa connection.off("eventName", handler)
       connection.off("reconnecting", handleReconnecting);
       connection.off("reconnected", handleReconnected);
       connection.off("close", handleClosed);
     };
   }, [connectionRef.current]);
-
 
   // Mostrar TypingDots y mensaje de bienvenida solo al abrir el widget
   useEffect(() => {
@@ -188,7 +197,7 @@ function ChatWidget({
     const hasWelcome = messages.some(m => m.id === welcomeId);
 
     if (!hasWelcome) {
-      setTypingSender("ai");
+      setTypingSender("bot");
       setIsTyping(true);
 
       const welcomeMsg = {
@@ -390,14 +399,14 @@ function ChatWidget({
       const map = new Map();
       [...existing.messages, ...confirmedMessages].forEach(m => {
         const key = m.id ?? m.tempId;
-        const withColor = { ...m, color: m.color ?? generateColor(key) }; // ✅ no se muta
+        const withColor = { ...m, color: m.color ?? getSenderColor(m.from) };
         map.set(key, withColor);
       });
       mergedMessages = Array.from(map.values());
     } else {
       mergedMessages = confirmedMessages.map(m => ({
         ...m,
-        color: m.color ?? generateColor(m.id ?? m.tempId),
+        color: m.color ?? getSenderColor(m.from),
       }));
     }
 
@@ -450,53 +459,32 @@ function ChatWidget({
       console.log("📩 Mensaje recibido:", msg);
 
       const newMessage = normalizeMessage(msg);
-      if (!newMessage.color) newMessage.color = generateColor(newMessage.id);
+      if (!newMessage.color) newMessage.color = getSenderColor(newMessage.from);
 
       // Confirmación optimista
-      if (newMessage.tempId && newMessage.from === "user") {
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === newMessage.tempId ? { ...newMessage, status: "sent" } : m
-          )
-        );
-        return;
-      }
+      setMessages(prev => {
+        const map = new Map(prev.map(m => [m.uniqueKey, m]));
 
-      if (newMessage.from !== "user") {
-        // Simulación typing
-        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        // Si es una confirmación de un mensaje de usuario, actualízalo.
+        if (newMessage.tempId && newMessage.from === "user") {
+          const existingMsg = Array.from(map.values()).find(m => m.tempId === newMessage.tempId);
+          if (existingMsg) {
+            map.set(existingMsg.uniqueKey, { ...existingMsg, ...newMessage, status: "sent" });
+          } else {
+            map.set(newMessage.uniqueKey, newMessage);
+          }
+        } else {
+          // Si es un mensaje nuevo (del bot, admin, etc.), simplemente añádelo.
+          map.set(newMessage.uniqueKey, newMessage);
+        }
 
-        setTypingSender(newMessage.from === "bot" ? "ai" : newMessage.from);
-        setIsTyping(true);
-
-        const typingDelay = Math.min(
-          3000,
-          500 + (newMessage.text?.length || 0) * 50
-        );
-
-        typingTimeoutRef.current = setTimeout(() => {
-          setMessages(prev => {
-            const all = [...prev, newMessage].filter(Boolean); // ✅ filtramos nulos
-            const map = new Map();
-            all.forEach(m => {
-              const key = m.id ?? m.tempId ?? uuidv4(); // ✅ garantizamos key
-              map.set(key, { ...m, color: m.color ?? generateColor(key) }); // ✅ garantizamos estructura
-            });
-            return Array.from(map.values());
-          });
-
-
+        // Apagar el "escribiendo..." justo cuando llega el mensaje del bot/admin
+        if (newMessage.from !== "user") {
           setIsTyping(false);
           setTypingSender(null);
-        }, typingDelay);
-      } else {
-        setMessages(prev => {
-          const all = [...prev, newMessage];
-          const map = new Map();
-          all.forEach(m => map.set(m.id ?? m.tempId, m));
-          return Array.from(map.values());
-        });
-      }
+        }
+        return Array.from(map.values());
+      });
     };
 
     const initConnection = async () => {
@@ -524,7 +512,7 @@ function ChatWidget({
       try {
         connection = createHubConnection(conversationId);
         await connection.start();
-        setConnectionStatus("conectado a SignalR");
+        setConnectionStatus("conectado");
         setIsConnected(true);
         connection.on("ReceiveMessage", handleReceiveMessage);
         connectionRef.current = connection;
@@ -568,8 +556,8 @@ function ChatWidget({
         console.error("❌ Error enviando heartbeat:", err);
         setIsBotReady(false); // Asegurarse de que no esté listo si falla
       }
-    };
-    sendHeartbeat();
+      };
+      sendHeartbeat();
     intervalId = setInterval(() => {
       if (!isUnmounted) sendHeartbeat();
     }, 30000);
@@ -663,7 +651,7 @@ function ChatWidget({
     });
 
     setMessage("");
-    setTypingSender("ai");
+    setTypingSender("bot");
     setIsTyping(true);
 
     try {
@@ -998,60 +986,79 @@ function ChatWidget({
               ✕
             </button>
           </div>
-          <TransitionGroup>
-            {(showConnectionDebug || connectionStatus === "desconectado") && (
-              <CSSTransition
-                key={connectionStatus}
-                timeout={300}
-                nodeRef={nodeRef} // 🔹 ref estable
-                onEnter={() => {
-                  const node = nodeRef.current;
-                  if (!node) return;
-                  node.style.opacity = 0;
-                  node.style.transform = "translateY(-5px)";
-                  requestAnimationFrame(() => {
-                    node.style.transition = "all 0.3s ease";
-                    node.style.opacity = 1;
-                    node.style.transform = "translateY(0)";
-                  });
-                }}
-                onExit={() => {
-                  const node = nodeRef.current;
-                  if (!node) return;
+          <SwitchTransition>
+            <CSSTransition
+              key={showConnectionDebug ? connectionStatus : "hidden"}
+              timeout={300}
+              nodeRef={nodeRef}
+              unmountOnExit
+              mountOnEnter
+              onEnter={() => {
+                const node = nodeRef.current;
+                if (!node) return;
+                node.style.opacity = 0;
+                node.style.transform = "translateY(-5px)";
+                requestAnimationFrame(() => {
+                  node.style.transition = "all 0.3s ease";
                   node.style.opacity = 1;
                   node.style.transform = "translateY(0)";
-                  requestAnimationFrame(() => {
-                    node.style.transition = "all 0.3s ease";
-                    node.style.opacity = 0;
-                    node.style.transform = "translateY(-5px)";
-                  });
-                }}
-              >
-                <div
-                  ref={nodeRef}
-                  style={{
-                    fontSize: "12px",
-                    color: "#000",
-                    backgroundColor:
-                      connectionStatus === "conectado a SignalR"
-                        ? pastelColors.conectadoVerde
-                        : connectionStatus.includes("reconectando")
-                          ? pastelColors.reconectando
-                          : connectionStatus.includes("error")
-                            ? pastelColors.error
-                            : pastelColors.desconectado,
-                    padding: "4px 8px",
-                    textAlign: "center",
-                    borderRadius: "6px",
-                    marginBottom: "4px",
-                  }}
-                >
-                  Estado de conexión: {connectionStatus}
-                </div>
-              </CSSTransition>
-            )}
-          </TransitionGroup>
+                });
+              }}
+              onExit={() => {
+                const node = nodeRef.current;
+                if (!node) return;
+                node.style.opacity = 1;
+                node.style.transform = "translateY(0)";
+                requestAnimationFrame(() => {
+                  node.style.transition = "all 0.3s ease";
+                  node.style.opacity = 0;
+                  node.style.transform = "translateY(-5px)";
+                });
+              }}
+            >
+              <div ref={nodeRef}>
+                {showConnectionDebug && (
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "#000",
+                      backgroundColor:
+                        connectionStatus === "conectado"
+                          ? pastelColors.conectadoVerde
+                          : connectionStatus.includes("reconectando")
+                            ? pastelColors.reconectando
+                            : connectionStatus.includes("error")
+                              ? pastelColors.error
+                              : pastelColors.desconectado,
+                      padding: "4px 8px",
+                      textAlign: "center",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Estado de conexión: {connectionStatus}
+                  </div>
+                )}
+              </div>
+            </CSSTransition>
+          </SwitchTransition>
 
+          {iaWarning && (
+            <div
+              style={{
+                color: "#333",
+                backgroundColor: "#ffe0b2",
+                padding: "10px",
+                textAlign: "center",
+                fontSize: "13px",
+                fontWeight: "500",
+                borderRadius: "6px",
+                marginBottom: "4px",
+                transition: "all 0.3s ease",
+              }}
+            >
+              {iaWarning}
+            </div>
+          )}
 
           {iaWarning && (
             <div
@@ -1086,7 +1093,7 @@ function ChatWidget({
             <div
               style={{
                 fontSize: "10.5px",
-                color: isColorDark(backgroundColor) ? "#e0e0e0" : "#333333",
+                color: isColorDark(backgroundColor) ? "#e0e0e0" : "#a3a0a0ff",
                 backgroundColor: isColorDark(backgroundColor)
                   ? "rgba(255, 255, 255, 0.07)"
                   : "rgba(0, 0, 0, 0.04)",

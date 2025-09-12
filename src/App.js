@@ -46,7 +46,6 @@ export default function App() {
   const { pathname } = useLocation();
   const isWidgetFrame = pathname === "/widget-frame";
 
-  // Detectar rutas landing
   const isLandingRoute =
     pathname === "/" ||
     pathname === "/via" ||
@@ -55,7 +54,6 @@ export default function App() {
     pathname === "/authentication/sign-in" ||
     pathname === "/authentication/sign-up";
 
-  // Layout según la ruta
   useEffect(() => {
     if (isLandingRoute) {
       setLayout(dispatch, "landing");
@@ -65,7 +63,6 @@ export default function App() {
     }
   }, [pathname, dispatch, isLandingRoute]);
 
-  // Cache RTL
   useMemo(() => {
     const cacheRtl = createCache({
       key: "rtl",
@@ -92,56 +89,57 @@ export default function App() {
 
   const handleConfiguratorOpen = () => setOpenConfigurator(dispatch, !openConfigurator);
 
-  // Dir attribute
   useEffect(() => {
     document.body.setAttribute("dir", direction);
   }, [direction]);
 
-  // NUEVO: Soporte rutas estilo Soft UI y estilo moderno
   const getRoutes = (allRoutes) =>
     allRoutes.flatMap((route, index) => {
-      // Si tiene colapsables
-      if (route.collapse) {
-        return getRoutes(route.collapse);
-      }
+      if (route.collapse) return getRoutes(route.collapse);
 
-      // Formato Soft UI Dashboard
+      // Soft UI Dashboard
       if (route.route && route.component) {
-        return (
-          <Route
-            exact
-            path={route.route}
-            element={route.component}
-            key={route.key || index}
-          />
-        );
+        const Component = route.component;
+        let element = null;
+
+        // Si es función, lo instanciamos
+        if (typeof Component === "function") {
+          element = <Component />;
+        }
+        // Si ya es JSX (objeto), lo usamos tal cual
+        else if (Component && typeof Component === "object") {
+          element = Component;
+        }
+
+        if (element) {
+          return <Route key={route.key || index} path={route.route} element={element} />;
+        }
+
+        return null;
       }
 
-      // Formato moderno con children
+
+      // Modern routes with children
       if (route.children) {
+        const ParentElement =
+          route.element && (typeof route.element === "function" ? <route.element /> : route.element);
+
         return (
-          <Route key={index} path={route.path} element={route.element}>
-            {route.children.map((child, idx) => (
-              <Route
-                key={idx}
-                index={child.index}
-                path={child.path}
-                element={child.element}
-              />
-            ))}
+          <Route key={index} path={route.path} element={ParentElement}>
+            {route.children.map((child, idx) => {
+              const ChildElement =
+                child.element && (typeof child.element === "function" ? <child.element /> : child.element);
+              return <Route key={idx} index={child.index} path={child.path} element={ChildElement} />;
+            })}
           </Route>
         );
       }
 
-      // Ruta simple moderna
-      if (route.path && route.element) {
-        return (
-          <Route
-            key={index}
-            path={route.path}
-            element={route.element}
-          />
-        );
+
+      // Simple modern route
+      if (route.path) {
+        const Elem = route.element && typeof route.element === "function" ? <route.element /> : null;
+        return <Route key={index} path={route.path} element={Elem} />;
       }
 
       return null;
@@ -185,7 +183,7 @@ export default function App() {
           <ThemeProvider theme={themeRTL}>
             <CssBaseline />
             <ScrollToTop />
-            {!isWidgetFrame && layout === "dashboard" && (
+            {!isWidgetFrame && layout === "dashboard" && !isLandingRoute && miniSidenav !== null && (
               <>
                 <Sidenav
                   color={sidenavColor}
@@ -198,6 +196,7 @@ export default function App() {
                 {configsButton}
               </>
             )}
+
             {!isWidgetFrame && layout === "vr" && <Configurator />}
             {commonRoutes}
           </ThemeProvider>
@@ -211,12 +210,13 @@ export default function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <ScrollToTop />
-        {!isWidgetFrame && layout === "dashboard" && (
+        {!isWidgetFrame && layout === "dashboard" && miniSidenav !== null && !isLandingRoute && (
           <>
             <Sidenav
               color={sidenavColor}
               brand={brand}
-              routes={routes}
+              brandName="VOIA"
+              routes={routes.filter(r => r.icon)} // filtramos routes sin icon
               onMouseEnter={handleOnMouseEnter}
               onMouseLeave={handleOnMouseLeave}
             />
@@ -224,6 +224,8 @@ export default function App() {
             {configsButton}
           </>
         )}
+
+
         {!isWidgetFrame && layout === "vr" && <Configurator />}
         {commonRoutes}
       </ThemeProvider>

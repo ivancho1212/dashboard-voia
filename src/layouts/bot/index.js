@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Grid from "@mui/material/Grid";
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -12,14 +11,10 @@ import BotPreview from "./preview";
 import { getAvailableBotTemplates } from "services/botTemplateService";
 
 function BotsDashboard() {
-  const [showCreate, setShowCreate] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const navigate = useNavigate(); // <--- esta línea es necesaria
-
-  const handleShowCreate = () => setShowCreate(true);
-  const handleCancelCreate = () => setShowCreate(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const loadTemplates = async () => {
@@ -46,14 +41,13 @@ function BotsDashboard() {
         {loading ? (
           <SoftTypography>Cargando plantillas...</SoftTypography>
         ) : (
-          <Grid item xs={12}>
-            <BotPreview
-              templates={templates}
-              onSelectTemplate={(template) => {
-                navigate(`/bots/training/${template.id}`);
-              }}
-            />
-          </Grid>
+          // Eliminamos el Grid innecesario ya que BotPreview ya es un Grid container
+          <BotPreview
+            templates={templates}
+            onSelectTemplate={(template) => {
+              navigate(`/bots/training/${template.id}`);
+            }}
+          />
         )}
       </SoftBox>
       <Footer />
