@@ -9,10 +9,10 @@ const MessageBubble = React.forwardRef(
 
     const backgroundColor =
       fromRole === "admin"
-        ? "#d0f0c0" // verde claro para admin
+        ? "#a7d9a7" // verde más visible para admin
         : fromRole === "bot"
-        ? "#cce5ff" // azul claro para bot
-        : "#f1f1f1"; // gris claro para user
+          ? "#cce5ff" // azul claro para bot
+          : "#f1f1f1"; // gris claro para user
 
     const formattedTime = timestamp
       ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -110,11 +110,17 @@ const MessageBubble = React.forwardRef(
           position: "relative",
         }}
       >
-        {!isRight && (
-          <div style={{ fontSize: "11px", fontWeight: "bold", marginBottom: "4px", color: "#555" }}>
-            {fromName || (fromRole === "user" ? "Usuario" : fromRole === "bot" ? "Bot" : "Admin")}
-          </div>
-        )}
+        <div
+          style={{
+            fontSize: "11px",
+            fontWeight: "bold",
+            marginBottom: "4px",
+            color: "#555",
+            textAlign: isRight ? "right" : "left",
+          }}
+        >
+          {fromName || (fromRole === "user" ? "Usuario" : fromRole === "bot" ? "Bot" : "Admin")}
+        </div>
 
         {replyTo && (
           <div
@@ -365,7 +371,15 @@ const MessageBubble = React.forwardRef(
             );
           })}
 
-  {text && <div>{text}</div>}
+        {text ? (
+          <div>{text}</div>
+        ) : (
+          files.length === 0 && (
+            <div style={{ fontStyle: "italic", color: "#888" }}>
+              [Mensaje vacío]
+            </div>
+          )
+        )}
 
         <div style={{ fontSize: "10px", color: "#555", marginTop: "0.2px", textAlign: "right" }}>
           {formattedTime}

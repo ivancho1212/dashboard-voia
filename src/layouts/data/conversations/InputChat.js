@@ -1,19 +1,55 @@
-import React, { forwardRef } from "react";
+import React, { forwardRef, useRef } from "react";
 import PropTypes from "prop-types";
 import InputBase from "@mui/material/InputBase";
 import IconButton from "@mui/material/IconButton";
 import SendIcon from "@mui/icons-material/Send";
 import Paper from "@mui/material/Paper";
 
-// ✅ Usamos forwardRef para poder enfocar el input desde el padre
 const InputChat = forwardRef(function InputChat(
-  { value, onChange, onSend, replyTo, onCancelReply },
+  { value, onChange, onSend, replyTo, onCancelReply, connection, conversationId, currentUser },
   ref
 ) {
+  const typingTimeoutRef = useRef(null);
+
+  // ✅ Notifica que se ha dejado de escribir
+  const handleStopTyping = () => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    if (connection && conversationId && currentUser?.id) {
+              connection.invoke("StopTyping", conversationId, currentUser.id.toString());
+    }
+  };
+
+  // ✅ Notifica que se está escribiendo y programa la detención
+  const handleTyping = (text) => {
+    onChange(text); // Actualiza el estado en el componente padre
+
+    if (connection && conversationId && currentUser?.id) {
+      // Notifica que está escribiendo
+              connection.invoke("Typing", conversationId, currentUser.id.toString());
+
+      // Limpia el temporizador anterior
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Inicia un nuevo temporizador para detener el typing después de 2 segundos de inactividad
+      typingTimeoutRef.current = setTimeout(() => {
+        handleStopTyping();
+      }, 2000);
+    }
+  };
+
+  const handleSendMessage = () => {
+    handleStopTyping(); // Detiene el indicador de "escribiendo" inmediatamente
+    onSend();
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      onSend();
+      handleSendMessage();
     }
   };
 
@@ -84,8 +120,9 @@ const InputChat = forwardRef(function InputChat(
           multiline
           maxRows={3}
           value={value}
-          onChange={onChange}
+          onChange={(e) => handleTyping(e.target.value)}
           onKeyDown={handleKeyDown}
+          onBlur={handleStopTyping} // ✅ Detiene el typing si el usuario sale del input
           placeholder="Escribe un mensaje..."
           sx={{
             fontSize: "14px",
@@ -95,7 +132,7 @@ const InputChat = forwardRef(function InputChat(
             pr: 1,
           }}
         />
-        <IconButton onClick={onSend} color="info">
+        <IconButton onClick={handleSendMessage} color="info">
           <SendIcon />
         </IconButton>
       </Paper>
@@ -109,6 +146,9 @@ InputChat.propTypes = {
   onSend: PropTypes.func.isRequired,
   replyTo: PropTypes.object,
   onCancelReply: PropTypes.func,
+  connection: PropTypes.object, // Conexión de SignalR
+  conversationId: PropTypes.number, // ID de la conversación actual
+  currentUser: PropTypes.shape({ id: PropTypes.any.isRequired }), // Usuario que está escribiendo
 };
 
 export default InputChat;

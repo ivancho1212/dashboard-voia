@@ -14,49 +14,49 @@ const MessageList = ({
   primaryColor,
   secondaryColor,
 }) => (
-  <TransitionGroup style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-    {messages
-      .filter((msg) => !msg?.meta?.internalOnly)
-      .map((msg, index) => {
-        const nodeRef = messageRefs.current[index];
-        return (
-          <CSSTransition key={index} timeout={300} classNames="fade" nodeRef={nodeRef}>
-            <MessageBubble
-              key={index}
-              message={msg}
-              index={index}
-              messageRef={nodeRef}
-              fontFamily={fontFamily}
-              openImageModal={openImageModal}
-            />
-          </CSSTransition>
-        );
-      })}
+  <>
+    <TransitionGroup style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {messages
+        .filter((msg) => !msg?.meta?.internalOnly)
+        .map((msg, index) => {
+          const nodeRef = messageRefs.current[index];
+          return (
+            <CSSTransition key={msg.uniqueKey} timeout={300} classNames="fade" nodeRef={nodeRef}>
+              <MessageBubble
+                key={msg.uniqueKey}
+                message={msg}
+                index={index}
+                messageRef={nodeRef}
+                fontFamily={fontFamily}
+                openImageModal={openImageModal}
+              />
+            </CSSTransition>
+          );
+        })}
+    </TransitionGroup>
 
     {isTyping && (typingSender === "bot" || typingSender === "admin") && (
-      <CSSTransition key="typing" timeout={300} classNames="fade" nodeRef={typingRef}>
-        <div
-          ref={typingRef}
-          style={{
-            alignSelf: "flex-start",
-            backgroundColor: typingSender === "admin" ? "#ccc" : secondaryColor,
-            color: typingSender === "admin" ? "#000" : primaryColor,
-            padding: "8px 12px",
-            borderRadius: "12px",
-            maxWidth: "60%",
-            fontFamily,
-            fontSize: "14px",
-            fontStyle: "italic",
-            opacity: 0.7,
-            border: "none",
-            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
-          }}
-        >
-          <TypingDots color={primaryColor} />
-        </div>
-      </CSSTransition>
+      <div
+        ref={typingRef}
+        style={{
+          alignSelf: "flex-start",
+          backgroundColor: typingSender === "admin" ? "#ccc" : secondaryColor,
+          color: typingSender === "admin" ? "#000" : primaryColor,
+          padding: "8px 12px",
+          borderRadius: "12px",
+          maxWidth: "60%",
+          fontFamily,
+          fontSize: "14px",
+          fontStyle: "italic",
+          opacity: 0.7,
+          border: "none",
+          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.1)",
+        }}
+      >
+        <TypingDots color={primaryColor} />
+      </div>
     )}
-  </TransitionGroup>
+  </>
 );
 
 MessageList.propTypes = {

@@ -21,18 +21,8 @@ import CheckIcon from "@mui/icons-material/Check";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import BlockIcon from "@mui/icons-material/Block";
-
-const getStatusIcon = (status) => {
-  switch (status) {
-    case "pendiente":
-      return <AccessTimeIcon />;
-    case "resuelta":
-      return <DoneAllIcon />;
-    case "activa":
-    default:
-      return <CheckIcon />;
-  }
-};
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline'; // <-- Esta línea es crucial
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'; // Cambia esta línea
 
 function ConversationList({
   conversations,
@@ -42,6 +32,7 @@ function ConversationList({
   onBlock,
   highlightedIds = [],
   onClearHighlight = () => {},
+  activeTab,
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
@@ -70,7 +61,7 @@ function ConversationList({
       })
       .filter((conv) => {
         const convId = `${conv.id}`;
-        const textToSearch = `${conv.alias || ""} ${conv.lastMessage || ""}`;
+        const textToSearch = `Sesión ${conv.id} ${conv.lastMessage || ""}`;
         const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
         return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
       })
@@ -84,6 +75,23 @@ function ConversationList({
       0% { background-color: #fffde7; }
       50% { background-color: #fff176; }
       100% { background-color: #fffde7; }
+    }
+    @keyframes blink {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+    @keyframes blink-green-orange {
+      0% { color: green; opacity: 1; }
+      25% { color: green; opacity: 0.5; }
+      50% { color: orange; opacity: 1; }
+      75% { color: orange; opacity: 0.5; }
+      100% { color: green; opacity: 1; }
+    }
+    @keyframes blink-orange {
+      0% { opacity: 1; }
+      50% { opacity: 0.5; }
+      100% { opacity: 1; }
     }
   `;
     document.head.appendChild(styleTag);
@@ -104,7 +112,7 @@ function ConversationList({
     <Box display="flex" flexDirection="column" sx={{ height: "100%", minHeight: 0 }}>
       {/* Encabezado y Filtro */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-        <SoftTypography variant="h5" color="info.main" fontWeight="bold">
+        <SoftTypography variant="h5" color="info" fontWeight="bold">
           Conversaciones
         </SoftTypography>
 
@@ -145,7 +153,9 @@ function ConversationList({
       {/* Lista con scroll */}
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0, maxWidth: "100%" }}>
         <List sx={{ width: "100%", padding: 0 }}>
-          {filtered.map((conv) => (
+          {filtered.map((conv) => {
+            console.log("Rendering conversation:", conv);
+            return (
             <ListItemButton
               key={conv.id}
               onClick={() => {
@@ -224,7 +234,7 @@ function ConversationList({
                 >
                   <Typography
                     variant="body2"
-                    color="text.secondary"
+                    color="secondary"
                     sx={{
                       fontSize: "13px",
                       overflow: "hidden",
@@ -242,32 +252,7 @@ function ConversationList({
                       );
 
                       if (!search || !matchMessage) {
-                        const messages = messagesMap[conv.id];
-                        let last;
-
-                        if (messages?.length > 0) {
-                          last = messages[messages.length - 1];
-                        } else if (conv.lastMessage) {
-                          last = {
-                            text:
-                              conv.lastMessage.Type === "text" ? conv.lastMessage.Content : null,
-                            files:
-                              conv.lastMessage.Type !== "text"
-                                ? [{ name: conv.lastMessage.Content }]
-                                : [],
-                            type: conv.lastMessage.Type,
-                          };
-                        }
-
-                        if (!last) return "Sin mensajes aún";
-
-                        if (last?.files?.length > 0) {
-                          return `📎 ${last.files.map((f) => f.name || "archivo").join(", ")}`;
-                        }
-
-                        if (last?.text) return last.text;
-
-                        return "📎 Archivo adjunto";
+                        return conv.lastMessage || "Sin mensajes aún";
                       }
 
                       const index = matchMessage.text.toLowerCase().indexOf(lowerSearch);
@@ -307,37 +292,42 @@ function ConversationList({
               >
                 <Box display="flex" alignItems="center" gap={0.5}>
                   <Tooltip title={`Estado: ${conv.status}`}>
-                    <Chip
-                      icon={getStatusIcon(conv.status)}
-                      color="default"
-                      size="small"
-                      sx={{
-                        height: 18,
-                        width: 18,
-                        minWidth: 0,
-                        borderRadius: "50%",
-                        backgroundColor:
-                          conv.status === "pendiente"
-                            ? "#ff9800"
-                            : conv.status === "resuelta"
-                            ? "#4caf50"
-                            : "#29b6f6",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        "& .MuiChip-icon": {
-                          color: "#fff !important",
-                          fontSize: "12px !important",
-                          margin: 0,
-                          padding: 0,
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        },
-                        "& .MuiChip-label": {
-                          display: "none",
-                        },
-                      }}
+                    <FiberManualRecordIcon
+                      sx={(() => {
+                        const HEARTBEAT_INACTIVITY_THRESHOLD = 45 * 1000;
+                        const isHeartbeatActive = conv.lastHeartbeatTime && (Date.now() - conv.lastHeartbeatTime < HEARTBEAT_INACTIVITY_THRESHOLD);
+                        const isPending = conv.status === "pendiente";
+                        const isResolved = conv.status === "resuelta";
+
+                        let color = 'gray';
+                        let animation = 'none';
+
+                        if (isHeartbeatActive) {
+                          if (isPending) {
+                            color = 'green'; // Initial color for blinking
+                            animation = 'blink-green-orange 1s infinite';
+                          } else {
+                            color = 'green';
+                            animation = 'blink 1s infinite';
+                          }
+                        } else { // Heartbeat is inactive
+                          if (isPending) {
+                            color = 'orange';
+                            animation = 'blink-orange 1s infinite'; // Added blinking for orange
+                          } else if (isResolved) {
+                            color = 'gray';
+                          }
+                           else {
+                            color = 'gray';
+                          }
+                        }
+
+                        return {
+                          color: color,
+                          animation: animation,
+                          fontSize: 'small',
+                        };
+                      })()}
                     />
                   </Tooltip>
                   {!conv.isWithAI && conv.unreadCount > 0 && conv.id !== activeTab && (
@@ -376,17 +366,9 @@ function ConversationList({
 
                   {!conv.isWithAI && (
                     <Tooltip title="IA pausada">
-                      <Chip
-                        label="IA pausada"
-                        size="small"
-                        sx={{
-                          backgroundColor: "#9e9e9e",
-                          color: "#fff",
-                          fontSize: "10px",
-                          height: 18,
-                          borderRadius: "8px",
-                        }}
-                      />
+                      <IconButton size="small" sx={{ color: "#8b8a8aff", mr: -1.9 }}>
+                        <PauseCircleOutlineIcon fontSize="small" />
+                      </IconButton>
                     </Tooltip>
                   )}
 
@@ -400,7 +382,7 @@ function ConversationList({
 
                 <Typography
                   variant="caption"
-                  color="text.secondary"
+                  color="secondary"
                   sx={{ fontSize: "9.5px", mt: 0.2 }}
                 >
                   {formatDistanceToNow(new Date(conv.updatedAt), {
@@ -410,7 +392,8 @@ function ConversationList({
                 </Typography>
               </Box>
             </ListItemButton>
-          ))}
+          )}
+        )}
         </List>
       </Box>
     </Box>
@@ -433,7 +416,7 @@ ConversationList.propTypes = {
   messagesMap: PropTypes.objectOf(
     PropTypes.arrayOf(
       PropTypes.shape({
-        text: PropTypes.string.isRequired,
+        text: PropTypes.string,
         from: PropTypes.string,
         timestamp: PropTypes.string,
       })
@@ -444,6 +427,7 @@ ConversationList.propTypes = {
   onBlock: PropTypes.func.isRequired,
   highlightedIds: PropTypes.arrayOf(PropTypes.string),
   onClearHighlight: PropTypes.func,
+  activeTab: PropTypes.string,
 };
 
 export default ConversationList;

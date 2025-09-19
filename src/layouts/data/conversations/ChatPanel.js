@@ -49,6 +49,7 @@ const ChatPanel = forwardRef(
       userName,
       isTyping,
       typingSender,
+      typingConversationId,
       onToggleIA,
       iaPaused,
       onSendAdminMessage,
@@ -63,6 +64,7 @@ const ChatPanel = forwardRef(
       onJumpToReply,
       highlightedMessageId,
       onAdminTyping,
+      onAdminStopTyping,
     },
     ref
   ) => {
@@ -144,7 +146,7 @@ const ChatPanel = forwardRef(
       }, 5000);
 
       return () => clearTimeout(timeout);
-    }, [highlightedMessageId]);
+    }, [highlightedMessageId, onJumpToReply, messageRefs]);
 
     const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
     const handleCloseMenu = () => setAnchorEl(null);
@@ -188,9 +190,9 @@ const ChatPanel = forwardRef(
 
         const replyInfo = replyTo
           ? {
-              replyToMessageId: replyTo.id,
-              replyToText: replyTo.text || replyTo.fileName || "mensaje",
-            }
+            replyToMessageId: replyTo.id,
+            replyToText: replyTo.text || replyTo.fileName || "mensaje",
+          }
           : null;
 
         try {
@@ -219,17 +221,32 @@ const ChatPanel = forwardRef(
     };
 
     const typingTimeout = useRef(null);
+    const typingActiveRef = useRef(false); // To track if typing is currently active
 
     const handleInputChange = (text) => {
       setInputValue(text);
 
-      if (typingTimeout.current) clearTimeout(typingTimeout.current);
+      if (typingTimeout.current) {
+        clearTimeout(typingTimeout.current);
+      }
 
       if (text.trim()) {
-        typingTimeout.current = setTimeout(() => {
-          // ✅ USA LA PROP EN LUGAR DE 'connection.invoke'
+        // If not already typing, send typing start
+        if (!typingActiveRef.current) {
           onAdminTyping(conversationId);
-        }, 500);
+          typingActiveRef.current = true;
+        }
+        // Set a timeout to send stop typing if no more input
+        typingTimeout.current = setTimeout(() => {
+          onAdminStopTyping(conversationId); // New prop to send stop typing
+          typingActiveRef.current = false;
+        }, 1000); // Send stop typing after 1 second of inactivity
+      } else {
+        // If input is empty and typing was active, send stop typing immediately
+        if (typingActiveRef.current) {
+          onAdminStopTyping(conversationId);
+          typingActiveRef.current = false;
+        }
       }
     };
 
@@ -257,53 +274,44 @@ const ChatPanel = forwardRef(
     const getBlockedIcon = () => <BlockIcon />;
     const processedMessages = useMemo(() => {
       return messages.map((msg) => {
-        // Normaliza el campo 'text' para asegurar que siempre esté presente
         const normalizedText = msg.text || msg.question || msg.content || "";
-        let files = [];
 
-        // ✅ Soporte para msg.file (cuando es objeto)
-        if (msg.file?.fileUrl) {
-          files.push({ ...msg.file, url: msg.file.fileUrl });
+        // Prioritize msg.files if it exists (for real-time messages)
+        let files = Array.isArray(msg.files) ? [...msg.files] : [];
+
+        // Fallback for history/legacy messages if msg.files is not present
+        if (files.length === 0) {
+          if (msg.file?.fileUrl) {
+            files.push({ ...msg.file, url: msg.file.fileUrl });
+          }
+          if (Array.isArray(msg.images)) {
+            msg.images.forEach((img) => {
+              if (img.fileUrl) files.push({ ...img, url: img.fileUrl });
+            });
+          }
+          if (msg.fileUrl && msg.fileName) {
+            files.push({
+              fileUrl: msg.fileUrl,
+              fileName: msg.fileName,
+              fileType: msg.fileType || "application/octet-stream",
+              url: msg.fileUrl,
+            });
+          }
         }
 
-        // ✅ Soporte para msg.images[]
-        if (Array.isArray(msg.images)) {
-          msg.images.forEach((img) => {
-            if (img.fileUrl) files.push({ ...img, url: img.fileUrl });
-          });
-        }
-
-        // ✅ Soporte para mensajes que traen fileUrl y fileName directamente
-        if (!files.length && msg.fileUrl && msg.fileName) {
-          files.push({
-            fileUrl: msg.fileUrl,
-            fileName: msg.fileName,
-            fileType: msg.fileType || "application/octet-stream",
-            url: msg.fileUrl,
-          });
-        }
-
-        // ✅ Resolver replyTo
         let resolvedReplyTo = null;
         if (msg.replyToMessageId) {
-          const original = messages.find(
-            (m) => m.id?.toString() === msg.replyToMessageId?.toString()
-          );
+          const original = messages.find((m) => m.id?.toString() === msg.replyToMessageId?.toString());
           if (original) {
-            // ✅ Buscar archivo: imagen o documento
             const firstFile =
+              (Array.isArray(original.files) && original.files.length > 0 ? original.files[0] : null) ||
               original.file ||
-              (Array.isArray(original.images) && original.images.length > 0
-                ? original.images[0]
-                : null) ||
-              (Array.isArray(original.files) && original.files.length > 0
-                ? original.files[0]
-                : null);
+              (Array.isArray(original.images) && original.images.length > 0 ? original.images[0] : null);
 
             resolvedReplyTo = {
               id: original.id,
               text: original.text || (firstFile ? null : msg.replyToText),
-              fromName: original.fromName || original.from || "Usuario",
+              fromName: original.fromRole === "admin" ? "Admin" : `Sesión ${conversationId}`,
               fromRole: original.fromRole || original.from || "user",
               fileName: firstFile?.fileName,
               fileUrl: firstFile?.fileUrl || firstFile?.url,
@@ -314,13 +322,14 @@ const ChatPanel = forwardRef(
 
         return {
           ...msg,
+          fromName: msg.fromRole === "admin" ? "Admin" : `Sesión ${conversationId}`,
           text: normalizedText,
           fromRole: msg.fromRole || msg.from || "user",
           files: files.length > 0 ? files : undefined,
           replyTo: resolvedReplyTo ?? msg.replyTo ?? null,
         };
       });
-    }, [messages]);
+    }, [messages, conversationId]);
 
     useEffect(() => {
       const fetchTags = async () => {
@@ -398,8 +407,15 @@ const ChatPanel = forwardRef(
       };
     }, [conversationId]);
 
+    console.log("ChatPanel Typing Props:", {
+      isTyping,
+      typingSender,
+      typingConversationId,
+      currentConversationId: conversationId,
+    });
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+        {/* HEADER */}
         <Box
           sx={{
             position: "relative",
@@ -413,7 +429,7 @@ const ChatPanel = forwardRef(
           <Box display="flex" justifyContent="space-between" alignItems="center" height={25}>
             <SoftTypography
               variant="caption"
-              fontWeight="500"
+              fontWeight="medium"
               noWrap
               sx={{
                 maxWidth: "60%",
@@ -428,17 +444,17 @@ const ChatPanel = forwardRef(
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
               {conversationTags.length > 0
                 ? conversationTags.map((tag, index) => (
-                    <TagChip
-                      key={index}
-                      tag={tag}
-                      index={index}
-                      isExpanded={expandedTagIndex === index}
-                      onToggle={() =>
-                        setExpandedTagIndex((prev) => (prev === index ? null : index))
-                      }
-                      backgroundColor={getBackgroundColor(status)}
-                    />
-                  ))
+                  <TagChip
+                    key={index}
+                    tag={tag}
+                    index={index}
+                    isExpanded={expandedTagIndex === index}
+                    onToggle={() =>
+                      setExpandedTagIndex((prev) => (prev === index ? null : index))
+                    }
+                    backgroundColor={getBackgroundColor(status)}
+                  />
+                ))
                 : null}
               {blocked && (
                 <Tooltip title="Usuario bloqueado">
@@ -514,6 +530,8 @@ const ChatPanel = forwardRef(
             </Box>
           </Box>
         </Box>
+
+        {/* PANEL DE TAGS */}
         {showPendingEditor && (
           <Box
             sx={{
@@ -541,7 +559,6 @@ const ChatPanel = forwardRef(
               Crear Etiqueta
             </Typography>
 
-            {/* Etiqueta / Label */}
             <TextField
               placeholder="Nombre de la etiqueta"
               size="small"
@@ -571,7 +588,6 @@ const ChatPanel = forwardRef(
               }}
             />
 
-            {/* Botones */}
             <Box display="flex" justifyContent="flex-end" gap={1}>
               <IconButton
                 size="small"
@@ -589,18 +605,14 @@ const ChatPanel = forwardRef(
                 color="success"
                 onClick={async () => {
                   if (!pendingTag.label?.trim()) return;
-
                   try {
                     await createConversationTag({
                       conversationId,
                       label: pendingTag.label.trim(),
                       highlightedMessageId: null,
                     });
-
-                    // ✅ Recargar las etiquetas después de crear una
                     const updatedTags = await getTagsByConversationId(conversationId);
                     setConversationTags(updatedTags || []);
-
                     setShowPendingEditor(false);
                     setPendingTag(null);
                   } catch (error) {
@@ -615,6 +627,7 @@ const ChatPanel = forwardRef(
           </Box>
         )}
 
+        {/* MENSAJES */}
         <div
           id="chat-container"
           onScroll={(e) => {
@@ -648,12 +661,11 @@ const ChatPanel = forwardRef(
                   if (el && msg.id) messageRefs.current[msg.id] = el;
                 }}
                 isHighlighted={highlightedMessageId === msg.id}
-                isAIActive={!iaPaused} // 👈 ESTA ES LA LÍNEA CLAVE
+                isAIActive={!iaPaused}
               />
             ))
           )}
-
-          {isTyping && ["bot", "admin", "user"].includes(typingSender) && (
+          {isTyping && typingSender && typingConversationId == conversationId && (
             <CSSTransition
               in
               appear
@@ -663,10 +675,11 @@ const ChatPanel = forwardRef(
               unmountOnExit
             >
               <div ref={typingRef}>
-                <TypingIndicator color="#00bcd4" background="#e0f7fa" variant="bars" />
+                <TypingIndicator sender={typingSender} />
               </div>
             </CSSTransition>
           )}
+
 
           <div ref={bottomRef} />
 
@@ -696,16 +709,16 @@ const ChatPanel = forwardRef(
           )}
         </div>
 
+        {/* INPUT */}
         <Box sx={{ pt: 1, pb: 2, borderTop: "1px solid #eee", bgcolor: "white", zIndex: 1 }}>
           <Box display="flex" alignItems="center" gap={1}>
             <Controls onToggle={onToggleIA} iaPaused={iaPaused} />
-
             {iaPaused && (
               <Box flex={1}>
                 <InputChat
                   ref={inputRef}
                   value={inputValue}
-                  onChange={(e) => handleInputChange(e.target.value)}
+                  onChange={handleInputChange}   // 👈 ya no necesitas (e) => ... porque la función espera directamente el texto
                   onSend={handleSendMessage}
                   replyTo={replyTo}
                   onCancelReply={onCancelReply}
@@ -715,10 +728,10 @@ const ChatPanel = forwardRef(
           </Box>
         </Box>
       </Box>
-    );
-  }
+    ); // 👈 este cierra el return y el componente
+  } // 👈 este cierra la definición de la función ChatPanel si la tienes como function
 );
-
+// 👇 Esto SIEMPRE va FUERA del componente
 ChatPanel.propTypes = {
   conversationId: PropTypes.number.isRequired,
   messages: PropTypes.array.isRequired,
@@ -739,6 +752,8 @@ ChatPanel.propTypes = {
   onJumpToReply: PropTypes.func,
   highlightedMessageId: PropTypes.string,
   onAdminTyping: PropTypes.func.isRequired,
+  onAdminStopTyping: PropTypes.func, // ✅ agregado
+    typingConversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // ✅ agregar
 };
 
 export default ChatPanel;

@@ -42,11 +42,12 @@ export const sendGroupedImages = async ({ connection, conversationId, files, use
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => {
-        const base64 = reader.result.split(',')[1]; // ⚠️ limpio solo el contenido
+        // ⚠️ FIX: Send the full Data URL, don't split it.
+        // The backend is responsible for parsing it.
         resolve({
           fileName: file.name,
           fileType: file.type,
-          fileContent: base64,
+          fileContent: reader.result, // <-- Send full result
         });
       };
       reader.onerror = reject;

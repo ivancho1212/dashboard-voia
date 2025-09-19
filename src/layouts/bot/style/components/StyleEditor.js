@@ -25,16 +25,15 @@ export default function StyleEditor({
   setLoading, // ✅ Agrega esto
   setLoadingMessage, // ✅ Y esto también
 }) {
+  const [editorStyle, setEditorStyle] = useState(style);
   const [showPrimaryPicker, setShowPrimaryPicker] = useState(false);
   const [showSecondaryPicker, setShowSecondaryPicker] = useState(false);
   const [showHeaderBgPicker, setShowHeaderBgPicker] = useState(false);
   const primaryRef = useRef(null);
   const secondaryRef = useRef(null);
   const headerRef = useRef(null);
-  
-  // Normaliza los datos al cargar el estilo para edición
+
   useEffect(() => {
-    if (!style) return;
     const normalized = {
       ...style,
       avatarUrl: style.avatarUrl || style.AvatarUrl || style.avatar_url || "",
@@ -52,9 +51,15 @@ export default function StyleEditor({
       theme: style.theme || style.Theme || "light",
       customCss: style.customCss || style.CustomCss || style.custom_css || "",
     };
-    setStyle(normalized);
+    setEditorStyle(normalized);
   }, [style]);
-  
+
+  const handleStyleChange = (newStyle) => {
+    const updatedStyle = typeof newStyle === 'function' ? newStyle(editorStyle) : newStyle;
+    setEditorStyle(updatedStyle);
+    setStyle(updatedStyle);
+  };
+
   useEffect(() => {
     function handleClickOutside(event) {
       if (
@@ -90,7 +95,7 @@ export default function StyleEditor({
     const value = e.target.value;
 
     if (name === "theme") {
-      setStyle((prev) => {
+      handleStyleChange((prev) => {
         if (prev.theme === value) return prev;
 
         let updated = { ...prev, theme: value };
@@ -108,7 +113,7 @@ export default function StyleEditor({
         return updated;
       });
     } else {
-      setStyle((prev) => ({ ...prev, [name]: value }));
+      handleStyleChange((prev) => ({ ...prev, [name]: value }));
 
       if (name === "position") {
         setShowPreviewWidget(true);
@@ -119,15 +124,15 @@ export default function StyleEditor({
   return (
     <SoftBox width="100%" maxWidth="900px" px={2}>
       <SoftBox mb={2}>
-        <AvatarUploader style={style} setStyle={setStyle} />
+        <AvatarUploader style={editorStyle} setStyle={handleStyleChange} />
       </SoftBox>
       <SoftBox mb={2}>
         <SoftTypography variant="caption">Nombre del widget</SoftTypography>
         <TextField
           fullWidth
           placeholder="Ej. Asistente virtual"
-          value={style.title || ""}
-          onChange={(e) => setStyle((prev) => ({ ...prev, title: e.target.value }))}
+          value={editorStyle.title || ""}
+          onChange={(e) => handleStyleChange((prev) => ({ ...prev, title: e.target.value }))}
         />
       </SoftBox>
 
@@ -135,7 +140,7 @@ export default function StyleEditor({
         <SoftTypography variant="caption">Tema</SoftTypography>
         <SoftSelect
           label="Tema"
-          value={style.theme || "light"}
+          value={editorStyle.theme || "light"}
           onChange={handleSelectChange("theme")}
           fullWidth
         >
@@ -155,11 +160,11 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              sx={{ backgroundColor: style.primaryColor || "#000000" }}
+              sx={{ backgroundColor: editorStyle.primaryColor || "#000000" }}
               border="1px solid #ccc"
               borderRadius="8px"
             />
-            {style.theme === "custom" && (
+            {editorStyle.theme === "custom" && (
               <SoftButton
                 onClick={() => {
                   setShowPrimaryPicker((prev) => !prev);
@@ -181,9 +186,9 @@ export default function StyleEditor({
               style={{ position: "relative", marginTop: "8px" }}
             >
               <SketchPicker
-                color={style.primaryColor}
+                color={editorStyle.primaryColor}
                 onChangeComplete={(color) =>
-                  setStyle((prev) => ({ ...prev, primaryColor: color.hex }))
+                  handleStyleChange((prev) => ({ ...prev, primaryColor: color.hex }))
                 }
                 disableAlpha
               />
@@ -200,11 +205,11 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              sx={{ backgroundColor: style.secondaryColor || "#ffffff" }}
+              sx={{ backgroundColor: editorStyle.secondaryColor || "#ffffff" }}
               border="1px solid #ccc"
               borderRadius="8px"
             />
-            {style.theme === "custom" && (
+            {editorStyle.theme === "custom" && (
               <SoftButton
                 onClick={() => {
                   setShowSecondaryPicker((prev) => !prev);
@@ -226,9 +231,9 @@ export default function StyleEditor({
               style={{ position: "relative", marginTop: "8px" }}
             >
               <SketchPicker
-                color={style.secondaryColor}
+                color={editorStyle.secondaryColor}
                 onChangeComplete={(color) =>
-                  setStyle((prev) => ({ ...prev, secondaryColor: color.hex }))
+                  handleStyleChange((prev) => ({ ...prev, secondaryColor: color.hex }))
                 }
                 disableAlpha
               />
@@ -245,11 +250,11 @@ export default function StyleEditor({
             <SoftBox
               width="40px"
               height="40px"
-              sx={{ backgroundColor: style.headerBackgroundColor || "#f5f5f5" }}
+              sx={{ backgroundColor: editorStyle.headerBackgroundColor || "#f5f5f5" }}
               border="1px solid #ccc"
               borderRadius="8px"
             />
-            {style.theme === "custom" && (
+            {editorStyle.theme === "custom" && (
               <SoftButton
                 onClick={() => {
                   setShowHeaderBgPicker((prev) => !prev);
@@ -271,9 +276,9 @@ export default function StyleEditor({
               style={{ position: "relative", marginTop: "8px" }}
             >
               <SketchPicker
-                color={style.headerBackgroundColor || "#f5f5f5"}
+                color={editorStyle.headerBackgroundColor || "#f5f5f5"}
                 onChangeComplete={(color) =>
-                  setStyle((prev) => ({ ...prev, headerBackgroundColor: color.hex }))
+                  handleStyleChange((prev) => ({ ...prev, headerBackgroundColor: color.hex }))
                 }
                 disableAlpha
               />
@@ -289,7 +294,7 @@ export default function StyleEditor({
           <SoftTypography variant="caption">Fuente</SoftTypography>
           <SoftSelect
             label="Fuente"
-            value={style.fontFamily || "Arial"}
+            value={editorStyle.fontFamily || "Arial"}
             onChange={handleSelectChange("fontFamily")}
             fullWidth
           >
@@ -313,7 +318,7 @@ export default function StyleEditor({
           <SoftTypography variant="caption">Posición</SoftTypography>
           <SoftSelect
             label="Posición"
-            value={style.position || "bottom-right"}
+            value={editorStyle.position || "bottom-right"}
             onChange={handleSelectChange("position")}
             fullWidth
           >
@@ -344,9 +349,9 @@ export default function StyleEditor({
           labelPlacement="end"
           control={
             <Switch
-              checked={style.allowImageUpload ?? true}
+              checked={editorStyle.allowImageUpload ?? true}
               onChange={(e) =>
-                setStyle((prev) => ({ ...prev, allowImageUpload: e.target.checked }))
+                handleStyleChange((prev) => ({ ...prev, allowImageUpload: e.target.checked }))
               }
               color="info" // asegúrate de que "info" esté definido en el theme
               sx={{
@@ -369,9 +374,9 @@ export default function StyleEditor({
           labelPlacement="end"
           control={
             <Switch
-              checked={style.allowFileUpload ?? true}
+              checked={editorStyle.allowFileUpload ?? true}
               onChange={(e) =>
-                setStyle((prev) => ({ ...prev, allowFileUpload: e.target.checked }))
+                handleStyleChange((prev) => ({ ...prev, allowFileUpload: e.target.checked }))
               }
               color="info"
               sx={{
@@ -393,11 +398,11 @@ export default function StyleEditor({
       </SoftBox>
 
       <SaveApplyButtons
-        style={style}
+        style={editorStyle}
         botId={parseInt(botId)}
         userId={userId}
         onStyleSaved={(savedStyle) => {
-          setStyle((prev) => ({ ...prev, ...savedStyle }));
+          handleStyleChange((prev) => ({ ...prev, ...savedStyle }));
           onCancel(); // <- esto hace que vuelva a la lista y se recargue
         }}
         onCancel={onCancel}

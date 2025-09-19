@@ -50,13 +50,14 @@ function ChatWidget({
   // Move isOpen to the top so it's available for all hooks
   const [isOpen, setIsOpen] = useState(false);
   const [botStyle, setBotStyle] = useState(style || null);
-  const [isDemo, setIsDemo] = useState(!style);
+  const [isDemo, setIsDemo] = useState(initialDemo);
   const [botContext, setBotContext] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [isBotReady, setIsBotReady] = useState(false);
+  const [isBotReady, setIsBotReady] = useState(initialDemo);
   const [promptSent, setPromptSent] = useState(false);
   const promptSentRef = useRef(false);
-  const [isConnected, setIsConnected] = useState(false);
+  const [isConnected, setIsConnected] = useState(false); // ESTA LÍNEA DEBE ESTAR AQUÍ
+
   // Para animación del mensaje de debug
   const [connectionStatus, setConnectionStatus] = useState("desconocido");
 
@@ -85,14 +86,19 @@ function ChatWidget({
   };
 
   useEffect(() => {
+    if (initialDemo) return;
+
     const fetchBotStyleAndContext = async () => {
       try {
         // 🔹 Estilos
         const res = await fetch(`http://localhost:5006/api/Bots/${botId}`);
         const data = await res.json();
-        if (!style && data.style) {
+        if (data.style) {
           setBotStyle(data.style);
-          setIsDemo(false);
+          // No cambiar isDemo si initialDemo es true
+          if (!initialDemo) {
+            setIsDemo(false);
+          }
         }
 
 
@@ -190,32 +196,33 @@ function ChatWidget({
 
   // Mostrar TypingDots y mensaje de bienvenida solo al abrir el widget
   useEffect(() => {
-    if (!isOpen || isDemo) return;
+    if (isOpen && !isDemo) {
+      const welcomeId = "welcome-message";
+      const hasWelcome = messages.some(m => m.id === welcomeId);
 
-    // Verificar si ya existe el mensaje de bienvenida
-    const welcomeId = "welcome-message";
-    const hasWelcome = messages.some(m => m.id === welcomeId);
+      if (!hasWelcome) {
+        setTypingSender("bot");
+        setIsTyping(true);
 
-    if (!hasWelcome) {
-      setTypingSender("bot");
-      setIsTyping(true);
+        const welcomeMsg = {
+          id: welcomeId,
+          from: "ai",
+          text: "👋 ¡Hola! Bienvenido. ¿En qué puedo ayudarte hoy?",
+          status: "sent",
+          timestamp: new Date().toISOString(),
+        };
 
-      const welcomeMsg = {
-        id: welcomeId, // 🔹 ID fijo para evitar duplicados
-        from: "ai",
-        text: "👋 ¡Hola! Bienvenido. ¿En qué puedo ayudarte hoy?",
-        status: "sent", // 🔹 ya considerado enviado
-        timestamp: new Date().toISOString(),
-      };
-
-      const typingDelay = 1500 + Math.random() * 1000;
-      setTimeout(() => {
-        setMessages(prev => [...prev, normalizeMessage(welcomeMsg)]);
-        setIsTyping(false);
-        setTypingSender(null);
-        setPromptSent(true);
-        promptSentRef.current = true; // 🔹 mantener referencia
-      }, typingDelay);
+        const typingDelay = 1500 + Math.random() * 1000;
+        setTimeout(() => {
+          setMessages(prev => [...prev, normalizeMessage(welcomeMsg)]);
+          requestAnimationFrame(() => {
+            setIsTyping(false);
+            setTypingSender(null);
+          });
+          setPromptSent(true);
+          promptSentRef.current = true;
+        }, typingDelay);
+      }
     }
   }, [isOpen, isDemo, messages]);
 
@@ -236,7 +243,7 @@ function ChatWidget({
     theme: style.theme || style.Theme || "light",
     customCss: style.customCss || style.CustomCss || style.custom_css || "",
   };
-  const effectiveStyle = botStyle || normalizedStyle;
+  const effectiveStyle = initialDemo ? normalizedStyle : (botStyle || normalizedStyle);
   const {
     allowImageUpload,
     allowFileUpload,
@@ -314,7 +321,19 @@ function ChatWidget({
   const [iaWarning, setIaWarning] = useState(null);
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
-  const typingTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    console.log(`[TYPING STATE CHANGED] isTyping: ${isTyping}, typingSender: ${typingSender}`);
+  }, [isTyping, typingSender]);
+
+  // Safeguard to turn off typing indicator if bot is not ready, disconnected, or has a warning
+  useEffect(() => {
+    if ((!isBotReady || !isConnected || iaWarning) && isTyping) {
+      console.log("🚫 Bot not ready/connected or warning present, turning off typing indicator.");
+      setIsTyping(false);
+      setTypingSender(null);
+    }
+  }, [isBotReady, isConnected, iaWarning, isTyping]);
   const CACHE_KEY = `chat_${botId}_${userId}`;
   const CACHE_TIMEOUT = 1 * 60 * 1000;
 
@@ -446,9 +465,10 @@ function ChatWidget({
     }
   };
 
-  useEffect(() => {
-    if (!isOpen) { // 🔹 solo bloquear si el chat no está abierto
+useEffect(() => {
+    if (!isOpen || isDemo) {
       if (connectionRef.current) {
+        console.log("🧹 Limpiando conexión SignalR existente (cerrado o demo).");
         connectionRef.current.stop();
         connectionRef.current = null;
       }
@@ -456,16 +476,22 @@ function ChatWidget({
     }
 
     const handleReceiveMessage = (msg) => {
-      console.log("📩 Mensaje recibido:", msg);
-
+      console.log("📩 Mensaje recibido (procesado):", msg);
       const newMessage = normalizeMessage(msg);
       if (!newMessage.color) newMessage.color = getSenderColor(newMessage.from);
 
-      // Confirmación optimista
+      // ✅ Apagar el indicador de typing si el mensaje es del que está escribiendo
+      // Usamos una función de callback en setTypingSender para acceder al valor más reciente
+      setTypingSender(currentTypingSender => {
+        if (currentTypingSender && currentTypingSender === newMessage.from) {
+          setIsTyping(false);
+          return null; // Resetea el typing sender
+        }
+        return currentTypingSender; // Mantén el sender si no coincide
+      });
+
       setMessages(prev => {
         const map = new Map(prev.map(m => [m.uniqueKey, m]));
-
-        // Si es una confirmación de un mensaje de usuario, actualízalo.
         if (newMessage.tempId && newMessage.from === "user") {
           const existingMsg = Array.from(map.values()).find(m => m.tempId === newMessage.tempId);
           if (existingMsg) {
@@ -474,58 +500,79 @@ function ChatWidget({
             map.set(newMessage.uniqueKey, newMessage);
           }
         } else {
-          // Si es un mensaje nuevo (del bot, admin, etc.), simplemente añádelo.
           map.set(newMessage.uniqueKey, newMessage);
-        }
-
-        // Apagar el "escribiendo..." justo cuando llega el mensaje del bot/admin
-        if (newMessage.from !== "user") {
-          setIsTyping(false);
-          setTypingSender(null);
         }
         return Array.from(map.values());
       });
     };
 
+    let connection;
+
     const initConnection = async () => {
-      if (isDemo) return;
-
-      if (connectionRef.current) return;
-
       console.log("🟡 Inicializando chat vía servicio:", { botId, userId });
-
-      let conversationId;
       try {
-        conversationId = await createConversation(userId, botId);
-        if (!conversationId) throw new Error("No se recibió conversationId");
-      } catch (err) {
-        console.error("❌ Error creando conversación:", err);
-        setConnectionStatus("fallida");
-        setIsConnected(false);
-        return;
-      }
+        const convId = await createConversation(userId, botId);
+        if (!convId) throw new Error("No se recibió conversationId");
+        
+        conversationIdRef.current = convId;
+        setConversationId(convId);
 
-      conversationIdRef.current = conversationId;
-      setConversationId(conversationId);
+        connection = createHubConnection(convId);
+        connectionRef.current = connection;
 
-      let connection;
-      try {
-        connection = createHubConnection(conversationId);
+        // ✅ REGISTRO DE EVENTOS CORRECTO
+        connection.on("ReceiveMessage", handleReceiveMessage);
+
+        connection.on("ReceiveTyping", (convId, sender) => {
+          if (convId === conversationIdRef.current) {
+            console.log(`💬 ${sender} está escribiendo en la conversación ${convId}`);
+            setTypingSender(sender);
+            setIsTyping(true);
+          }
+        });
+
+        connection.on("ReceiveStopTyping", (convId, sender) => {
+          // Usamos una función de callback para asegurar que tenemos el valor más reciente de typingSender
+          setTypingSender(currentTypingSender => {
+            if (convId === conversationIdRef.current && currentTypingSender === sender) {
+              console.log(`🛑 ${sender} ha dejado de escribir en la conversación ${convId}`);
+              setIsTyping(false);
+              return null; // Resetea el sender
+            }
+            return currentTypingSender; // No hay cambios si no coincide
+          });
+        });
+
         await connection.start();
         setConnectionStatus("conectado");
         setIsConnected(true);
-        connection.on("ReceiveMessage", handleReceiveMessage);
-        connectionRef.current = connection;
-        console.log("✅ Conexión lista con convId:", conversationId);
+        
+        await connection.invoke("JoinRoom", convId);
+        console.log("✅ Conexión lista y unido al grupo:", convId);
+
       } catch (err) {
-        console.error("❌ Error iniciando SignalR:", err);
-        setConnectionStatus("error en SignalR");
+        console.error("❌ Error en la conexión de chat:", err);
+        setConnectionStatus("error");
         setIsConnected(false);
       }
     };
 
     initConnection();
-  }, [isDemo, isOpen, userId, botId]);
+
+    return () => {
+      console.log("🧹 Limpiando conexión SignalR.");
+      if (connectionRef.current) {
+        connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
+        // ✅ Limpiar listeners correctos
+        connectionRef.current.off("ReceiveTyping");
+        connectionRef.current.off("ReceiveStopTyping");
+        connectionRef.current.stop();
+        connectionRef.current = null;
+      }
+    };
+    // Se eliminan dependencias que causaban re-conexiones innecesarias.
+    // La lógica de `handleReceiveMessage` ahora es más robusta con callbacks de estado.
+  }, [isOpen, isDemo, userId, botId]);
 
 
   useEffect(() => {
@@ -556,8 +603,8 @@ function ChatWidget({
         console.error("❌ Error enviando heartbeat:", err);
         setIsBotReady(false); // Asegurarse de que no esté listo si falla
       }
-      };
-      sendHeartbeat();
+    };
+    sendHeartbeat();
     intervalId = setInterval(() => {
       if (!isUnmounted) sendHeartbeat();
     }, 30000);
@@ -598,8 +645,26 @@ function ChatWidget({
     if (!trimmedMessage) return;
 
     if (isDemo) {
-      // Mantener el código de demo sin cambios
-      // ...
+      const userMessage = normalizeMessage({
+        from: "user",
+        text: trimmedMessage,
+      });
+      setMessages((prev) => [...prev, userMessage]);
+      setMessage("");
+
+      setTypingSender("bot");
+      setIsTyping(true);
+
+      setTimeout(() => {
+        const botMessage = normalizeMessage({
+          from: "bot",
+          text: "Esta es una respuesta automática en modo demo.",
+        });
+        setMessages((prev) => [...prev, botMessage]);
+        setIsTyping(false);
+        setTypingSender(null);
+      }, 1000);
+
       return;
     }
 
@@ -651,8 +716,6 @@ function ChatWidget({
     });
 
     setMessage("");
-    setTypingSender("bot");
-    setIsTyping(true);
 
     try {
       const payload = {
@@ -690,8 +753,7 @@ function ChatWidget({
           m.id === tempId ? { ...m, status: "error" } : m
         )
       );
-    } finally {
-      setIsTyping(false);
+      setIsTyping(false); // Turn off typing on error
       setTypingSender(null);
     }
   };
@@ -815,7 +877,7 @@ function ChatWidget({
 
         // 4. Programar la llegada del mensaje
         const messageId = setTimeout(() => {
-          console.log(`💬 [MESSAGE] ${item.sender}: ${item.content}`);
+          console.log(`[DEMO] Adding message for: ${item.sender} and setting isTyping to FALSE`);
           const newMsg = normalizeMessage({
             id: `demo-${counter++}-${Date.now()}`,
             sender: item.sender,
@@ -827,7 +889,6 @@ function ChatWidget({
             files: [],
           });
           setMessages((prev) => [...prev, newMsg]);
-          // Apagamos el typing justo después de que el mensaje se renderiza
           setIsTyping(false);
           setTypingSender(null);
         }, totalDelay);
@@ -868,13 +929,7 @@ function ChatWidget({
     };
   }, [isDemo, isOpen]);
 
-  useEffect(() => {
-    if (botStyle || style) {
-      setIsDemo(false);
-    }
-  }, [botStyle, style]);
-
-  const isInputDisabled = !isDemo && (!conversationId && connectionStatus !== "fallida");
+  const isInputDisabled = isDemo ? false : !isConnected;
 
   return (
     <div style={wrapperStyle}>
@@ -1120,11 +1175,6 @@ function ChatWidget({
               primaryColor={primaryColor}
               secondaryColor={secondaryColor}
             />
-            {isTyping && (typingSender === "ai" || typingSender === "admin") && (
-              <div style={{ padding: "4px 8px" }}>
-                <TypingDots color={primaryColor} />
-              </div>
-            )}
 
             <div ref={messagesEndRef} />
           </div>

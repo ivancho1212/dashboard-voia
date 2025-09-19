@@ -7,7 +7,7 @@ const API_URL = "http://localhost:5006/api";
 export async function createConversation(userId, botId) {
   try {
     const { data } = await axios.post(
-      `${API_URL}/Conversations/create-empty`,
+      `${API_URL}/Conversations/get-or-create`,
       { userId, botId },
       { timeout: 20000 } // 20 segundos
     );

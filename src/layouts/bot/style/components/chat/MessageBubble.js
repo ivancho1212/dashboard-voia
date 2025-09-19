@@ -105,67 +105,137 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
       );
     });
 
+  useEffect(() => {
+    console.log(
+      `[MessageBubble Render #${index}]`,
+      { from: message.from, status: message.status, text: message.text },
+      { backgroundColor: containerStyle.backgroundColor, color: containerStyle.color }
+    );
+    console.log("[MessageBubble] message.file:", message.file); // LOG AÑADIDO
+    console.log("[MessageBubble] message.images:", message.images); // LOG AÑADIDO
+    console.log("[MessageBubble] message.multipleFiles:", message.multipleFiles); // LOG AÑADIDO
+  }, [message, index, containerStyle.backgroundColor, containerStyle.color]);
+
   return (
     <div ref={messageRef} style={containerStyle}>
       {/* Archivos múltiples */}
       {message.multipleFiles?.length > 0 && (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: "6px",
-            marginBottom: "6px",
-            width: "100%",
-            boxSizing: "border-box",
-          }}
-        >
-          {message.multipleFiles.slice(0, 4).map((file, i) => {
-            const isLastVisible = i === 3 && message.multipleFiles.length > 4;
-            const src = `data:${file.fileType};base64,${file.fileContent}`;
-            return (
-              <div key={i} style={{ position: "relative", aspectRatio: "1 / 1", overflow: "hidden", borderRadius: "8px" }}>
-                <img
-                  src={src}
-                  alt={file.fileName}
-                  onClick={() => {
-                    if (!isLastVisible) {
-                      openImageModal(message.multipleFiles, src);
-                    }
-                  }}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    filter: isLastVisible ? "brightness(0.5)" : "none",
-                    cursor: isLastVisible ? "default" : "pointer",
-                  }}
-                />
-                {isLastVisible && (
+        <>
+          {/* Imágenes */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(2, 1fr)",
+              gap: "6px",
+              marginBottom: "6px",
+              width: "100%",
+              boxSizing: "border-box",
+            }}
+          >
+            {message.multipleFiles
+              .filter((file) =>
+                ["jpg", "jpeg", "png", "gif", "webp"].some((ext) =>
+                  file.fileName?.toLowerCase().endsWith(ext)
+                )
+              )
+              .slice(0, 4)
+              .map((file, i, arr) => {
+                const isLastVisible = i === 3 && arr.length > 4;
+                const src = file.fileUrl.startsWith("http")
+                  ? file.fileUrl
+                  : `http://localhost:5006${file.fileUrl}`;
+
+                return (
                   <div
+                    key={i}
                     style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      backgroundColor: "rgba(0, 0, 0, 0.6)",
-                      color: "white",
-                      display: "flex",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      fontSize: "18px",
-                      fontWeight: "bold",
+                      position: "relative",
+                      aspectRatio: "1 / 1",
+                      overflow: "hidden",
                       borderRadius: "8px",
                     }}
                   >
-                    +{message.multipleFiles.length - 4}
+                    <img
+                      src={src}
+                      alt={file.fileName}
+                      onClick={() => {
+                        if (!isLastVisible) {
+                          openImageModal(arr, src);
+                        }
+                      }}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        filter: isLastVisible ? "brightness(0.5)" : "none",
+                        cursor: isLastVisible ? "default" : "pointer",
+                      }}
+                    />
+                    {isLastVisible && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: "100%",
+                          backgroundColor: "rgba(0, 0, 0, 0.6)",
+                          color: "white",
+                          display: "flex",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          fontSize: "18px",
+                          fontWeight: "bold",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        +{arr.length - 4}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+          </div>
+
+          {/* Documentos */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {message.multipleFiles
+              .filter(
+                (file) =>
+                  !["jpg", "jpeg", "png", "gif", "webp"].some((ext) =>
+                    file.fileName?.toLowerCase().endsWith(ext)
+                  )
+              )
+              .map((file, i) => {
+                const href = file.fileUrl.startsWith("http")
+                  ? file.fileUrl
+                  : `http://localhost:5006${file.fileUrl}`;
+
+                return (
+                  <a
+                    key={i}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      padding: "6px 10px",
+                      backgroundColor: "#f8f8f8",
+                      borderRadius: "6px",
+                      textDecoration: "none",
+                      color: "#007bff",
+                      fontSize: "14px",
+                      fontWeight: "500",
+                      wordBreak: "break-word",
+                    }}
+                  >
+                    📎 {file.fileName}
+                  </a>
+                );
+              })}
+          </div>
+        </>
       )}
+
 
       {/* Archivo único */}
       {message.file && (

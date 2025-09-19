@@ -1,5 +1,6 @@
 import React from "react";
 import PropTypes from "prop-types";
+import ReactDOM from "react-dom"; // Importar ReactDOM
 
 const ImagePreviewModal = ({
   isOpen,
@@ -16,7 +17,7 @@ const ImagePreviewModal = ({
     ? currentImage?.fileUrl
     : `http://localhost:5006${currentImage?.fileUrl}`;
 
-  return (
+  return ReactDOM.createPortal(
     <div
       onClick={onClose}
       style={{
@@ -79,7 +80,8 @@ const ImagePreviewModal = ({
       >
         ›
       </button>
-    </div>
+    </div>,
+    document.body
   );
 };
 

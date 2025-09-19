@@ -15,7 +15,7 @@ export async function getConversationsByUser(userId) {
 
     return conversations.map((c) => ({
       id: `${c.id}`,
-      alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
+      alias: c.alias,
       lastMessage: c.userMessage || "",
       updatedAt: c.createdAt || new Date().toISOString(),
       status: c.status,
@@ -119,18 +119,18 @@ export async function getConversationsWithLastMessage() {
 
     return conversations.map((c) => ({
       id: `${c.id}`,
-      alias: c.user?.name || `Usuario ${String(c.id).slice(-4)}`,
+      alias: c.alias,
       lastMessage: c.lastMessage
-        ? c.lastMessage.Type === "text"
-          ? c.lastMessage.Content
-          : c.lastMessage.Type === "image"
-          ? "📷 Imagen enviada"
-          : `📎 Archivo: ${c.lastMessage.Content}`
+        ? c.lastMessage.type === "text"
+          ? c.lastMessage.content // Use content for text
+          : c.lastMessage.type === "image"
+          ? "📷 Imagen" // Consistent naming
+          : `📎 Archivo: ${c.lastMessage.content}` // Use content for file name
         : "Conversación iniciada",
-      updatedAt: c.lastMessage?.Timestamp || new Date().toISOString(),
+      updatedAt: c.lastMessage?.timestamp || c.updatedAt || new Date().toISOString(), // Use timestamp from lastMessage
       status: c.status,
       blocked: false,
-      isWithAI: c.isWithAI ?? true,
+      isWithAI: c.isWithAI,
     }));
   } catch (error) {
     console.error("❌ [getConversationsWithLastMessage] Error:", error);

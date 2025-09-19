@@ -19,6 +19,7 @@ const InputArea = ({
   allowImageUpload,
   allowFileUpload,
 }) => {
+  const typingTimeoutRef = useRef(null);
 
   const autoResizeTextarea = () => {
     const textarea = textareaRef.current;
@@ -26,6 +27,49 @@ const InputArea = ({
       textarea.style.height = "auto";
       textarea.style.height = `${textarea.scrollHeight}px`;
     }
+  };
+
+  // ✅ Lógica para detener el indicador de escritura
+  const handleStopTyping = () => {
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    const connection = connectionRef.current;
+    if (connection && connection.state === "Connected" && conversationId) {
+              connection.invoke("StopTyping", conversationId, "user").catch(err => console.error("Error en StopTyping:", err));
+    }
+  };
+
+  // ✅ Lógica para iniciar el indicador de escritura con debounce
+  const handleTyping = (text) => {
+    setMessage(text);
+    autoResizeTextarea();
+
+    const connection = connectionRef.current;
+    if (connection && connection.state === "Connected" && conversationId) {
+      if (text.trim()) {
+        // ✅ Usa el nombre correcto del método: SendTyping
+        connection.invoke("Typing", conversationId, "user").catch(err => console.error("Error en Typing:", err));
+        if (typingTimeoutRef.current) {
+          clearTimeout(typingTimeoutRef.current);
+        }
+        typingTimeoutRef.current = setTimeout(handleStopTyping, 2000); // 2 segundos de inactividad
+      } else {
+        handleStopTyping(); // Si el texto está vacío, detener inmediatamente
+      }
+    }
+  };
+
+  const handleSendMessage = () => {
+    if (isInputDisabled || !message.trim()) return;
+    handleStopTyping(); // Detener el typing al enviar
+    sendMessage();
+    setMessage("");
+    requestAnimationFrame(() => {
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
+    });
   };
 
   const handleUpload = async (event) => {
@@ -108,7 +152,7 @@ const InputArea = ({
                 style={{ display: "none" }}
                 onChange={handleUpload}
                 disabled={isInputDisabled}
-                aria-label="Subir documento" // ✅ agregada etiqueta accesible
+                aria-label="Subir documento"
               />
             </label>
 
@@ -132,7 +176,6 @@ const InputArea = ({
         </div>
       )}
 
-      {/* 📝 Textarea */}
       <textarea
         ref={textareaRef}
         placeholder={
@@ -140,35 +183,14 @@ const InputArea = ({
         }
         value={message}
         disabled={isInputDisabled}
-        onChange={async (e) => {
-          const text = e.target.value;
-          setMessage(text);
-          autoResizeTextarea();
-
-          if (text.trim()) {
-            const connection = connectionRef.current;
-            if (connection && connection.state === "Connected") {
-              try {
-                await connection.invoke("Typing", conversationId, "user");
-              } catch (err) {
-                console.error("❌ Error enviando Typing del usuario:", err);
-              }
-            }
-          }
-        }}
+        onChange={(e) => handleTyping(e.target.value)}
+        onBlur={handleStopTyping}
         onKeyDown={(e) => {
           if (isInputDisabled) return;
 
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            sendMessage();
-            setMessage("");
-
-            requestAnimationFrame(() => {
-              if (textareaRef.current) {
-                textareaRef.current.style.height = "auto";
-              }
-            });
+            handleSendMessage();
           }
         }}
         rows={1}
@@ -190,10 +212,9 @@ const InputArea = ({
         }}
       />
 
-      {/* 🚀 Icono de enviar */}
       <button
-        onClick={!isInputDisabled ? sendMessage : undefined}
-        disabled={isInputDisabled} // ✅ deshabilitado cuando es demo
+        onClick={handleSendMessage}
+        disabled={isInputDisabled || !message.trim()}
         style={{
           position: "absolute",
           right: "20px",
@@ -201,10 +222,10 @@ const InputArea = ({
           transform: "translateY(-50%)",
           background: "transparent",
           border: "none",
-          cursor: isInputDisabled ? "not-allowed" : "pointer",
+          cursor: isInputDisabled || !message.trim() ? "not-allowed" : "pointer",
           padding: 0,
         }}
-        aria-label="Enviar mensaje" // ✅ accesible
+        aria-label="Enviar mensaje"
       >
         <FaPaperPlane style={{ color: inputText, fontSize: "18px" }} />
       </button>
