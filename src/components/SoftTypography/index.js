@@ -34,7 +34,7 @@ SoftTypography.defaultProps = {
 
 // Typechecking props for the SoftTypography
 SoftTypography.propTypes = {
-  color: PropTypes.oneOf([
+    color: PropTypes.oneOf([
     "inherit",
     "primary",
     "secondary",
@@ -46,6 +46,7 @@ SoftTypography.propTypes = {
     "dark",
     "text",
     "white",
+    "gray",
   ]),
   fontWeight: PropTypes.oneOf([false, "light", "regular", "medium", "bold"]),
   textTransform: PropTypes.oneOf(["none", "capitalize", "uppercase", "lowercase"]),

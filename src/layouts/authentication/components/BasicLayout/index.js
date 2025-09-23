@@ -56,7 +56,7 @@ function BasicLayout({ title, image, children }) {
         <Grid container justifyContent="center" sx={{ textAlign: "center" }}>
           <Grid item xs={10} lg={6}>
             {title && (
-              <SoftBox mt={1} mb={3}>
+              <SoftBox mt={1} mb={1}>
                 <SoftTypography variant="h1" color="white" fontWeight="bold">
                   {title}
                 </SoftTypography>
@@ -72,12 +72,12 @@ function BasicLayout({ title, image, children }) {
             left: "50%",
             transform: "translateX(-50%)",
             top: {
-              xs: "calc(50vh - 110px)",
-              sm: "calc(50vh - 120px)",
-              md: "calc(50vh - 150px)",
+              xs: "calc(50vh - 280px)", // sube más en pantallas pequeñas
+              sm: "calc(50vh - 300px)",
+              md: "calc(50vh - 320px)",
             },
             width: { xs: "92%", sm: "75%", md: "40%", lg: "32%" },
-            mb: { xs: 6, sm: 8, md: 10, lg: 12 },
+            mb: { xs: 2, sm: 3, md: 4, lg: 5 }, // menos margen inferior
           }}
         >
           {children}

@@ -346,7 +346,7 @@ function Header({ user }) {
                 </SoftTypography>
               ) : (
                 <>
-                  <SoftTypography variant="caption" color="gray">
+                  <SoftTypography variant="caption" color="text">
                     Actualmente no estás suscrito
                   </SoftTypography>
                   <SoftTypography

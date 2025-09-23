@@ -20,11 +20,12 @@ import StylePreview from "./components/StylePreview";
 import StyleList from "./components/StyleList";
 
 import Loader from "components/Loader";
+import { useAuth } from "contexts/AuthContext";
 
 function BotStylePage() {
   const { id: botId } = useParams();
   const navigate = useNavigate();
-  const userId = 2;
+  const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState(0);
   const [viewMode, setViewMode] = useState("list");
@@ -37,7 +38,8 @@ function BotStylePage() {
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Cargando estilos...");
 
-  const defaultNewStyle = {
+  // Generar nuevo estilo dinámicamente
+  const defaultNewStyle = (userId) => ({
     user_id: userId,
     theme: "light",
     primary_color: "#000000",
@@ -51,9 +53,10 @@ function BotStylePage() {
     allow_image_upload: true,
     allow_file_upload: true,
     header_background_color: "#f5f5f5",
-  };
+  });
 
   const fetchBotAndStyles = async () => {
+    if (!user?.id) return;
     setLoading(true);
     setLoadingMessage("Cargando estilos...");
     try {
@@ -61,7 +64,7 @@ function BotStylePage() {
       const botStyleId = botRes.data.styleId;
       setBotStyleId(botStyleId);
 
-      const userStyles = await getBotStylesByUser(userId);
+      const userStyles = await getBotStylesByUser(user.id);
 
       let currentBotStyle = null;
       if (botStyleId && !userStyles.find((s) => s.id === botStyleId)) {
@@ -99,7 +102,7 @@ function BotStylePage() {
 
   useEffect(() => {
     fetchBotAndStyles();
-  }, [botId]);
+  }, [botId, user]);
 
   const onTabChange = (_, newVal) => {
     setActiveTab(newVal);
@@ -110,7 +113,7 @@ function BotStylePage() {
     } else if (newVal === 1) {
       setViewMode("create");
       setSelectedStyle(null);
-      setStyleEditing({ ...defaultNewStyle });
+      setStyleEditing(user ? { ...defaultNewStyle(user.id) } : null);
     }
   };
 
@@ -132,6 +135,7 @@ function BotStylePage() {
   };
 
   const onSaveNewStyle = async (newStyle) => {
+    if (!user?.id) return;
     try {
       setLoading(true);
       setLoadingMessage(viewMode === "edit" ? "Actualizando estilo..." : "Creando nuevo estilo...");
@@ -258,8 +262,7 @@ function BotStylePage() {
 
                       <SoftTypography variant="body2" color="text" mb={2}>
                         Este es el widget con los estilos aplicados. Puedes verlo flotando en la
-                        pantalla según su posición configurada (por ejemplo, abajo a la derecha, al
-                        centro, etc.).
+                        pantalla según su posición configurada.
                       </SoftTypography>
 
                       <StylePreview style={styleToPreview} />
@@ -291,7 +294,7 @@ function BotStylePage() {
                       setStyle={setStyleEditing}
                       setShowPreviewWidget={() => {}}
                       botId={botId}
-                      userId={userId}
+                      userId={user?.id}
                       onCancel={onBackToList}
                       setLoading={setLoading}
                       setLoadingMessage={setLoadingMessage}

@@ -25,10 +25,13 @@ export async function getBotsByUserId(userId) {
 
 export async function createBot(botData) {
   try {
-    const response = await axios.post(API_URL, botData);
+    const token = localStorage.getItem("token"); // 🔥 tomar token guardado
+    const response = await axios.post(API_URL, botData, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
     return response.data;
   } catch (error) {
-    console.error("Error en createBot:", error);
+    console.error("❌ Error en createBot:", error.response?.data || error.message);
     throw error;
   }
 }

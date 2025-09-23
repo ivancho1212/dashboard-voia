@@ -18,8 +18,7 @@ import InputBase from "@mui/material/InputBase";
 import { getBotsByUserId } from "services/botService";
 import integracionWidgetImg from "assets/images/integracion-widget.png";
 import { createBotIntegration } from "services/botIntegrationService";
-
-const userId = 2;
+import { useAuth } from "contexts/AuthContext";
 
 function capitalizar(texto) {
   if (!texto) return "";
@@ -27,20 +26,22 @@ function capitalizar(texto) {
 }
 
 function BotAdminDashboard() {
+  const { user } = useAuth();
   const [bots, setBots] = useState([]);
   const [scripts, setScripts] = useState({});
 
   useEffect(() => {
-    localStorage.setItem("token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...");
-    getBotsByUserId(userId)
-      .then((res) => setBots(res))
-      .catch((err) => console.error("❌ Error al traer bots:", err));
-  }, []);
+    if (user && user.id) {
+      getBotsByUserId(user.id)
+        .then((res) => setBots(res))
+        .catch((err) => console.error("❌ Error al traer bots:", err));
+    }
+  }, [user]);
 
   const generateScript = async (botId) => {
     if (scripts[botId]) return; // Ya existe
 
-    const code = `<script src="https://tudominio.com/widget.js" data-user="${userId}" data-bot="${botId}"></script>`;
+    const code = `<script src="https://tudominio.com/widget.js" data-user="${user.id}" data-bot="${botId}"></script>`;
     try {
       await createBotIntegration({
         botId,

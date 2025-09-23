@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "@mui/material/Card";
 import Checkbox from "@mui/material/Checkbox";
@@ -14,6 +14,12 @@ import { register } from "services/authService"; // Asegúrate de importar la fu
 import { Link } from "react-router-dom";
 import TermsModal from "../components/TermsModal";
 import ReCAPTCHA from "react-google-recaptcha";
+import CountrySelect from "components/GeoSelect/CountrySelect";
+import CitySelect from "components/GeoSelect/CitySelect";
+import PhoneInput from "react-phone-input-2";
+import "react-phone-input-2/lib/style.css";
+import { getCountryCallingCode } from "libphonenumber-js";
+
 
 function SignUp() {
   const navigate = useNavigate();
@@ -31,6 +37,8 @@ function SignUp() {
     avatarUrl: "",
     documentTypeId: "",
     dataConsent: false,
+    country: "",
+    city: "",
   });
 
   // Estado de los errores y mensajes
@@ -52,6 +60,16 @@ function SignUp() {
     });
   };
 
+  const customSelectStyles = {
+    control: (provided) => ({
+      ...provided,
+      minHeight: "42px",
+      borderRadius: "0.5rem",
+      borderColor: "#d2d6da",
+      fontSize: "0.875rem",
+    }),
+  };
+
   // Validación del formulario
   const validateForm = () => {
     const errors = {};
@@ -68,6 +86,8 @@ function SignUp() {
       errors.confirmPassword = "Las contraseñas no coinciden.";
     }
     if (!phoneRegex.test(form.phone)) errors.phone = "Teléfono inválido. Ej: 3XXXXXXXXX";
+    if (!form.country.trim()) errors.country = "El país es obligatorio.";
+    if (!form.city.trim()) errors.city = "La ciudad es obligatoria.";
     if (!form.address.trim()) errors.address = "La dirección es obligatoria.";
     if (!documentRegex.test(form.documentNumber))
       errors.documentNumber = "Documento inválido (6-12 dígitos).";
@@ -104,7 +124,7 @@ function SignUp() {
         name: form.name,
         email: form.email,
         password: form.password,
-        roleId: 2, // Rol por defecto
+        roleId: 2,
         documentTypeId: parseInt(form.documentTypeId, 10),
         phone: form.phone,
         address: form.address,
@@ -113,16 +133,17 @@ function SignUp() {
         avatarUrl: form.avatarUrl,
         isVerified: false,
         recaptchaToken,
+        country: form.country,  // 🔹 nuevo
+        city: form.city,        // 🔹 nuevo
 
-        // Aquí agregamos los consentimientos
         consents: [
           {
             consent_type: "terms_and_conditions",
-            granted: form.termsAccepted ? 1 : 0,
+            granted: agreement ? 1 : 0,
           },
           {
             consent_type: "privacy_policy",
-            granted: form.privacyAccepted ? 1 : 0,
+            granted: form.dataConsent ? 1 : 0,
           },
         ],
       };
@@ -144,38 +165,40 @@ function SignUp() {
     <BasicLayout title="¡Bienvenido!" image={curved6}>
       <Card
         sx={{
-          mb: { xs: 6, sm: 8, md: 10, lg: 12 },
-          boxShadow: "0px 8px 25px rgba(0, 0, 0, 0.2)", // 👈 sombra extra
-          borderRadius: "16px", // opcional, para esquinas más suaves
+          mb: { xs: 2, sm: 3, md: 4 }, // 👈 mucho más compacto
+          boxShadow: "0px 8px 25px rgba(0, 0, 0, 0.2)",
+          borderRadius: "16px",
         }}
       >
+
         <SoftBox p={3} textAlign="center">
           <SoftTypography variant="h5" fontWeight="medium" mb={2}>
             Crear cuenta
           </SoftTypography>
         </SoftBox>
+        {/*
         <SoftBox mb={2}>
           <Socials
             onSocialClick={(provider) => {
               setSocialProvider(provider);
-              setShowTermsModal(true); // 👈 abre el modal
+              setShowTermsModal(true);
             }}
           />
         </SoftBox>
 
-        {/* Modal de términos */}
         <TermsModal
           open={showTermsModal}
           onClose={() => setShowTermsModal(false)}
           onAccept={() => {
             setShowTermsModal(false);
-            // Aquí ya puedes llamar tu login con Google/Microsoft
             console.log("Usuario aceptó términos con", socialProvider);
           }}
         />
 
         <Separator />
-        <SoftBox pt={2} pb={3} px={2}>
+        */}
+
+        <SoftBox pb={3} px={2}>
           <SoftBox component="form" role="form" onSubmit={handleSubmit}>
             <SoftBox mb={2}>
               <SoftInput
@@ -187,76 +210,6 @@ function SignUp() {
               {formErrors.name && (
                 <SoftTypography color="error" fontSize="small">
                   {formErrors.name}
-                </SoftTypography>
-              )}
-            </SoftBox>
-
-            <SoftBox mb={2}>
-              <SoftInput
-                type="email"
-                placeholder="Email"
-                name="email"
-                value={form.email}
-                onChange={handleChange}
-              />
-              {formErrors.email && (
-                <SoftTypography color="error" fontSize="small">
-                  {formErrors.email}
-                </SoftTypography>
-              )}
-            </SoftBox>
-            <SoftBox mb={2}>
-              <SoftInput
-                type="password"
-                placeholder="Contraseña"
-                name="password"
-                value={form.password}
-                onChange={handleChange}
-              />
-              {formErrors.password && (
-                <SoftTypography color="error" fontSize="small">
-                  {formErrors.password}
-                </SoftTypography>
-              )}
-            </SoftBox>
-            <SoftBox mb={2}>
-              <SoftInput
-                type="password"
-                placeholder="Confirmar contraseña"
-                name="confirmPassword"
-                value={form.confirmPassword}
-                onChange={handleChange}
-              />
-              {formErrors.confirmPassword && (
-                <SoftTypography color="error" fontSize="small">
-                  {formErrors.confirmPassword}
-                </SoftTypography>
-              )}
-            </SoftBox>
-
-            <SoftBox mb={2}>
-              <SoftInput
-                placeholder="Teléfono"
-                name="phone"
-                value={form.phone}
-                onChange={handleChange}
-              />
-              {formErrors.phone && (
-                <SoftTypography color="error" fontSize="small">
-                  {formErrors.phone}
-                </SoftTypography>
-              )}
-            </SoftBox>
-            <SoftBox mb={2}>
-              <SoftInput
-                placeholder="Dirección"
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-              />
-              {formErrors.address && (
-                <SoftTypography color="error" fontSize="small">
-                  {formErrors.address}
                 </SoftTypography>
               )}
             </SoftBox>
@@ -302,6 +255,130 @@ function SignUp() {
               {formErrors.documentNumber && (
                 <SoftTypography color="error" fontSize="small">
                   {formErrors.documentNumber}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <SoftInput
+                placeholder="Dirección"
+                name="address"
+                value={form.address}
+                onChange={handleChange}
+              />
+              {formErrors.address && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.address}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <CountrySelect
+                value={form.country}
+                onChange={(code, label) =>
+                  setForm({
+                    ...form,
+                    country: label,
+                    countryCode: code,
+                    city: "", // 👈 limpia la ciudad al cambiar país
+                  })
+                }
+                styles={customSelectStyles}
+              />
+              {formErrors.country && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.country}
+                </SoftTypography>
+              )}
+            </SoftBox>
+
+            <SoftBox mb={2}>
+              <CitySelect
+                key={form.countryCode} // 👈 fuerza a recrear el Select cuando cambia país
+                countryCode={form.countryCode}
+                value={form.city}
+                onChange={(val) => setForm({ ...form, city: val })}
+              />
+              {formErrors.city && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.city}
+                </SoftTypography>
+              )}
+            </SoftBox>
+
+            <SoftBox mb={2} display="flex" alignItems="center">
+              {form.countryCode && (
+                <SoftBox
+                  display="flex"
+                  alignItems="center"
+                  sx={{
+                    border: "1px solid #d2d6da",
+                    borderRadius: "0.5rem 0 0 0.5rem",
+                    padding: "0 10px",
+                    backgroundColor: "#f9f9f9",
+                    fontSize: "0.875rem",
+                    height: "35px",
+                  }}
+                >
+                  +{getCountryCallingCode(form.countryCode)}
+                </SoftBox>
+              )}
+
+              <SoftInput
+                placeholder="Teléfono"
+                name="phone"
+                value={form.phone}
+                onChange={handleChange}
+                sx={{
+                  borderRadius: form.countryCode ? "0 0.5rem 0.5rem 0" : "0.5rem",
+                  flex: 1,
+                }}
+              />
+            </SoftBox>
+            {formErrors.phone && (
+              <SoftTypography color="error" fontSize="small">
+                {formErrors.phone}
+              </SoftTypography>
+            )}
+
+            <SoftBox mb={2}>
+              <SoftInput
+                type="email"
+                placeholder="Email"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+              />
+              {formErrors.email && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.email}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <SoftInput
+                type="password"
+                placeholder="Contraseña"
+                name="password"
+                value={form.password}
+                onChange={handleChange}
+              />
+              {formErrors.password && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.password}
+                </SoftTypography>
+              )}
+            </SoftBox>
+            <SoftBox mb={2}>
+              <SoftInput
+                type="password"
+                placeholder="Confirmar contraseña"
+                name="confirmPassword"
+                value={form.confirmPassword}
+                onChange={handleChange}
+              />
+              {formErrors.confirmPassword && (
+                <SoftTypography color="error" fontSize="small">
+                  {formErrors.confirmPassword}
                 </SoftTypography>
               )}
             </SoftBox>

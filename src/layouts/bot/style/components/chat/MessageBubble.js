@@ -15,9 +15,9 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
   let textColor = "#1a1a1a";
 
   if (isUser) {
-    if (isSending) backgroundColor = "#d6ecfc";
+    if (isSending) backgroundColor = "#e5eff7ff";
     else if (isError) backgroundColor = "#fcd6d6";
-    else backgroundColor = "#b8d0ecff";
+    else backgroundColor = "#d6e7faff";
     textColor = "#1a1a1a"; // texto de usuario siempre oscuro
   } else if (isAI || isAdmin) {
     const { backgroundColor: bg, textColor: tc } = getSenderColor(message.from);
@@ -285,6 +285,26 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal 
       )}
 
       {/* Texto */}
+      {message.replyToText && (
+        <div style={{
+          padding: '8px',
+          margin: '-2px -2px 8px -2px',
+          backgroundColor: 'rgba(0, 0, 0, 0.05)',
+          borderRadius: '6px',
+          borderLeft: `3px solid ${isUser ? '#88a8c4' : '#b0b0b0'}`,
+          fontSize: '13px',
+          opacity: 0.9,
+        }}>
+          <span style={{
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            display: 'block',
+          }}>
+            {message.replyToText}
+          </span>
+        </div>
+      )}
       {message.text && <span>{message.text}</span>}
 
       {/* Timestamp y Status */}
@@ -322,6 +342,7 @@ MessageBubble.propTypes = {
     status: PropTypes.string,
     text: PropTypes.string,
     timestamp: PropTypes.string,
+    replyToText: PropTypes.string,
     file: PropTypes.shape({
       fileType: PropTypes.string,
       fileUrl: PropTypes.string,

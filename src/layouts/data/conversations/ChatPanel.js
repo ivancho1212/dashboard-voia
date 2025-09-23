@@ -407,12 +407,7 @@ const ChatPanel = forwardRef(
       };
     }, [conversationId]);
 
-    console.log("ChatPanel Typing Props:", {
-      isTyping,
-      typingSender,
-      typingConversationId,
-      currentConversationId: conversationId,
-    });
+    
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
         {/* HEADER */}

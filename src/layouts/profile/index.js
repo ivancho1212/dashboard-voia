@@ -70,6 +70,7 @@ function Overview() {
             {user && (
               <ProfileInfoCard
                 title="Información del perfil"
+                description=""
                 info={{
                   Teléfono: editMode ? (
                     <TextField
@@ -200,6 +201,7 @@ function Overview() {
                 }}
                 social={[]}
                 action={{
+                  route: "", // Add this line
                   tooltip: editMode ? "" : "Editar perfil",
                   icon: <EditIcon />,
                   onClick: () => setEditMode(true),
@@ -216,7 +218,7 @@ function Overview() {
           </Grid>
 
           <Grid item xs={12} md={6} xl={4}>
-            <MyBotCard />
+            {/* <MyBotCard /> */}
           </Grid>
         </Grid>
       </SoftBox>

@@ -18,12 +18,14 @@ const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
 
 const normalizeMessage = (msg) => {
-  const id = msg.id ?? msg.tempId ?? uuidv4(); // 🔹 Siempre tener un id
+  const id = msg.id ?? msg.tempId ?? uuidv4();
+  const uniqueKey = msg.tempId ?? id; // Prioritize tempId for the key
+
   return {
     ...msg,
-    id,
-    tempId: msg.tempId ?? id,
-    status: msg.status ?? "sent", // ✅ Normaliza el estado
+    id, // The real ID can update, that's fine.
+    tempId: msg.tempId ?? id, // Ensure tempId is always present if possible
+    status: msg.status ?? "sent",
     from: msg.from ?? (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "bot"),
     text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
     file: msg.file ?? null,
@@ -31,7 +33,7 @@ const normalizeMessage = (msg) => {
     images: msg.images ?? msg.imageGroup ?? [],
     timestamp: msg.timestamp ?? new Date().toISOString(),
     color: msg.color ?? getSenderColor(msg.from),
-    uniqueKey: id, // 🔹 clave persistente para eliminar duplicados
+    uniqueKey, // Use the stable key
   };
 };
 
@@ -481,28 +483,45 @@ useEffect(() => {
       if (!newMessage.color) newMessage.color = getSenderColor(newMessage.from);
 
       // ✅ Apagar el indicador de typing si el mensaje es del que está escribiendo
-      // Usamos una función de callback en setTypingSender para acceder al valor más reciente
       setTypingSender(currentTypingSender => {
         if (currentTypingSender && currentTypingSender === newMessage.from) {
           setIsTyping(false);
-          return null; // Resetea el typing sender
+          return null;
         }
-        return currentTypingSender; // Mantén el sender si no coincide
+        return currentTypingSender;
       });
 
       setMessages(prev => {
-        const map = new Map(prev.map(m => [m.uniqueKey, m]));
-        if (newMessage.tempId && newMessage.from === "user") {
-          const existingMsg = Array.from(map.values()).find(m => m.tempId === newMessage.tempId);
-          if (existingMsg) {
-            map.set(existingMsg.uniqueKey, { ...existingMsg, ...newMessage, status: "sent" });
-          } else {
-            map.set(newMessage.uniqueKey, newMessage);
+        // Si el mensaje entrante tiene un tempId, intenta encontrar y actualizar el mensaje existente.
+        if (newMessage.tempId) {
+          const existingMessageIndex = prev.findIndex(
+            m => m.tempId === newMessage.tempId && m.status === 'sending'
+          );
+
+          if (existingMessageIndex !== -1) {
+            // Se encontró el mensaje temporal, se actualiza en su lugar.
+            const updatedMessages = [...prev];
+            updatedMessages[existingMessageIndex] = { 
+              ...updatedMessages[existingMessageIndex], 
+              ...newMessage,
+              status: 'sent' // Forzar el estado a 'sent' en la confirmación
+            };
+            console.log('✅ Mensaje actualizado:', updatedMessages[existingMessageIndex]);
+            return updatedMessages;
           }
-        } else {
-          map.set(newMessage.uniqueKey, newMessage);
         }
-        return Array.from(map.values());
+
+        // Para mensajes nuevos (o si no se encontró uno temporal para actualizar),
+        // verifica si ya existe por su ID final para evitar duplicados.
+        const messageExists = prev.some(m => m.id === newMessage.id && m.id !== newMessage.tempId);
+        if (messageExists) {
+          console.log('🚫 Mensaje duplicado detectado y omitido:', newMessage);
+          return prev; // No agregar duplicado
+        }
+
+        // Si no, es un mensaje nuevo para nosotros, agrégalo.
+        console.log('➕ Agregando nuevo mensaje:', newMessage);
+        return [...prev, newMessage];
       });
     };
 
@@ -549,6 +568,9 @@ useEffect(() => {
         
         await connection.invoke("JoinRoom", convId);
         console.log("✅ Conexión lista y unido al grupo:", convId);
+
+        await connection.invoke("UserIsActive", convId);
+        console.log(`❤️ Heartbeat inicial enviado para conversación ${convId}`);
 
       } catch (err) {
         console.error("❌ Error en la conexión de chat:", err);
@@ -604,7 +626,6 @@ useEffect(() => {
         setIsBotReady(false); // Asegurarse de que no esté listo si falla
       }
     };
-    sendHeartbeat();
     intervalId = setInterval(() => {
       if (!isUnmounted) sendHeartbeat();
     }, 30000);
@@ -684,14 +705,13 @@ useEffect(() => {
       const tempId = uuidv4();
       setMessages(prev => [
         ...prev,
-        {
-          id: tempId,
+        normalizeMessage({
           tempId,
           from: "user",
           text: trimmedMessage,
           status: "error",
           timestamp: new Date().toISOString()
-        }
+        })
       ]);
       setMessage("");
       return;
@@ -700,7 +720,6 @@ useEffect(() => {
     // ID temporal para render inmediato
     const tempId = uuidv4();
     const userMessageForDisplay = normalizeMessage({
-      id: tempId,
       tempId,
       from: "user",
       text: trimmedMessage,
@@ -708,12 +727,7 @@ useEffect(() => {
       timestamp: new Date().toISOString()
     });
 
-    setMessages(prev => {
-      const all = [...prev, userMessageForDisplay];
-      const map = new Map();
-      all.forEach(m => map.set(m.id ?? m.tempId, m));
-      return Array.from(map.values());
-    });
+    setMessages(prev => [...prev, userMessageForDisplay]);
 
     setMessage("");
 
@@ -739,18 +753,11 @@ useEffect(() => {
         promptSentRef.current = true;
       }
 
-      // Actualizar mensaje a "sent"
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === tempId ? { ...m, status: "sent" } : m
-        )
-      );
-
     } catch (err) {
       console.error("❌ Error enviando mensaje:", err);
       setMessages(prev =>
         prev.map(m =>
-          m.id === tempId ? { ...m, status: "error" } : m
+          m.uniqueKey === tempId ? { ...m, status: "error" } : m
         )
       );
       setIsTyping(false); // Turn off typing on error
@@ -1240,8 +1247,7 @@ useEffect(() => {
 ChatWidget.propTypes = {
   botId: PropTypes.number.isRequired,
   style: PropTypes.object,
-
-  userId: PropTypes.number.isRequired,
+  userId: PropTypes.number,
   title: PropTypes.string,
   theme: PropTypes.oneOf(["light", "dark", "custom"]),
   primaryColor: PropTypes.string,

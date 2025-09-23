@@ -4,6 +4,7 @@ import Footer from "examples/Footer";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import UsersTable from "./components/UsersTable"; // esta ruta es correcta
+import UserBotsSection from "./components/UserBotsSection";
 
 function UserProfileList() {
   return (
@@ -14,7 +15,11 @@ function UserProfileList() {
           Usuarios Registrados
         </SoftTypography>
         <UsersTable />
+
+        {/* Sección de bots del usuario */}
+        <UserBotsSection />
       </SoftBox>
+
       <Footer />
     </DashboardLayout>
   );

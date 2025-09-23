@@ -35,11 +35,14 @@ import {
   getTrainingTextsByTemplate,
   deleteTrainingText,
 } from "services/trainingCustomTextsService";
+import { useAuth } from "contexts/AuthContext";
 
 function BotTraining() {
   const { id } = useParams();
   const location = useLocation();
   const template = location.state?.template;
+  const { user } = useAuth();
+  const userId = user?.id;
 
   const [interactions, setInteractions] = useState([]);
   const [question, setQuestion] = useState("");
@@ -62,7 +65,7 @@ function BotTraining() {
   const [botName, setBotName] = useState("");
   const [creatingBot, setCreatingBot] = useState(false);
   const [botDescription, setBotDescription] = useState("");
-  const [sessionId, setSessionId] = useState(null); 
+  const [sessionId, setSessionId] = useState(null);
 
   const [files, setFiles] = useState([]);
   const [urls, setUrls] = useState([]);
@@ -177,6 +180,26 @@ function BotTraining() {
       setPromptSaved(false);
     }
   };
+  // 🔹 Nueva función para asegurar sessionId
+  const ensureSessionId = async () => {
+    if (!sessionId) {
+      try {
+        const response = await createTemplateTrainingSessionWithPrompts({
+          botTemplateId: parseInt(id),
+          sessionName: "Sesión automática",
+          description: "Generada automáticamente al agregar adjuntos",
+          prompts: [],
+        });
+        setSessionId(response.id);
+        return response.id;
+      } catch (error) {
+        console.error("Error creando sesión automática:", error);
+        alert("❌ No se pudo crear sesión para guardar adjuntos.");
+        return null;
+      }
+    }
+    return sessionId;
+  };
 
   const handleSavePrompt = async () => {
     if (interactions.length === 0 && !text.trim()) {
@@ -199,18 +222,24 @@ function BotTraining() {
       return;
     }
 
+    // 🔹 Nos aseguramos de tener un sessionId válido
+    const sid = await ensureSessionId();
+    if (!sid) return; // Detiene si no se pudo crear sesión
+
     const sessionData = {
       botTemplateId: parseInt(id),
       sessionName: "Entrenamiento manual",
       description: "Entrenamiento creado desde el panel",
       prompts: allPrompts,
+      templateTrainingSessionId: sid, // <-- asociamos a la sesión existente
     };
 
     try {
+      // Aquí llamamos al endpoint de prompts, usando el sid
       const response = await createTemplateTrainingSessionWithPrompts(sessionData);
 
       setPromptSaved(true);
-      setSessionId(response.id); // ← ESTA línea es CLAVE
+      setSessionId(response.id); // actualizamos por si es la primera vez
       alert("Sesión de entrenamiento guardada correctamente.");
     } catch (error) {
       console.error("Error al guardar el entrenamiento:", error);
@@ -226,11 +255,19 @@ function BotTraining() {
   };
 
   const handleSaveAttachments = async () => {
+    if (!userId) {
+      alert("⚠️ Debes iniciar sesión para guardar adjuntos.");
+      return;
+    }
 
     if (!hasValidInputs()) {
       alert("⚠️ Debes adjuntar al menos un archivo, un enlace o un texto válido.");
       return;
     }
+
+    // 🔹 Nos aseguramos de tener un sessionId válido
+    const sid = await ensureSessionId();
+    if (!sid) return;
 
     try {
       setSavingAttachments(true);
@@ -239,16 +276,15 @@ function BotTraining() {
       // 🗂️ Archivo
       if (file && !fileError) {
         const exists = files.some((f) => f.fileName === file.name);
-        if (exists) {
-          alert("⚠️ Este archivo ya fue subido.");
-        } else {
-
+        if (!exists) {
           try {
-            await uploadFile(file, parseInt(id), 2, sessionId); // <-- incluir sessionId
+            await uploadFile(file, parseInt(id), userId, sid);
             hasChanges = true;
+            // Actualizamos la lista local
+            setFiles((prev) => [...prev, { fileName: file.name }]);
+            setFile(null); // Limpiar input
           } catch (uploadError) {
             console.error("❌ Error al subir archivo:", uploadError);
-          
             Swal.fire({
               icon: "error",
               title: "Archivo inválido",
@@ -256,46 +292,45 @@ function BotTraining() {
                 uploadError?.response?.data?.message ||
                 "No se pudo procesar el archivo. Puede estar cifrado o corrupto.",
             });
-          
-            return; // ⛔ Detenemos la ejecución si hay error al subir
           }
-          
+        } else {
+          console.warn("Archivo ya existe:", file.name);
         }
       }
 
       // 🔗 Enlace
       if (link && !linkError) {
         const exists = urls.some((u) => u.url === link);
-        if (exists) {
-          alert("⚠️ Este enlace ya fue agregado.");
-        } else {
-
+        if (!exists) {
           await createTrainingUrl({
             botTemplateId: parseInt(id),
             url: link,
-            userId: 2,
-            templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
+            userId: userId,
+            templateTrainingSessionId: sid,
           });
-
           hasChanges = true;
+          setUrls((prev) => [...prev, { url: link }]);
+          setLink(""); // Limpiar input
+        } else {
+          console.warn("Enlace ya existe:", link);
         }
       }
 
       // ✍️ Texto
       if (text.trim()) {
         const exists = texts.some((t) => t.content === text.trim());
-        if (exists) {
-          alert("⚠️ Este texto ya fue agregado.");
-        } else {
-
+        if (!exists) {
           await createTrainingCustomText({
             botTemplateId: parseInt(id),
             content: text.trim(),
-            userId: 2,
-            templateTrainingSessionId: sessionId, // 💡 Si tu backend lo acepta
+            userId: userId,
+            templateTrainingSessionId: sid,
           });
-
           hasChanges = true;
+          setTexts((prev) => [...prev, { content: text.trim() }]);
+          setText(""); // Limpiar textarea
+        } else {
+          console.warn("Texto ya existe:", text.trim());
         }
       }
 
@@ -304,7 +339,7 @@ function BotTraining() {
         alert("✅ Adjuntos guardados correctamente.");
         setShowModal(true);
       } else {
-        alert("⚠️ Estos datos ya fueron agregados anteriormente.");
+        alert("⚠️ No se agregaron nuevos datos. Todo ya existía previamente.");
       }
     } catch (error) {
       console.error("❌ Error al guardar adjuntos:", error);
@@ -320,11 +355,16 @@ function BotTraining() {
       return;
     }
 
+    if (!name.trim()) {
+      alert("⚠️ El nombre del bot no puede estar vacío.");
+      return;
+    }
+
     const botData = {
-      name,
-      description,
+      name: name.trim(),
+      description: description.trim(),
       botTemplateId: parseInt(id),
-      apiKey: "test-havevpi-8df16dfksvddffvsh0s430lndtvwf-le0df1dasñj7rbgfsgbcjhmkby5gvx5fftirss03sfgrfdrayv", // ✅ OK temporal
+      apiKey: `test-havevpi-${Math.random().toString(36).substring(2, 15)}`,
       isActive: true,
       templateTrainingSessionId: sessionId,
     };
@@ -338,7 +378,7 @@ function BotTraining() {
       console.error("❌ Error creando bot:", error.response?.data || error.message);
       alert(
         error.response?.data?.message ||
-          "❌ Ocurrió un error al crear el bot. Revisa consola para más detalles."
+        "❌ Ocurrió un error al crear el bot. Revisa consola para más detalles."
       );
     } finally {
       setCreatingBot(false);
@@ -356,13 +396,23 @@ function BotTraining() {
   };
 
   const handleDeleteUrl = async (urlId) => {
-    await deleteTrainingUrl(urlId);
-    fetchExistingData();
+    try {
+      await deleteTrainingUrl(urlId);
+      setUrls(urls.filter((u) => u.id !== urlId));
+    } catch (error) {
+      console.error("Error eliminando URL:", error);
+      alert("❌ No se pudo eliminar el enlace.");
+    }
   };
 
   const handleDeleteText = async (textId) => {
-    await deleteTrainingText(textId);
-    fetchExistingData();
+    try {
+      await deleteTrainingText(textId);
+      setTexts(texts.filter((t) => t.id !== textId));
+    } catch (error) {
+      console.error("Error eliminando texto:", error);
+      alert("❌ No se pudo eliminar el texto.");
+    }
   };
 
   return (
@@ -599,7 +649,7 @@ function BotTraining() {
             )}
 
             {files.length === 0 && urls.length === 0 && texts.length === 0 && (
-              <SoftTypography variant="body2" color="textSecondary">
+              <SoftTypography variant="body2" color="secondary">
                 No hay documentos, enlaces o textos almacenados.
               </SoftTypography>
             )}
@@ -669,7 +719,7 @@ function BotTraining() {
                       text: "Solo se permiten archivos PDF, DOCX o XLSX de máximo 5MB.",
                     });
                   }
-                  
+
                 }}
               />
             </Grid>

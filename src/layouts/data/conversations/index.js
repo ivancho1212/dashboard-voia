@@ -27,6 +27,7 @@ import {
   updateConversationIsWithAI,
   getConversationsWithLastMessage,
 } from "services/conversationsService";
+import { useAuth } from "contexts/AuthContext";
 
 function Conversations() {
   const tabContainerRef = useRef(null);
@@ -51,8 +52,18 @@ function Conversations() {
 
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [loadingConversationId, setLoadingConversationId] = useState(null);
+  const [ticker, setTicker] = useState(0);
 
-  const userId = 2; // Simulado
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+        setTicker(prev => prev + 1);
+    }, 1000); // Check every 1 second
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handleToggleIA = async (conversationId) => {
     const newState = !iaPausedMap[conversationId];
@@ -79,7 +90,7 @@ function Conversations() {
     iaPausedMapRef.current = iaPausedMap;
   }, [iaPausedMap]);
 
-  useEffect(() => {
+    useEffect(() => {
     if (!connectionRef.current) {
       connectionRef.current = createHubConnection();
     }
@@ -107,12 +118,24 @@ function Conversations() {
           }, 500);
         });
 
+        connection.on("Heartbeat", (conversationId) => {
+          console.log(`❤️ Heartbeat recibido para conversación ${conversationId}`);
+          const convId = String(conversationId);
+          setConversationList(prevList =>
+            prevList.map(conv =>
+              conv.id === convId
+                ? { ...conv, lastHeartbeatTime: new Date().toISOString() }
+                : conv
+            )
+          );
+        });
+
         connection.on("NewConversationOrMessage", (msg) => {
           if (msg.from === 'admin') {
             return; // Ignore echoed admin messages (already handled optimistically)
           }
 
-          console.log("📨 Nuevo mensaje recibido:", msg);
+          console.log(`📨 Nuevo mensaje recibido:`, msg);
           const convId = String(msg.conversationId);
 
           const newMsg = { ...msg };
@@ -166,6 +189,7 @@ function Conversations() {
       connection.off("ReceiveTyping");
       connection.off("ReceiveStopTyping");
       connection.off("NewConversationOrMessage");
+      connection.off("Heartbeat");
       if (connection.state === "Connected") {
         connection.stop();
       }
@@ -177,7 +201,7 @@ function Conversations() {
     const fetchData = async () => {
       try {
         const data = await getConversationsWithLastMessage(userId);
-        const conversations = data.map((conv) => ({ ...conv, id: String(conv.id) }));
+        const conversations = data.map((conv) => ({ ...conv, id: String(conv.id), updatedAt: conv.lastMessage?.timestamp || conv.updatedAt, }));
         setConversationList(conversations);
         const initialIaPausedMap = {};
         conversations.forEach(conv => {
@@ -199,6 +223,9 @@ function Conversations() {
       setIaPausedMap((prev) => ({ ...prev, [conv.id]: !conv.isWithAI }));
     }
     setActiveTab(idStr);
+    setConversationList((prevList) =>
+      prevList.map((c) => (c.id === idStr ? { ...c, unreadCount: 0 } : c))
+    );
     setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
 
     const cached = messageCache.current.get(idStr);

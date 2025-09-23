@@ -1,10 +1,12 @@
 import React from "react";
 import PropTypes from "prop-types";
 import ChatWidget from "./ChatWidget";
+import { useAuth } from "contexts/AuthContext";
 
 const DEFAULT_AVATAR = "/VIA.png";
 
 export default function StylePreview({ style }) {
+  const { user } = useAuth();
   // Normaliza los datos para el preview
   const normalized = {
     ...style,
@@ -27,7 +29,7 @@ export default function StylePreview({ style }) {
     <div>
       <ChatWidget
         botId={2} // Cambiado a un botId válido
-        userId={9999}
+        userId={user?.id}
         style={normalized}
         title={normalized.title}
         theme={normalized.theme}
