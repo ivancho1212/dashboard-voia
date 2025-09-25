@@ -1,4 +1,3 @@
-
 import { forwardRef } from "react";
 
 // prop-types is a library for typechecking of props
@@ -13,6 +12,9 @@ import SoftInputIconRoot from "components/SoftInput/SoftInputIconRoot";
 // Soft UI Dashboard React contexts
 import { useSoftUIController } from "context";
 
+// Soft UI Dashboard React components
+import SoftTypography from "components/SoftTypography"; // <--- Import SoftTypography
+
 const SoftInput = forwardRef((props, ref) => {
   const {
     size = "medium",
@@ -20,6 +22,7 @@ const SoftInput = forwardRef((props, ref) => {
     error = false,
     success = false,
     disabled = false,
+    helperText, // <--- Extract helperText here
     ...rest
   } = props;
 
@@ -41,6 +44,11 @@ const SoftInput = forwardRef((props, ref) => {
           {...rest}
           ownerState={{ size, error, success, iconDirection, direction, disabled }}
         />
+        {helperText && ( // <--- Render helperText here
+          <SoftTypography variant="caption" color={error ? "error" : "text"} mt={0.5}>
+            {helperText}
+          </SoftTypography>
+        )}
       </SoftInputWithIconRoot>
     );
   } else if (icon?.component && icon?.direction === "right") {
@@ -55,11 +63,23 @@ const SoftInput = forwardRef((props, ref) => {
             {icon.component}
           </SoftInputIconRoot>
         </SoftInputIconBoxRoot>
+        {helperText && ( // <--- Render helperText here
+          <SoftTypography variant="caption" color={error ? "error" : "text"} mt={0.5}>
+            {helperText}
+          </SoftTypography>
+        )}
       </SoftInputWithIconRoot>
     );
   } else {
     template = (
-      <SoftInputRoot {...rest} ref={ref} ownerState={{ size, error, success, disabled }} />
+      <> {/* Use a fragment to wrap the input and helper text */}
+        <SoftInputRoot {...rest} ref={ref} ownerState={{ size, error, success, disabled }} />
+        {helperText && ( // <--- Render helperText here
+          <SoftTypography variant="caption" color={error ? "error" : "text"} mt={0.5}>
+            {helperText}
+          </SoftTypography>
+        )}
+      </>
     );
   }
 
@@ -77,6 +97,7 @@ SoftInput.defaultProps = {
   error: false,
   success: false,
   disabled: false,
+  helperText: "", // <--- Add default value for helperText
 };
 
 // Typechecking props for the SoftInput
@@ -89,6 +110,7 @@ SoftInput.propTypes = {
   error: PropTypes.bool,
   success: PropTypes.bool,
   disabled: PropTypes.bool,
+  helperText: PropTypes.string, // <--- Add helperText propType
 };
 
 export default SoftInput;

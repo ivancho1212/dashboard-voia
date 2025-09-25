@@ -5,15 +5,17 @@ import App from "App";
 
 // Soft UI Dashboard React Context Provider
 import { SoftUIControllerProvider } from "context";
-import { AuthProvider } from "contexts/AuthContext";
+import { AuthProvider } from "auth-context";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
-  <BrowserRouter>
-    <SoftUIControllerProvider>
+  <React.StrictMode>
+    <BrowserRouter>
       <AuthProvider>
-        <App />
+        <SoftUIControllerProvider>
+          <App />
+        </SoftUIControllerProvider>
       </AuthProvider>
-    </SoftUIControllerProvider>
-  </BrowserRouter>
+    </BrowserRouter>
+  </React.StrictMode>
 );

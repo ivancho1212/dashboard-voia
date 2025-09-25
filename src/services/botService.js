@@ -36,6 +36,19 @@ export async function createBot(botData) {
   }
 }
 
+export async function deleteBot(botId) {
+  try {
+    const token = localStorage.getItem("token");
+    const response = await axios.delete(`${API_URL}/${botId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error en deleteBot:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
 
 // ✅ Nuevo método para actualizar solo el estilo del bot
 export async function updateBotStyle(botId, styleId) {

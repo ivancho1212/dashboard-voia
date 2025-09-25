@@ -19,7 +19,7 @@ function ViewBot({ bot, onBack, onEdit }) {
                 <SoftTypography variant="subtitle2" color="text">
                   Rol: <strong>{prompt.role}</strong>
                 </SoftTypography>
-                <SoftTypography variant="body2" color="textSecondary">
+                <SoftTypography variant="body2" color="text">
                   {prompt.content}
                 </SoftTypography>
               </SoftBox>

@@ -13,7 +13,7 @@ import SoftBox from "components/SoftBox";
 // Soft UI Dashboard React context
 import { useSoftUIController, setLayout } from "context";
 
-function PageLayout({ background, children }) {
+function PageLayout({ background = "default", children }) {
   const [, dispatch] = useSoftUIController();
   const { pathname } = useLocation();
 
@@ -33,11 +33,6 @@ function PageLayout({ background, children }) {
     </SoftBox>
   );
 }
-
-// Setting default values for the props for PageLayout
-PageLayout.defaultProps = {
-  background: "default",
-};
 
 // Typechecking props for the PageLayout
 PageLayout.propTypes = {

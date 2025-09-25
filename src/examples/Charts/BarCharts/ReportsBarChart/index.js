@@ -13,13 +13,30 @@ Coded by www.creative-tim.com
 * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 */
 
-import { useMemo } from "react";
+import { useRef, useState, useEffect } from "react";
 
 // porp-types is a library for typechecking of props
 import PropTypes from "prop-types";
 
-// react-chartjs-2 components
-import { Bar } from "react-chartjs-2";
+// chart.js
+import Chart from 'chart.js/auto';
+import {
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+} from 'chart.js';
+
+Chart.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 // @mui material components
 import Card from "@mui/material/Card";
@@ -35,8 +52,49 @@ import BarReportsChartItem from "examples/Charts/BarCharts/ReportsBarChart/Repor
 // ReportsBarChart configurations
 import configs from "examples/Charts/BarCharts/ReportsBarChart/configs";
 
-function ReportsBarChart({ color, title, description, chart, items }) {
-  const { data, options } = configs(chart.labels || [], chart.datasets || {});
+function ReportsBarChart({ color = "dark", title, description = "", chart, items = [] }) {
+  const chartRef = useRef(null);
+  const chartInstanceRef = useRef(null);
+  const [chartData, setChartData] = useState(configs(chart.labels || [], chart.datasets || {}));
+  const { data, options } = chartData;
+
+  useEffect(() => {
+    // Cleanup function to destroy chart instance
+    return () => {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const initChart = async () => {
+      if (chartRef.current && chartRef.current.children[0]) {
+        if (chartInstanceRef.current) {
+          chartInstanceRef.current.destroy();
+        }
+
+        const ctx = chartRef.current.children[0].getContext('2d');
+        const newChartData = configs(chart.labels || [], chart.datasets || {});
+        setChartData(newChartData);
+
+        chartInstanceRef.current = new Chart(ctx, {
+          type: 'bar',
+          data: newChartData.data,
+          options: newChartData.options
+        });
+      }
+    };
+
+    initChart();
+
+    return () => {
+      if (chartInstanceRef.current) {
+        chartInstanceRef.current.destroy();
+      }
+    };
+  }, [chart]);
 
   const renderItems = items.map(({ icon, label, progress }) => (
     <Grid item xs={6} sm={3} key={label}>
@@ -51,23 +109,19 @@ function ReportsBarChart({ color, title, description, chart, items }) {
 
   return (
     <Card sx={{ height: "100%" }}>
-      <SoftBox padding="1rem">
-        {useMemo(
-          () => (
-            <SoftBox
-              variant="gradient"
-              bgColor={color}
-              borderRadius="lg"
-              py={2}
-              pr={0.5}
-              mb={3}
-              height="12.5rem"
-            >
-              <Bar data={data} options={options} />
-            </SoftBox>
-          ),
-          [chart, color]
-        )}
+            <SoftBox padding="1rem">
+        <SoftBox
+          ref={chartRef}
+          variant="gradient"
+          bgColor={color}
+          borderRadius="lg"
+          py={2}
+          pr={0.5}
+          mb={3}
+          height="12.5rem"
+        >
+          <canvas />
+        </SoftBox>
         <SoftBox px={1}>
           <SoftBox mb={2}>
             <SoftTypography variant="h6" fontWeight="medium" textTransform="capitalize">
@@ -87,13 +141,6 @@ function ReportsBarChart({ color, title, description, chart, items }) {
     </Card>
   );
 }
-
-// Setting default values for the props of ReportsBarChart
-ReportsBarChart.defaultProps = {
-  color: "dark",
-  description: "",
-  items: [],
-};
 
 // Typechecking props for the ReportsBarChart
 ReportsBarChart.propTypes = {

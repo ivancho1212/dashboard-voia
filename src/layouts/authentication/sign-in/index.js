@@ -103,7 +103,7 @@ function SignIn() {
           </SoftButton>
         </SoftBox>
 
-        {/* Botones sociales en blanco */}
+        {/* Botones sociales en blanco 
         <SoftBox mt={2}>
           <SoftButton
             fullWidth
@@ -142,7 +142,7 @@ function SignIn() {
             Iniciar sesión con Microsoft
           </SoftButton>
         </SoftBox>
-
+*/}
         <SoftBox mt={3} textAlign="center">
           <SoftTypography variant="button" color="text" fontWeight="regular">
             ¿No tienes una cuenta?{" "}

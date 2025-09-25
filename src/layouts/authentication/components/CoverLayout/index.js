@@ -6,7 +6,16 @@ import PageLayout from "examples/LayoutContainers/PageLayout";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useNavigate } from "react-router-dom"; // 👈 importar navigate
 
-function CoverLayout({ bgColor, header, title, description, image, top, titleColor, children }) {
+function CoverLayout({ 
+  bgColor = "#000", 
+  header = "", 
+  title = "", 
+  description = "", 
+  image, 
+  top = 20, 
+  titleColor = "white", 
+  children 
+}) {
   const navigate = useNavigate(); // 👈 inicializar navigate
 
   return (
@@ -95,15 +104,6 @@ function CoverLayout({ bgColor, header, title, description, image, top, titleCol
   );
 }
 
-CoverLayout.defaultProps = {
-  header: "",
-  title: "",
-  description: "",
-  color: "info",
-  top: 20,
-  bgColor: "#000",
-  titleColor: "white",
-};
 
 CoverLayout.propTypes = {
   color: PropTypes.oneOf([

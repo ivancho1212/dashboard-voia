@@ -37,7 +37,7 @@ function UserBotsSection() {
             <Card key={bot.id}>
               <CardContent>
                 <SoftTypography variant="h6">{bot.name}</SoftTypography>
-                <SoftTypography variant="body2" color="textSecondary">
+                <SoftTypography variant="body2" color="text">
                   {bot.description || "Sin descripción"}
                 </SoftTypography>
               </CardContent>

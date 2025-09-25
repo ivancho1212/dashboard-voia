@@ -4,14 +4,18 @@ const BASE_URL = "http://localhost:5006/api";
 const API_URL = `${BASE_URL}/UploadedDocuments`;
 
 // 🔼 Subir archivo
-export const uploadFile = async (file, botTemplateId, userId, templateTrainingSessionId = null) => {
+export const uploadFile = async (file, botId, userId) => {
   const formData = new FormData();
   formData.append("File", file);
-  formData.append("BotTemplateId", botTemplateId);
+  formData.append("BotId", botId);
+  formData.append("BotTemplateId", botId > 0 ? 1 : null);
   formData.append("UserId", userId);
-  if (templateTrainingSessionId) {
-    formData.append("TemplateTrainingSessionId", templateTrainingSessionId);
-  }
+
+  console.log('Enviando archivo con datos:', {
+    fileName: file.name,
+    botId,
+    userId
+  });
 
   const response = await axios.post(API_URL, formData, {
     headers: { "Content-Type": "multipart/form-data" },
