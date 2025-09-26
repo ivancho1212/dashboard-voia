@@ -8,7 +8,8 @@ export const uploadFile = async (file, botId, userId) => {
   const formData = new FormData();
   formData.append("File", file);
   formData.append("BotId", botId);
-  formData.append("BotTemplateId", botId > 0 ? 1 : null);
+  // TODO: El BotTemplateId no debería estar hardcodeado a 1.
+  formData.append("BotTemplateId", botId > 0 ? 1 : null); 
   formData.append("UserId", userId);
 
   console.log('Enviando archivo con datos:', {
@@ -17,10 +18,19 @@ export const uploadFile = async (file, botId, userId) => {
     userId
   });
 
-  const response = await axios.post(API_URL, formData, {
-    headers: { "Content-Type": "multipart/form-data" },
-  });
-  return response.data;
+  try {
+    const response = await axios.post(API_URL, formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  } catch (error) {
+    if (error.response && error.response.status === 409) {
+      console.warn(`⚠️ Archivo duplicado: ${file.name}. Ya existe en la plantilla.`);
+      return { duplicate: true, message: error.response.data.message };
+    }
+    // Para cualquier otro error, relánzalo para que el catch principal lo maneje
+    throw error;
+  }
 };
 
 // 🔍 Obtener archivos por plantilla

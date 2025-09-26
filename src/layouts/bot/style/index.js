@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 import { getBotStylesByUser, getBotStyleById, createBotStyle } from "services/botStylesService";
+import { getBotsByUserId, updateBotStyle } from "services/botService";
+
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -37,6 +39,9 @@ function BotStylePage() {
 
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Cargando estilos...");
+  const [showBotSelectModal, setShowBotSelectModal] = useState(false);
+  const [selectedBotForStyle, setSelectedBotForStyle] = useState(null);
+  const [userBots, setUserBots] = useState([]);
 
   // Generar nuevo estilo dinámicamente
   const defaultNewStyle = (userId) => ({
@@ -60,27 +65,43 @@ function BotStylePage() {
     setLoading(true);
     setLoadingMessage("Cargando estilos...");
     try {
+      console.log("🔹 fetchBotAndStyles: iniciando carga de datos para user:", user.id);
+
       const botRes = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
-      const botStyleId = botRes.data.styleId;
+      const botData = botRes.data;
+      console.log("📌 Bot individual cargado:", botData);
+
+      const botStyleId = botData.styleId ?? botData.style_id;
       setBotStyleId(botStyleId);
 
+      // Obtener todos los bots del usuario
+      const bots = await getBotsByUserId(user.id);
+      console.log("📌 Bots obtenidos desde getBotsByUserId:", bots);
+
+      setUserBots(bots);
+
       const userStyles = await getBotStylesByUser(user.id);
+      console.log("📌 Estilos obtenidos:", userStyles);
 
       let currentBotStyle = null;
       if (botStyleId && !userStyles.find((s) => s.id === botStyleId)) {
         currentBotStyle = await getBotStyleById(botStyleId);
+        console.log("📌 Estilo del bot actual cargado individualmente:", currentBotStyle);
       }
 
       const combined = [...(currentBotStyle ? [currentBotStyle] : []), ...userStyles];
       const uniqueStyles = Array.from(new Map(combined.map((s) => [s.id, s])).values());
 
       setStyles(uniqueStyles);
+
+      console.log("✅ fetchBotAndStyles finalizó con éxito. Styles:", uniqueStyles);
     } catch (error) {
-      console.error("Error al cargar estilos o datos del bot:", error);
+      console.error("❌ Error al cargar estilos o datos del bot:", error);
     } finally {
       setLoading(false);
     }
   };
+
 
   const normalizeStyle = (style) => ({
     id: style.id,
@@ -148,7 +169,7 @@ function BotStylePage() {
         const created = response.data;
 
         await axios.put(`http://localhost:5006/api/Bots/${botId}`, {
-          styleId: created.id,
+          style_id: created.id,
         });
 
         setBotStyleId(created.id);
@@ -165,23 +186,45 @@ function BotStylePage() {
   };
 
   const onApplyStyle = async (styleId) => {
+    if (!user?.id) return;
     try {
       setLoading(true);
-      setLoadingMessage("Aplicando estilo al bot...");
-      const botRes = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
-      const updatedBot = { ...botRes.data, styleId };
+      setLoadingMessage("Preparando selección de bot...");
 
-      await axios.put(`http://localhost:5006/api/Bots/${botId}`, updatedBot);
-      setBotStyleId(styleId);
+      // Obtener todos los bots del usuario
+      let bots = await getBotsByUserId(user.id);
+      console.log("📌 Bots desde getBotsByUserId:", bots);
 
-      alert("Estilo aplicado al bot.");
-      await fetchBotAndStyles();
+      // Traer también el bot actual por ID
+      const currentBot = await axios.get(`http://localhost:5006/api/Bots/${botId}`).then(res => res.data);
+      console.log("📌 Bot actual:", currentBot);
+
+      // Mergear y eliminar duplicados por ID
+      const mergedBots = Array.from(new Map([...bots, currentBot].map(b => [b.id, b])).values());
+      console.log("📌 Bots finales para mostrar en modal:", mergedBots);
+
+      if (mergedBots.length === 0) {
+        alert("No tienes bots disponibles para aplicar el estilo.");
+        return;
+      }
+
+      if (mergedBots.length === 1) {
+        await updateBotStyle(mergedBots[0].id, styleId);
+        alert(`Estilo aplicado al bot "${mergedBots[0].name}".`);
+        await fetchBotAndStyles();
+        return;
+      }
+
+      // Mostrar todos los bots en el modal
+      setSelectedBotForStyle({ styleId, userBots: mergedBots, selectedBotId: mergedBots[0].id });
+      setShowBotSelectModal(true);
     } catch (err) {
-      console.error("Error al aplicar estilo al bot:", err);
+      console.error("❌ Error al preparar la aplicación de estilo:", err);
     } finally {
       setLoading(false);
     }
   };
+
 
   const onEditStyle = (style) => {
     const normalizedStyle = normalizeStyle(style);
@@ -220,8 +263,8 @@ function BotStylePage() {
     viewMode === "edit" || viewMode === "create"
       ? styleEditing
       : selectedStyle
-      ? normalizeStyle(selectedStyle)
-      : null;
+        ? normalizeStyle(selectedStyle)
+        : null;
 
   const handleContinue = () => {
     navigate("/bots/integration");
@@ -243,10 +286,11 @@ function BotStylePage() {
             <SoftBox mt={3}>
               {activeTab === 0 && (
                 <>
-                  {viewMode === "list" && (
+                  {activeTab === 0 && viewMode === "list" && (
                     <StyleList
                       styles={styles}
                       botStyleId={botStyleId}
+                      userBots={userBots}          // ✅ PASAR LOS BOTS
                       onViewStyle={onViewStyle}
                       onApplyStyle={onApplyStyle}
                       onEditStyle={onEditStyle}
@@ -292,7 +336,7 @@ function BotStylePage() {
                     <StyleEditor
                       style={styleEditing}
                       setStyle={setStyleEditing}
-                      setShowPreviewWidget={() => {}}
+                      setShowPreviewWidget={() => { }}
                       botId={botId}
                       userId={user?.id}
                       onCancel={onBackToList}
@@ -326,6 +370,85 @@ function BotStylePage() {
           </SoftBox>
         )}
       </SoftBox>
+
+      {showBotSelectModal && selectedBotForStyle && (
+        <SoftBox
+          position="fixed"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          bgcolor="rgba(0, 0, 0, 0.26) !important" // fondo más oscuro para que se vea sólido
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          zIndex={1500} // asegurarse que esté por encima de todo
+        >
+          <SoftBox
+            bgcolor="white !important" // contenido del modal sólido
+            borderRadius="12px"
+            p={4}
+            minWidth="300px"
+            maxWidth="400px"
+            boxShadow={6} // sombra más profunda para destacarlo
+          >
+            <SoftTypography variant="h6" mb={2}>
+              Selecciona el bot para aplicar el estilo
+            </SoftTypography>
+
+            <select
+              style={{ width: "100%", padding: "10px", marginBottom: "16px" }}
+              onChange={(e) =>
+                setSelectedBotForStyle((prev) => ({ ...prev, selectedBotId: e.target.value }))
+              }
+              value={selectedBotForStyle.selectedBotId || ""}
+            >
+              <option value="" disabled>
+                -- Selecciona un bot --
+              </option>
+              {selectedBotForStyle.userBots.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+
+            <SoftBox display="flex" justifyContent="flex-end" gap={1}>
+              <SoftButton
+                variant="gradient"
+                color="info"
+                onClick={async () => {
+                  if (!selectedBotForStyle.selectedBotId) return;
+                  setLoading(true);
+                  setLoadingMessage("Aplicando estilo...");
+                  await updateBotStyle(
+                    Number(selectedBotForStyle.selectedBotId),
+                    selectedBotForStyle.styleId
+                  );
+                  setShowBotSelectModal(false);
+                  setSelectedBotForStyle(null);
+                  await fetchBotAndStyles();
+                  setLoading(false);
+                  alert("Estilo aplicado correctamente.");
+                }}
+              >
+                Aplicar
+              </SoftButton>
+
+              <SoftButton
+                variant="outlined"
+                color="secondary"
+                onClick={() => {
+                  setShowBotSelectModal(false);
+                  setSelectedBotForStyle(null);
+                }}
+              >
+                Cancelar
+              </SoftButton>
+            </SoftBox>
+          </SoftBox>
+        </SoftBox>
+      )}
 
       <Footer />
     </DashboardLayout>

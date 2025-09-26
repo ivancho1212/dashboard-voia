@@ -1,5 +1,7 @@
+// src/contexts/AuthContext.js
 import React, { createContext, useContext, useState, useEffect } from "react";
-import PropTypes from "prop-types"; // ✅ importamos PropTypes
+import PropTypes from "prop-types";
+import { useNavigate } from "react-router-dom";
 
 const AuthContext = createContext(null);
 
@@ -7,6 +9,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const storedToken = localStorage.getItem("token");
@@ -19,7 +22,7 @@ export const AuthProvider = ({ children }) => {
         setToken(storedToken);
         setIsAuthenticated(true);
       } catch (error) {
-        console.error("Failed to parse user from localStorage", error);
+        console.error("❌ Error parsing user from localStorage", error);
         localStorage.removeItem("token");
         localStorage.removeItem("user");
       }
@@ -40,6 +43,7 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setToken(null);
     setIsAuthenticated(false);
+    navigate("/authentication/sign-in"); // 🔥 redirige al login
   };
 
   return (
@@ -49,7 +53,6 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// ✅ agregamos validación de PropTypes
 AuthProvider.propTypes = {
   children: PropTypes.node.isRequired,
 };

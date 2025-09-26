@@ -49,19 +49,24 @@ export async function deleteBot(botId) {
   }
 }
 
-
-// ✅ Nuevo método para actualizar solo el estilo del bot
-export async function updateBotStyle(botId, styleId) {
+export async function forceDeleteBot(botId) {
   try {
-    const res = await axios.get(`${API_URL}/${botId}`);
-    const bot = res.data;
-    const updatedBot = { ...bot, styleId };
-    return await axios.put(`${API_URL}/${botId}`, updatedBot);
+    const token = localStorage.getItem("token");
+    const response = await axios.delete(`${API_URL}/${botId}/force`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
   } catch (error) {
-    console.error("Error al actualizar el estilo del bot:", error);
+    console.error("❌ Error en forceDeleteBot:", error.response?.data || error.message);
     throw error;
   }
 }
+
+export const updateBotStyle = async (botId, styleId) => {
+  return axios.patch(`http://localhost:5006/api/Bots/${botId}/style`, {
+    styleId: styleId,
+  });
+};
 
 export const getBotContext = async (botId) => {
   try {
@@ -74,4 +79,5 @@ export const getBotContext = async (botId) => {
     console.error("Error en getBotContext:", error);
     return null;
   }
+  
 };

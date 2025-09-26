@@ -7,11 +7,11 @@ import { Select, MenuItem } from "@mui/material";
 import { createTrainingUrl } from "services/trainingUrlsService";
 import { createTrainingCustomText } from "services/trainingCustomTextsService";
 import { uploadFile } from "services/uploadedDocumentsService";
-import { createBot, deleteBot } from "services/botService";
+import { createBot, forceDeleteBot } from "services/botService";
 import { getBotTemplateById } from "services/botTemplateService";
 import { getIaProviders } from "services/botIaProviderService";
 import { getModelConfigsByProvider } from "services/aiModelConfigService";
-import { useAuth } from "auth-context/index";
+import { useAuth } from "contexts/AuthContext"; 
 import Swal from "sweetalert2";
 
 // Componentes de Material UI y Soft UI
@@ -45,8 +45,6 @@ function BotTraining() {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [isAddingInteraction, setIsAddingInteraction] = useState(false);
-  const [promptSaved, setPromptSaved] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
 
   // Estados para archivos y documentos
   const [files, setFiles] = useState([]);
@@ -54,13 +52,10 @@ function BotTraining() {
   const [texts, setTexts] = useState([]);
   const [fileErrors, setFileErrors] = useState(new Map());
   const [urlErrors, setUrlErrors] = useState(new Map());
-  const [textErrors, setTextErrors] = useState(new Map());
   const [currentUrl, setCurrentUrl] = useState("");
   const [currentText, setCurrentText] = useState("");
-  const [savingAttachments, setSavingAttachments] = useState(false);
 
   // Estado general
-  const [loading, setLoading] = useState(true);
   const [creatingBot, setCreatingBot] = useState(false);
 
   // Constantes
@@ -118,22 +113,6 @@ function BotTraining() {
     }
   }, [template]);
 
-  // Función para asegurar sessionId
-  const ensureSessionId = async () => {
-    if (!sessionId) {
-      try {
-        const newSessionId = Date.now().toString();
-        setSessionId(newSessionId);
-        return newSessionId;
-      } catch (error) {
-        console.error("Error generating session ID:", error);
-        Swal.fire("Error", "No se pudo generar ID de sesión", "error");
-        return null;
-      }
-    }
-    return sessionId;
-  };
-
   // Validaciones
   const validateFile = (file) => {
     const newErrors = new Map(fileErrors);
@@ -153,16 +132,15 @@ function BotTraining() {
 
   const validateUrl = (url) => {
     if (!url) return false;
-    
+
     const urlPattern = /^(https?:\/\/)[^\s$.?#].[^\s]*$/i;
     const isValid = urlPattern.test(url);
-    
+
     if (!isValid) {
       setUrlErrors(new Map([...urlErrors, [url, "URL inválida"]]));
       return false;
     }
 
-    // Filtrar enlaces no permitidos
     const forbiddenPatterns = [
       "drive.google.com",
       "docs.google.com",
@@ -259,92 +237,36 @@ function BotTraining() {
     }
   };
 
-  const prepareUploads = async (botId) => {
-    const uploadPromises = [];
-    
-    // Subir archivos
-    for (const file of files) {
-      uploadPromises.push(uploadFile(file, botId, userId, null));
-    }
-    
-    // Subir URLs
-    for (const url of urls) {
-      uploadPromises.push(createTrainingUrl({ 
-        botId, 
-        url,
-        userId 
-      }));
-    }
-    
-    // Subir textos
-    for (const text of texts) {
-      uploadPromises.push(createTrainingCustomText({ 
-        botId, 
-        botTemplateId: parseInt(botTemplateId),
-        userId, 
-        content: text 
-      }));
-    }
-
-    return uploadPromises;
-  };
-
-  const uploadPrompts = async (botId) => {
-    for (let i = 0; i < interactions.length; i += 2) {
-      const userInteraction = interactions[i];
-      const assistantInteraction = interactions[i + 1];
-      
-      await createBotCustomPrompt({ 
-        botId, 
-        role: 'user', 
-        content: userInteraction.content 
-      });
-      
-      await createBotCustomPrompt({ 
-        botId, 
-        role: 'assistant', 
-        content: assistantInteraction.content 
-      });
-    }
-  };
-
   const handleCreateBot = async () => {
     setCreatingBot(true);
     let newBotId = null;
 
+    const rollbackBot = async (botId) => {
+      if (!botId) return;
+      console.log(`[ROLLBACK] Iniciando rollback para el bot ID: ${botId}`);
+      try {
+        await forceDeleteBot(botId);
+        console.log(`[ROLLBACK] ✅ Bot ${botId} eliminado exitosamente.`);
+      } catch (rollbackError) {
+        console.error(`[ROLLBACK] ❌ Fallo crítico: No se pudo eliminar el bot ${botId}.`, rollbackError);
+        Swal.fire(
+          "Error Crítico de Rollback",
+          `El bot con nombre \"${botName}\" no pudo ser eliminado después de un error. Por favor, elimínelo manualmente.`, "error"
+        );
+      }
+    };
+
     try {
-      // Validar entradas
+      // --- PASO 1: VALIDACIONES INICIALES ---
+      console.log("[LOG] 1/5: Validando entradas...");
       validateInputs();
+      files.forEach(file => { if (!validateFile(file)) throw new Error(`Archivo inválido: ${file.name}`); });
+      urls.forEach(url => { if (!validateUrl(url)) throw new Error(`URL inválida: ${url}`); });
+      if (!botTemplateId) throw new Error('No se ha proporcionado el ID de la plantilla');
+      console.log("[LOG] ✅ 1/5: Entradas validadas.");
 
-      // Validar archivos y URLs
-      for (const file of files) {
-        if (!validateFile(file)) {
-          throw new Error(`Archivo inválido: ${file.name}`);
-        }
-      }
-
-      for (const url of urls) {
-        if (!validateUrl(url)) {
-          throw new Error(`URL inválida: ${url}`);
-        }
-      }
-
-      // Crear arrays para almacenar las promesas de subida
-      const fileUploads = [];
-      const urlUploads = [];
-      const textUploads = [];
-      const promptUploads = [];
-
-      // No preparamos las subidas de archivos aquí, las haremos después de crear el bot
-      
-      // Verificar que tenemos el ID de template
-      if (!botTemplateId) {
-        throw new Error('No se ha proporcionado el ID de la plantilla');
-      }
-
-      console.log('ID de plantilla verificado:', botTemplateId);
-
-      // Crear el bot
+      // --- PASO 2: CREACIÓN DEL BOT ---
+      console.log("[LOG] 2/5: Creando el bot...");
       const botData = {
         name: botName.trim(),
         description: botDescription.trim(),
@@ -353,118 +275,74 @@ function BotTraining() {
         isActive: true,
         userId
       };
-
-      console.log('Creando bot con datos:', botData);
       const newBot = await createBot(botData);
-
-      if (!newBot || !newBot.id) {
-        throw new Error('No se pudo obtener el ID del bot creado');
-      }
-
+      if (!newBot || !newBot.id) throw new Error('No se pudo obtener el ID del bot creado');
       newBotId = newBot.id;
-      console.log('Bot creado con ID:', newBotId);
+      console.log(`[LOG] ✅ 2/5: Bot creado con ID: ${newBotId}`);
 
-      // Primero subimos los archivos de forma secuencial
-      console.log('Iniciando subida de archivos...');
+      // --- PASO 3: SUBIDA DE CONTEXTO (SECUENCIAL) ---
+      console.log("[LOG] 3/5: Iniciando subida de contexto (Archivos, URLs, Textos)...");
+
+      console.log("Subiendo archivos...");
       for (const file of files) {
-        try {
-          console.log(`Subiendo archivo ${file.name} para bot ${newBotId}`);
-          await uploadFile(file, newBotId, userId);
-        } catch (error) {
-          console.error(`Error al subir archivo ${file.name}:`, error);
-          throw error;
+        const result = await uploadFile(file, newBotId, userId);
+        if (result?.duplicate) {
+          console.log(`Archivo omitido (duplicado): ${file.name}`);
+          continue; // Salta al siguiente archivo
         }
       }
-      console.log('Subida de archivos completada');
 
-      // Subir URLs
-      console.log('Subiendo URLs...');
+      console.log("Subiendo URLs...");
       for (const url of urls) {
-        try {
-          await createTrainingUrl({
-            url: url,
-            botId: newBotId,
-            botTemplateId: parseInt(botTemplateId),
-            userId: userId
-          });
-        } catch (error) {
-          console.error(`Error al subir URL ${url}:`, error);
-          throw error;
-        }
+        await createTrainingUrl({ url, botId: newBotId, botTemplateId: parseInt(botTemplateId), userId });
       }
 
-      // Subir textos
-      console.log('Subiendo textos personalizados...');
+      console.log("Subiendo textos personalizados...");
       for (const text of texts) {
-        try {
-          await createTrainingCustomText({
-            content: text,
-            botId: newBotId,
-            botTemplateId: parseInt(botTemplateId),
-            userId: userId
-          });
-        } catch (error) {
-          console.error(`Error al subir texto:`, error);
-          throw error;
-        }
+        await createTrainingCustomText({ content: text, botId: newBotId, botTemplateId: parseInt(botTemplateId), userId });
       }
+      console.log("[LOG] ✅ 3/5: Contexto subido.");
 
-      // Subir prompts
-      console.log('Subiendo prompts...');
+      // --- PASO 4: SUBIDA DE PROMPTS (SECUENCIAL) ---
+      console.log("[LOG] 4/5: Subiendo prompts...");
       for (let i = 0; i < interactions.length; i += 2) {
-        try {
-          const userPrompt = interactions[i];
-          const assistantPrompt = interactions[i + 1];
+        const userPrompt = interactions[i];
+        const assistantPrompt = interactions[i + 1];
 
-          if (!newBotId) {
-            console.error('No hay ID de bot disponible para crear los prompts');
-            throw new Error('No hay ID de bot disponible');
-          }
-
-          const userPromptData = {
-            BotId: newBotId,
-            BotTemplateId: parseInt(botTemplateId),
-            Role: 'user',
-            Content: userPrompt.content
-          };
-          console.log('Creando prompt de usuario con datos:', userPromptData);
-          await createBotCustomPrompt(userPromptData);
-
-          const assistantPromptData = {
-            BotId: newBotId,
-            BotTemplateId: parseInt(botTemplateId),
-            Role: 'assistant',
-            Content: assistantPrompt.content
-          };
-          console.log('Creando prompt de asistente con datos:', assistantPromptData);
-          await createBotCustomPrompt(assistantPromptData);
-        } catch (error) {
-          console.error('Error al crear prompts:', error);
-          throw error;
-        }
+        await createBotCustomPrompt({
+          BotId: newBotId,
+          BotTemplateId: parseInt(botTemplateId),
+          Role: 'user',
+          Content: userPrompt.content
+        });
+        await createBotCustomPrompt({
+          BotId: newBotId,
+          BotTemplateId: parseInt(botTemplateId),
+          Role: 'assistant',
+          Content: assistantPrompt.content
+        });
       }
+      console.log("[LOG] ✅ 4/5: Prompts subidos.");
 
+      // --- PASO 5: FINALIZACIÓN ---
+      console.log("[LOG] 5/5: Proceso finalizado con éxito.");
       await Swal.fire("¡Éxito!", "Bot creado y entrenado correctamente.", "success");
       navigate(`/bots/captured-data/${newBotId}`);
+
     } catch (error) {
+      // --- MANEJO DE ERRORES Y ROLLBACK ---
       console.error('❌ Error durante la creación o subida de datos:', error);
-      
-      if (newBotId) {
-        try {
-          await deleteBot(newBotId);
-          console.log('Bot eliminado después del error:', newBotId);
-        } catch (rollbackError) {
-          console.error(`❌ Error en el rollback del bot ${newBotId}:`, rollbackError);
-        }
-      }
+
+      await rollbackBot(newBotId);
 
       const errorMsg = error.response?.data?.message || error.message || "Ocurrió un error inesperado.";
-      await Swal.fire("Error en la Creación", `No se pudo crear el bot. ${errorMsg}`, "error");
+      const finalMsg = `No se pudo completar la creación del bot. ${errorMsg}. Se han revertido todos los cambios, puede intentarlo de nuevo.`;
+      await Swal.fire("Error en la Creación", finalMsg, "error");
+
     } finally {
       setCreatingBot(false);
     }
   };
-   
 
   return (
     <DashboardLayout>
