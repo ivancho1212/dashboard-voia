@@ -1,24 +1,33 @@
 (function () {
   const scriptTag = document.currentScript;
   const botId = scriptTag.getAttribute("data-bot");
+  const token = scriptTag.getAttribute("data-token");
 
   if (!botId) {
     console.error("❌ El atributo data-bot es requerido para el widget.");
     return;
   }
 
-  // Crear iframe
+  // Crear iframe que permita al ChatWidget gestionar su propio layout
   const iframe = document.createElement("iframe");
-  iframe.src = `http://localhost:3000/widget-frame?bot=${botId}`; // LOCALHOST para desarrollo
-  iframe.style.position = "fixed";
-  iframe.style.bottom = "20px";
-  iframe.style.right = "20px";
-  iframe.style.width = "400px";
-  iframe.style.height = "600px";
-  iframe.style.border = "none";
-  iframe.style.zIndex = "9999";
-  iframe.style.borderRadius = "16px";
-  iframe.style.boxShadow = "0 4px 20px rgba(0,0,0,0.2)";
+  const baseUrl = `http://localhost:3000/widget-frame?bot=${botId}`;
+  iframe.src = token ? `${baseUrl}&token=${token}` : baseUrl;
+  iframe.style.cssText = `
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 100vw;
+    height: 100vh;
+    border: none;
+    z-index: 9999;
+    background: transparent;
+    pointer-events: none;
+  `;
+  iframe.setAttribute('allowtransparency', 'true');
+  
+  iframe.onload = function() {
+    this.style.pointerEvents = "auto";
+  };
 
   document.body.appendChild(iframe);
 })();

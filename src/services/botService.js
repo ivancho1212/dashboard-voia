@@ -81,3 +81,16 @@ export const getBotContext = async (botId) => {
   }
   
 };
+
+export const getBotDataWithToken = async (botId, token) => {
+  try {
+    const response = await axios.get(`${API_URL}/${botId}/widget-settings`, {
+      params: { token },
+      timeout: 10000
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error en getBotDataWithToken:", error);
+    throw error;
+  }
+};

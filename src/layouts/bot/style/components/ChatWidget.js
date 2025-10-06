@@ -17,6 +17,22 @@ import { getSenderColor } from "../../../../utils/colors";
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
 
+// Función robusta para detectar si un string es un emoji (igual que en AvatarComponent.js)
+function isEmoji(str) {
+  if (!str || typeof str !== 'string') return false;
+  const trimmed = str.trim();
+  if (!trimmed) return false;
+  // Verificar que no sea una URL o path
+  if (trimmed.includes('/') || trimmed.includes('.') || trimmed.includes('http') || trimmed.includes('data:')) {
+    return false;
+  }
+  // Verificar que sea razonablemente corto (emojis suelen ser ≤ 8 chars)
+  if (trimmed.length > 8) return false;
+  // Regex completa para emojis (incluye ZWJ y variantes)
+  const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1F018}-\u{1F270}]|[\u{238C}-\u{2454}]|[\u{20D0}-\u{20FF}]|[\u{FE0F}]|[\u{200D}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F170}-\u{1F251}]/u;
+  return emojiRegex.test(trimmed);
+}
+
 const normalizeMessage = (msg) => {
   const id = msg.id ?? msg.tempId ?? uuidv4();
   const uniqueKey = msg.tempId ?? id; // Prioritize tempId for the key
@@ -820,6 +836,7 @@ useEffect(() => {
   const wrapperStyle = {
     position: "fixed",
     zIndex: 9999,
+    pointerEvents: isOpen ? "auto" : "none", // Solo interceptar eventos cuando está abierto
     ...positionStyles[position],
   };
 
@@ -958,6 +975,7 @@ useEffect(() => {
             boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
             overflow: "hidden",
             padding: 0,
+            pointerEvents: "auto", // Asegurar que el botón reciba clicks
           }}
         >
           <div
@@ -971,16 +989,33 @@ useEffect(() => {
               overflow: "hidden",
             }}
           >
-            <img
-              src={avatarUrl?.trim() ? avatarUrl : defaultAvatar}
-              alt="Avatar"
-              style={{
-                width: "60px",
-                height: "60px",
-                borderRadius: "50%",
-                objectFit: "cover",
-              }}
-            />
+            {isEmoji(avatarUrl) ? (
+              <span 
+                style={{ 
+                  fontSize: "32px", 
+                  lineHeight: 1,
+                  userSelect: "none",
+                  fontFamily: "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Android Emoji', 'EmojiOne Color', 'Twemoji Mozilla', sans-serif"
+                }}
+              >
+                {avatarUrl}
+              </span>
+            ) : (
+              <img
+                src={avatarUrl?.trim() ? avatarUrl : defaultAvatar}
+                alt="Avatar"
+                style={{
+                  width: "60px",
+                  height: "60px",
+                  borderRadius: "50%",
+                  objectFit: "cover",
+                }}
+                onError={(e) => {
+                  console.log("❌ Error cargando avatar launcher:", avatarUrl);
+                  e.target.style.display = "none";
+                }}
+              />
+            )}
           </div>
         </button>
       ) : (
@@ -1009,16 +1044,46 @@ useEffect(() => {
                 paddingLeft: "16px",
               }}
             >
-              <img
-                src={avatarUrl?.trim() ? avatarUrl : defaultAvatar}
-                alt="Avatar"
+              <div
                 style={{
                   width: "42px",
                   height: "42px",
                   borderRadius: "50%",
-                  objectFit: "cover",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                  backgroundColor: "rgba(255,255,255,0.1)",
                 }}
-              />
+              >
+                {isEmoji(avatarUrl) ? (
+                  <span 
+                    style={{ 
+                      fontSize: "24px", 
+                      lineHeight: 1,
+                      userSelect: "none",
+                      fontFamily: "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Android Emoji', 'EmojiOne Color', 'Twemoji Mozilla', sans-serif"
+                    }}
+                  >
+                    {avatarUrl}
+                  </span>
+                ) : (
+                  <img
+                    src={avatarUrl?.trim() ? avatarUrl : defaultAvatar}
+                    alt="Avatar"
+                    style={{
+                      width: "42px",
+                      height: "42px",
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                    }}
+                    onError={(e) => {
+                      console.log("❌ Error cargando avatar header:", avatarUrl);
+                      e.target.style.display = "none";
+                    }}
+                  />
+                )}
+              </div>
               <span
                 style={{
                   fontSize: "18px",

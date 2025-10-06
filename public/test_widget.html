@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba Widget VIA - Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            color: #fff;
+            margin-bottom: 30px;
+        }
+
+        .info {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🚀 Prueba Widget VIA - Test Page</h1>
+        <div class="info">
+            <h3>Información de Test:</h3>
+            <p><strong>Bot ID:</strong> 2</p>
+            <p><strong>Token:</strong> Generado automáticamente</p>
+            <p><strong>Objetivo:</strong> Probar widget embebido como lo usaría cualquier sitio web</p>
+        </div>
+        <div class="info">
+            <p>🎯 <strong>Características a probar:</strong></p>
+            <ul>
+                <li>✅ Widget completamente autónomo</li>
+                <li>✅ Posicionamiento automático desde DB</li>
+                <li>✅ Estilos aplicados desde configuración</li>
+                <li>✅ Sin dependencias de CSS externo</li>
+            </ul>
+        </div>
+        <div class="info">
+            <p>📊 <strong>Estado:</strong> El widget debe aparecer automáticamente según su configuración</p>
+        </div>
+    </div>
+
+<!-- VIA Chat Widget -->
+    <script 
+        async 
+        src="http://localhost:3000/widget.js" 
+        data-bot="1"
+        data-token="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJib3RJZCI6IjEiLCJhbGxvd2VkRG9tYWluIjoibG9jYWxob3N0IiwibmJmIjoxNzU5NzYzOTYxLCJleHAiOjE3NTk3NzExNjEsImlhdCI6MTc1OTc2Mzk2MSwiaXNzIjoiVm9pYS5BcGkiLCJhdWQiOiJWb2lhLkNsaWVudCJ9.z9oAuk6gh42B-_g-O-B0BW-Y8FEqOh5X40RFYNlJulY">
+    </script>
+</body>
+
+</html>

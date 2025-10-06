@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Simple Conversation</title>
+</head>
+<body>
+    <h1>Test Simple Conversation (No Widget)</h1>
+    <button onclick="testSimpleConversation()">Test Direct Conversation API</button>
+    <div id="results"></div>
+
+    <script>
+        function log(message) {
+            const results = document.getElementById('results');
+            results.innerHTML += '<div>' + JSON.stringify(message, null, 2) + '</div><br>';
+            console.log(message);
+        }
+
+        async function testSimpleConversation() {
+            try {
+                log('Testing direct conversation API call...');
+                
+                const conversationData = {
+                    botId: 2,
+                    userId: null, // Para usuarios anónimos
+                    title: "Test Conversation",
+                    userMessage: "Hello",
+                    botResponse: "Hi there!"
+                };
+                
+                log('Sending conversation data:');
+                log(conversationData);
+                
+                const response = await fetch('http://localhost:5006/api/Conversations/get-or-create', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                        // Sin Authorization header para probar
+                    },
+                    body: JSON.stringify(conversationData)
+                });
+
+                log(`Response status: ${response.status} ${response.statusText}`);
+                log(`Response headers:`, Object.fromEntries(response.headers.entries()));
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log(`Error response body: ${errorText}`);
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}\n${errorText}`);
+                }
+
+                const data = await response.json();
+                log('Conversation created successfully:');
+                log(data);
+            } catch (error) {
+                log('Error creating conversation:');
+                log(error);
+            }
+        }
+    </script>
+</body>
+</html>

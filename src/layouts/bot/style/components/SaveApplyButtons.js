@@ -7,6 +7,7 @@ import SoftTypography from "components/SoftTypography";
 import Modal from "@mui/material/Modal";
 import Box from "@mui/material/Box";
 import axios from "axios";
+import { useAuth } from "contexts/AuthContext";
 
 export default function SaveApplyButtons({
   style,
@@ -17,6 +18,7 @@ export default function SaveApplyButtons({
   setLoading,
   setLoadingMessage,
 }) {
+  const { token, logout } = useAuth();
   const [openModal, setOpenModal] = useState(false);
   const [styleName, setStyleName] = useState("");
 
@@ -42,19 +44,30 @@ export default function SaveApplyButtons({
       setLoading(true);
       setLoadingMessage(isUpdate ? "Actualizando estilo..." : "Guardando nuevo estilo...");
 
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+
       if (isUpdate) {
-        await axios.put(`${apiUrl}/${style.id}`, styleData);
+        await axios.put(`${apiUrl}/${style.id}`, styleData, config);
         alert("Estilo actualizado correctamente.");
         if (onStyleSaved) onStyleSaved({ ...style, ...styleData });
       } else {
-        const response = await axios.post(apiUrl, styleData);
+        const response = await axios.post(apiUrl, styleData, config);
         const createdStyle = response.data;
         alert(`Estilo "${createdStyle.name}" guardado correctamente.`);
         if (onStyleSaved) onStyleSaved(createdStyle);
       }
     } catch (error) {
       console.error("Error al guardar el estilo:", error);
-      alert("Error al guardar el estilo. Revisa la consola.");
+      if (error.response && error.response.status === 401) {
+        alert("Tu sesión ha expirado. Por favor inicia sesión nuevamente.");
+        logout();
+      } else {
+        alert("Error al guardar el estilo. Revisa la consola.");
+      }
     } finally {
       setLoading(false);
     }
