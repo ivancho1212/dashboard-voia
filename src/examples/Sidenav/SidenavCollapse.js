@@ -1,6 +1,7 @@
 
 // prop-types is a library for typechecking of props.
 import PropTypes from "prop-types";
+import { isValidElement, cloneElement } from "react";
 
 // @mui material components
 import Collapse from "@mui/material/Collapse";
@@ -27,6 +28,19 @@ function SidenavCollapse({ color, icon, name, children, active, noCollapse, open
   const [controller] = useSoftUIController();
   const { miniSidenav, transparentSidenav } = controller;
 
+  // Si el icono es un react-element (ej: react-icons), clónalo con color especial si está activo
+  let renderedIcon = icon;
+  if (isValidElement(icon)) {
+    // Para react-icons y SVGs, forzamos color y fill según estado activo
+    renderedIcon = cloneElement(icon, {
+      color: active ? "#fff" : "#344767", // blanco si activo, gris oscuro si no
+      style: {
+        ...(icon.props.style || {}),
+        fill: active ? "#fff" : "#344767",
+      },
+    });
+  }
+
   return (
     <>
       <ListItem component="li">
@@ -37,7 +51,7 @@ function SidenavCollapse({ color, icon, name, children, active, noCollapse, open
             {typeof icon === "string" ? (
               <Icon sx={(theme) => collapseIcon(theme, { active })}>{icon}</Icon>
             ) : (
-              icon
+              renderedIcon
             )}
           </ListItemIcon>
 

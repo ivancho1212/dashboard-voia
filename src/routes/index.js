@@ -1,4 +1,4 @@
-import dashboardRoutes from "./dashboard";
+import { getDashboardRoutesForUser } from "./dashboard";
 import botRoutes from "./bot";
 import userRoutes from "./user";
 import planRoutes from "./plan";
@@ -12,21 +12,22 @@ import widgetRoutes from "./widget";
 import landingRoutes from "./landing";
 import legalRoutes from "./legal";
 
-
-const routes = [
-  ...landingRoutes,
-  ...dashboardRoutes,
-  ...userRoutes,
-  ...planRoutes,
-  ...configRoutes,
-  ...botRoutes,
-  ...dataRoutes,
-  ...billingRoutes,
-  ...supportRoutes,
-  ...authRoutes,
-  ...otherRoutes, 
-  ...widgetRoutes,
-  ...legalRoutes, 
-];
-
-export default routes;
+// Exportar una función que recibe el usuario y retorna las rutas
+export function getAllRoutesForUser(user) {
+  const dashboardRoutes = getDashboardRoutesForUser(user);
+  return [
+    ...landingRoutes,
+    ...dashboardRoutes,
+    ...userRoutes,
+    ...planRoutes,
+    ...configRoutes,
+    ...botRoutes,
+    ...dataRoutes,
+    ...billingRoutes,
+    ...supportRoutes,
+    ...authRoutes,
+    ...otherRoutes, 
+    ...widgetRoutes,
+    ...legalRoutes, 
+  ];
+}

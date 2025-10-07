@@ -53,7 +53,7 @@ import { CacheProvider } from "@emotion/react";
 import createCache from "@emotion/cache";
 
 // Rutas
-import routes from "routes/index";
+import { getAllRoutesForUser } from "routes/index";
 
 // Context
 import {
@@ -76,14 +76,23 @@ export default function App() {
   const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
   const isWidgetFrame = pathname === "/widget-frame";
+  const { user } = useAuth();
 
+  // Rutas públicas (deben coincidir con landingRoutes y authRoutes)
+  const publicPaths = [
+    "/",
+    "/via",
+    "/authentication/sign-in",
+    "/authentication/sign-up",
+    "/politica-de-privacidad"
+  ];
   const isLandingRoute =
-    pathname === "/" ||
-    pathname === "/via" ||
+    publicPaths.includes(pathname) ||
     pathname.startsWith("/pregunta") ||
-    pathname.startsWith("/servicio") ||
-    pathname === "/authentication/sign-in" ||
-    pathname === "/authentication/sign-up";
+    pathname.startsWith("/servicio");
+
+  // Obtener rutas permitidas para el usuario
+  const routes = useMemo(() => getAllRoutesForUser(user), [user]);
 
   useEffect(() => {
     if (isLandingRoute) {
@@ -124,27 +133,21 @@ export default function App() {
     document.body.setAttribute("dir", direction);
   }, [direction]);
 
+  // Generador de rutas con protección
   const getRoutes = (allRoutes) =>
     allRoutes.flatMap((route, index) => {
       if (route.collapse) return getRoutes(route.collapse);
 
-      // Soft UI Dashboard
+      // Rutas con route/component (legacy)
       if (route.route && route.component) {
         const Component = route.component;
         let element = null;
-
-        // Si es función, lo instanciamos
         if (typeof Component === "function") {
           element = <Component />;
-        }
-        // Si ya es JSX (objeto), lo usamos tal cual
-        else if (Component && typeof Component === "object") {
+        } else if (Component && typeof Component === "object") {
           element = Component;
         }
-
-        // Proteger rutas administrativas
-
-        // Proteger también rutas de dashboard
+        // Proteger solo rutas administrativas/dashboard
         const isProtectedRoute =
           route.route.startsWith("/admin") ||
           route.route.startsWith("/config") ||
@@ -152,7 +155,6 @@ export default function App() {
           route.route.startsWith("/data") ||
           route.route.startsWith("/profile") ||
           route.route.startsWith("/dashboard");
-
         if (element) {
           return (
             <Route
@@ -162,32 +164,50 @@ export default function App() {
             />
           );
         }
-
         return null;
       }
-
       // Modern routes with children
       if (route.children) {
         const ParentElement =
           route.element && (typeof route.element === "function" ? <route.element /> : route.element);
-
         return (
           <Route key={index} path={route.path} element={ParentElement}>
             {route.children.map((child, idx) => {
               const ChildElement =
                 child.element && (typeof child.element === "function" ? <child.element /> : child.element);
-              return <Route key={idx} index={child.index} path={child.path} element={ChildElement} />;
+              // Proteger hijos administrativos
+              const isProtectedChild =
+                child.path?.startsWith("admin") ||
+                child.path?.startsWith("config") ||
+                child.path?.startsWith("billing") ||
+                child.path?.startsWith("data") ||
+                child.path?.startsWith("profile") ||
+                child.path?.startsWith("dashboard");
+              return (
+                <Route
+                  key={idx}
+                  index={child.index}
+                  path={child.path}
+                  element={isProtectedChild ? <PrivateRoute>{ChildElement}</PrivateRoute> : ChildElement}
+                />
+              );
             })}
           </Route>
         );
       }
-
       // Simple modern route
       if (route.path) {
         const Elem = route.element && typeof route.element === "function" ? <route.element /> : null;
-        return <Route key={index} path={route.path} element={Elem} />;
+        // Proteger solo si es admin/dashboard
+        const isProtected =
+          route.path.startsWith("admin") ||
+          route.path.startsWith("config") ||
+          route.path.startsWith("billing") ||
+          route.path.startsWith("data") ||
+          route.path.startsWith("profile") ||
+          route.path.startsWith("dashboard");
+        return <Route key={index} path={route.path} element={isProtected ? <PrivateRoute>{Elem}</PrivateRoute> : Elem} />;
       }
-
       return null;
     });
 
@@ -262,7 +282,7 @@ export default function App() {
               color={sidenavColor}
               brand={brand}
               brandName="VOIA"
-              routes={routes.filter(r => r.icon)} // filtramos routes sin icon
+              routes={routes.filter(r => r.icon && (!r.permission || (user && user.permissions && user.permissions.includes(r.permission))))}
               onMouseEnter={handleOnMouseEnter}
               onMouseLeave={handleOnMouseLeave}
             />

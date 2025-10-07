@@ -1,19 +1,110 @@
-import React, { useEffect, useState } from "react";
+// Mover estos useEffect dentro del componente WidgetFrame
+import React, { useEffect, useState, useMemo } from "react";
 import ChatWidget from "layouts/bot/style/components/ChatWidget";
 import { getBotDataWithToken } from "services/botService";
 import widgetAuthService from "services/widgetAuthService";
+import { getApiBaseUrl } from "config/environment";
+
+// Función robusta para detectar si es emoji
+function isEmoji(str) {
+  if (!str || typeof str !== 'string') return false;
+  const trimmed = str.trim();
+  if (!trimmed) return false;
+  if (trimmed.includes('/') || trimmed.includes('.') || trimmed.includes('http') || trimmed.includes('data:')) {
+    return false;
+  }
+  if (trimmed.length > 8) return false;
+  const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1F018}-\u{1F270}]|[\u{238C}-\u{2454}]|[\u{20D0}-\u{20FF}]|[\u{FE0F}]|[\u{200D}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F170}-\u{1F251}]/u;
+  return emojiRegex.test(trimmed);
+}
 
 function WidgetFrame() {
+  // Debug hooks (deben estar dentro del componente)
+  React.useEffect(() => {
+    console.log('[DEBUG WidgetFrame] Cambio en styleConfig:', styleConfig);
+  }, [styleConfig]);
+  React.useEffect(() => {
+    console.log('[DEBUG WidgetFrame] Cambio en isOpen:', isOpen);
+  }, [isOpen]);
+  React.useEffect(() => {
+    console.log('[DEBUG WidgetFrame] Cambio en loading:', loading);
+  }, [loading]);
+  React.useEffect(() => {
+    console.log('[DEBUG WidgetFrame] Cambio en error:', error);
+  }, [error]);
+  React.useEffect(() => {
+    console.log('[DEBUG WidgetFrame] Cambio en realToken:', realToken);
+  }, [realToken]);
+  React.useEffect(() => {
+    console.log('[DEBUG WidgetFrame] Cambio en autoRefresh:', autoRefresh);
+  }, [autoRefresh]);
+  if (!window.widgetFrameRenderCount) window.widgetFrameRenderCount = 0;
+  window.widgetFrameRenderCount++;
+  console.log(`[RENDER] WidgetFrame renderizado #${window.widgetFrameRenderCount} en`, new Date().toISOString());
   const searchParams = new URLSearchParams(window.location.search);
   const botId = parseInt(searchParams.get("bot"), 10);
   const tokenParam = searchParams.get("token");
   const userId = parseInt(searchParams.get("user"), 10) || null; // Para widgets, userId puede ser null
 
+  // HOOKS SIEMPRE AL INICIO
   const [styleConfig, setStyleConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [realToken, setRealToken] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh, setAutoRefresh] = useState(false); // Desactivar auto-refresh por defecto
+  // Estado de visibilidad del chat
+  const [isOpen, setIsOpen] = useState(false);
+
+  // useMemo para estilos, antes de cualquier return
+  const styleToPass = useMemo(() => {
+    const base = styleConfig?.styles || styleConfig?.style || {};
+    const result = { ...base };
+    if (styleConfig?.styles) {
+      const styles = styleConfig.styles;
+      let avatarUrl = styles.avatarUrl || styles.AvatarUrl || "";
+      if (!isEmoji(avatarUrl)) {
+        if (
+          avatarUrl &&
+          typeof avatarUrl === "string" &&
+          !avatarUrl.startsWith("http") &&
+          !avatarUrl.startsWith("data:") &&
+          !avatarUrl.startsWith("/")
+        ) {
+          avatarUrl = `/${avatarUrl}`;
+        }
+        if (
+          avatarUrl &&
+          typeof avatarUrl === "string" &&
+          avatarUrl.startsWith("/") &&
+          !avatarUrl.startsWith("/VIA.png") &&
+          !avatarUrl.startsWith("/static") &&
+          !avatarUrl.startsWith("data:")
+        ) {
+          avatarUrl = getApiBaseUrl().replace(/\/api$/, "") + avatarUrl;
+        }
+      }
+      Object.assign(result, {
+        title: styles.title || styles.Title || "Asistente Virtual",
+        theme: styles.theme || styles.Theme || "light",
+        primaryColor: styles.launcherBackground || styles.LauncherBackground || "#000000",
+        secondaryColor: styles.userMessageBackground || styles.UserMessageBackground || "#ffffff",
+        headerBackgroundColor: styles.headerBackgroundColor || styles.HeaderBackgroundColor || styles.headerBackground || styles.HeaderBackground || "#000000",
+        fontFamily: styles.fontFamily || styles.FontFamily || "Arial",
+        avatarUrl,
+        position: styles.position || styles.Position || "bottom-right",
+        allowImageUpload: styles.allowImageUpload ?? styles.AllowImageUpload ?? true,
+        allowFileUpload: styles.allowFileUpload ?? styles.AllowFileUpload ?? true,
+        customCss: styles.customCss || styles.CustomCss || ""
+      });
+    }
+    result.primaryColor = result.primaryColor || "#000000";
+    result.secondaryColor = result.secondaryColor || "#ffffff";
+    result.headerBackgroundColor = result.headerBackgroundColor || result.primaryColor || "#000000";
+    if (!result.title) {
+      result.title = styleConfig?.name || styleConfig?.settings?.styles?.name || "Asistente Virtual";
+    }
+    return result;
+  }, [styleConfig]);
 
   // Función para cargar configuración del bot
   const loadBotConfiguration = async () => {
@@ -72,7 +163,11 @@ function WidgetFrame() {
         };
       }
       
-      setStyleConfig(botConfig);
+      setStyleConfig({
+        ...botConfig,
+        botId,
+        tokenParam
+      });
       setLoading(false);
       
       // Notificar al padre que el widget está listo
@@ -93,6 +188,17 @@ function WidgetFrame() {
 
   // Aplicar estilos globales para hacer transparente SOLO el contenedor iframe, no el widget
   useEffect(() => {
+    console.log('[DEBUG] WidgetFrame montado', {
+      botId,
+      tokenParam,
+      userId,
+      styleConfig,
+      loading,
+      error,
+      realToken,
+      autoRefresh,
+      location: window.location.href
+    });
     // Crear y agregar estilos CSS para hacer transparente solo el contenedor
     const style = document.createElement('style');
     style.textContent = `
@@ -117,6 +223,17 @@ function WidgetFrame() {
     document.head.appendChild(style);
     
     return () => {
+      console.log('[DEBUG] WidgetFrame desmontado', {
+        botId,
+        tokenParam,
+        userId,
+        styleConfig,
+        loading,
+        error,
+        realToken,
+        autoRefresh,
+        location: window.location.href
+      });
       // Cleanup al desmontar
       if (document.head.contains(style)) {
         document.head.removeChild(style);
@@ -125,28 +242,36 @@ function WidgetFrame() {
   }, []);
 
   useEffect(() => {
+    console.log('[DEBUG] useEffect de configuración disparado', {
+      botId,
+      tokenParam,
+      styleConfig,
+      styleConfigBotId: styleConfig?.botId,
+      styleConfigTokenParam: styleConfig?.tokenParam
+    });
     if (!botId || isNaN(botId) || botId <= 0) {
       setError("No se proporcionó un botId válido en la URL (?bot=ID). Ejemplo: ?bot=2");
       setLoading(false);
       return;
     }
 
-    // Cargar configuración inicial
+    // Solo recargar si botId o tokenParam cambian realmente (no por cambios en styleConfig)
+    setLoading(true);
     loadBotConfiguration();
+  }, [botId, tokenParam]);
 
-    // � Auto-refresh para recargar estilos cada 30 segundos (opcional)
-    const refreshInterval = setInterval(() => {
-      if (autoRefresh) {
-        console.log("🔄 Auto-refresh: Recargando configuración del bot...");
-        loadBotConfiguration();
-      }
-    }, 30000); // 30 segundos
+    // Eliminar auto-refresh para evitar remounts
+    // const refreshInterval = setInterval(() => {
+    //   if (autoRefresh) {
+    //     console.log("🔄 Auto-refresh: Recargando configuración del bot...");
+    //     loadBotConfiguration();
+    //   }
+    // }, 30000); // 30 segundos
 
     // Cleanup
-    return () => {
-      clearInterval(refreshInterval);
-    };
-  }, [botId, tokenParam, autoRefresh]);
+    // return () => {
+    //   clearInterval(refreshInterval);
+    // };
 
   console.log('🔧 WidgetFrame Debug:', { 
     botId, 
@@ -197,12 +322,36 @@ function WidgetFrame() {
     );
   }
 
-  // Preparar estilos para pasar al ChatWidget
-  const styleToPass = styleConfig?.styles || styleConfig?.style || {};
-  
+  // ...existing code...
+
   // Mapear nombres de propiedades del backend al frontend
   if (styleConfig?.styles) {
     const styles = styleConfig.styles;
+    let avatarUrl = styles.avatarUrl || styles.AvatarUrl || "";
+    // Si es emoji, no modificar la URL
+    if (!isEmoji(avatarUrl)) {
+      // Si la URL es relativa y no es base64, prepende el dominio del backend
+      if (
+        avatarUrl &&
+        typeof avatarUrl === "string" &&
+        !avatarUrl.startsWith("http") &&
+        !avatarUrl.startsWith("data:") &&
+        !avatarUrl.startsWith("/")
+      ) {
+        avatarUrl = `/${avatarUrl}`;
+      }
+      if (
+        avatarUrl &&
+        typeof avatarUrl === "string" &&
+        avatarUrl.startsWith("/") &&
+        !avatarUrl.startsWith("/VIA.png") &&
+        !avatarUrl.startsWith("/static") &&
+        !avatarUrl.startsWith("data:")
+      ) {
+        // Si es una ruta relativa, prepende el dominio del backend
+        avatarUrl = getApiBaseUrl().replace(/\/api$/, "") + avatarUrl;
+      }
+    }
     Object.assign(styleToPass, {
       title: styles.title || styles.Title || "Asistente Virtual",
       theme: styles.theme || styles.Theme || "light",
@@ -210,19 +359,19 @@ function WidgetFrame() {
       secondaryColor: styles.userMessageBackground || styles.UserMessageBackground || "#ffffff",
       headerBackgroundColor: styles.headerBackgroundColor || styles.HeaderBackgroundColor || styles.headerBackground || styles.HeaderBackground || "#000000",
       fontFamily: styles.fontFamily || styles.FontFamily || "Arial",
-      avatarUrl: styles.avatarUrl || styles.AvatarUrl || "",
+      avatarUrl,
       position: styles.position || styles.Position || "bottom-right",
       allowImageUpload: styles.allowImageUpload ?? styles.AllowImageUpload ?? true,
       allowFileUpload: styles.allowFileUpload ?? styles.AllowFileUpload ?? true,
       customCss: styles.customCss || styles.CustomCss || ""
     });
   }
-  
+
   // Asegurar valores por defecto para prevenir errores
   styleToPass.primaryColor = styleToPass.primaryColor || "#000000";
   styleToPass.secondaryColor = styleToPass.secondaryColor || "#ffffff";
   styleToPass.headerBackgroundColor = styleToPass.headerBackgroundColor || styleToPass.primaryColor || "#000000";
-  
+
   // Debug para ver qué configuración se está pasando
   console.log("🔧 WidgetFrame - Estilos que se pasan al ChatWidget:", {
     originalStyleConfig: styleConfig,
@@ -230,7 +379,7 @@ function WidgetFrame() {
     botId,
     hasValidToken: !!(realToken || tokenParam)
   });
-  
+
   // Asegurar que tenga título
   if (!styleToPass.title) {
     styleToPass.title = styleConfig?.name || styleConfig?.settings?.styles?.name || "Asistente Virtual";
@@ -238,12 +387,15 @@ function WidgetFrame() {
 
   return (
     <ChatWidget
+      key={"main-widget"}
       botId={botId}
       userId={userId}
       style={styleToPass}
       isDemo={false} // Siempre false para widgets - no usar modo demo
       isWidget={true}
       widgetToken={realToken || tokenParam}
+      isOpen={isOpen}
+      setIsOpen={setIsOpen}
     />
   );
 }

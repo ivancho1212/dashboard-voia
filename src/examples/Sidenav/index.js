@@ -33,7 +33,8 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
   const { miniSidenav, transparentSidenav } = controller;
   const location = useLocation();
   const { pathname } = location;
-  const collapseName = pathname.split("/").slice(1)[0];
+  // Detectar activo correctamente para rutas anidadas
+  const collapseName = pathname.split("/")[1] || "";
 
   const closeSidenav = () => setMiniSidenav(dispatch, true);
 
@@ -58,6 +59,8 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
   // Render all the routes from the routes.js (All the visible items on the Sidenav)
   const renderRoutes = routes.map(({ type, name, icon, title, noCollapse, key, route, href }) => {
     let returnValue;
+    // Detectar activo por path, no solo por key
+    const isActive = route && pathname.startsWith(route);
 
     if (type === "collapse") {
       returnValue = href ? (
@@ -72,7 +75,7 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             color={color}
             name={name}
             icon={icon}
-            active={key === collapseName}
+            active={isActive}
             noCollapse={noCollapse}
           />
         </Link>
@@ -83,7 +86,7 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
             key={key}
             name={name}
             icon={icon}
-            active={key === collapseName}
+            active={isActive}
             noCollapse={noCollapse}
           />
         </NavLink>
@@ -129,26 +132,18 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
           </SoftTypography>
         </SoftBox>
         <SoftBox component={NavLink} to="/" textAlign="center">
-          {brand && (
-            <SoftBox
-              component="img"
-              src={brand}
-              alt="Logo via"
-              width="6rem"
-              mx="auto"
-              my={2}
-              display="block"
-            />
-          )}
+          <SoftBox
+            component="img"
+            src={process.env.PUBLIC_URL + "/VIA.png"}
+            alt="Logo VIA"
+            width="6rem"
+            mx="auto"
+            my={2}
+            display="block"
+          />
         </SoftBox>
 
-        {brandName && (
-          <SoftBox textAlign="center" sx={(theme) => sidenavLogoLabel(theme, { miniSidenav })}>
-            <SoftTypography component="h6" variant="button" fontWeight="medium">
-              {brandName}
-            </SoftTypography>
-          </SoftBox>
-        )}
+        {/* Eliminado brandName (VOIA) del sidebar */}
       </SoftBox>
       <Divider />
       <List>{renderRoutes}</List>

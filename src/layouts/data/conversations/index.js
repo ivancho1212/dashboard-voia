@@ -34,6 +34,8 @@ import { useAuth } from "contexts/AuthContext";
 function Conversations() {
   // Mostrar papelera y actualizar lista tras eliminar
   const handleShowTrash = async () => {
+    // Solo permitir ver la papelera si el usuario es el admin (id === '1')
+    if (userId !== '1') return;
     setShowTrash(true);
     await fetchTrash();
   };
@@ -389,7 +391,7 @@ function Conversations() {
       <SoftBox px={2} pt={2}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={4} lg={4}>
-            {showTrash ? (
+            {showTrash && userId === '1' ? (
               <>
                 <Button variant="text" color="info" sx={{ mb: 1 }} onClick={() => setShowTrash(false)}>
                   Volver

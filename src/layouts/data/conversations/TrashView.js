@@ -1,4 +1,5 @@
 import React from "react";
+import { hasPermission } from "utils/permissions";
 import PropTypes from "prop-types";
 import { Box, Typography, IconButton, Button, List, ListItem, ListItemText } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";

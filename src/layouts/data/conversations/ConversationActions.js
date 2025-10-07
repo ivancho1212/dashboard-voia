@@ -1,6 +1,8 @@
 // src/layouts/data/conversations/ConversationActions.js
 
 import React, { useState, useCallback } from "react";
+import { useAuth } from "contexts/AuthContext";
+import { hasPermission } from "utils/permissions";
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -14,6 +16,7 @@ import PropTypes from "prop-types";
 import { moveConversationToTrash } from "services/conversationsService";
 
 function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus, conversationId, onMovedToTrash }) {
+  const { user } = useAuth();
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -64,14 +67,16 @@ function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus, 
           {blocked ? "Desbloquear Usuario" : "Bloquear Usuario"}
         </MenuItem>
 
-        <MenuItem
-          onClick={() => {
-            setConfirmOpen(true);
-            handleClose();
-          }}
-        >
-          Eliminar conversación
-        </MenuItem>
+        {hasPermission(user, "CanDeleteConversation") && (
+          <MenuItem
+            onClick={() => {
+              setConfirmOpen(true);
+              handleClose();
+            }}
+          >
+            Eliminar conversación
+          </MenuItem>
+        )}
         <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
           <DialogTitle>¿Estás seguro?</DialogTitle>
           <DialogContent>¿Deseas eliminar esta conversación? Se moverá a la papelera.</DialogContent>
