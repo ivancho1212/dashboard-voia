@@ -11,7 +11,7 @@ export const login = async (email, password) => {
     });
 
     if (response.data.token) {
-      localStorage.setItem("authToken", response.data.token);
+      localStorage.setItem("token", response.data.token);
     }
 
     return response.data;
@@ -34,7 +34,7 @@ export const register = async (newUser) => {
 
 export const getMyProfile = async () => {
   try {
-    const token = localStorage.getItem("authToken");
+    const token = localStorage.getItem("token");
     const response = await axios.get(`${API_BASE_URL}/me`, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -49,8 +49,8 @@ export const getMyProfile = async () => {
 
 // authService.js
 export const updateMyProfile = async (data) => {
-  const token = localStorage.getItem("authToken");
-    const response = await axios.put(`${API_BASE_URL}/me`, data, {
+  const token = localStorage.getItem("token");
+  const response = await axios.put(`${API_BASE_URL}/me`, data, {
     headers: {
       Authorization: `Bearer ${token}`,
     },

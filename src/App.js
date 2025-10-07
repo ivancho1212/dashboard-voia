@@ -1,5 +1,36 @@
 import { useState, useEffect, useMemo } from "react";
+import PropTypes from "prop-types";
+import React from "react";
 import { Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "contexts/AuthContext";
+
+// Wrapper para rutas privadas
+import { useContext } from "react";
+import { AuthContext } from "contexts/AuthContext";
+function PrivateRoute({ children }) {
+  const { isAuthenticated, hydrated } = useContext(AuthContext);
+  const location = useLocation();
+  // Mientras no esté hidratado, no renderizar nada
+  if (!hydrated) return null;
+  if (!isAuthenticated) {
+    // Forzar desmontaje inmediato de la vista protegida
+    return <Navigate to="/authentication/sign-in" state={{ from: location }} replace />;
+  }
+  // Forzar remount de la vista protegida al cambiar autenticación
+  return <React.Fragment key="auth">{children}</React.Fragment>;
+}
+
+PrivateRoute.propTypes = {
+  children: PropTypes.oneOfType([
+    PropTypes.node,
+    PropTypes.arrayOf(PropTypes.node),
+    PropTypes.string,
+    PropTypes.number,
+    PropTypes.element,
+    PropTypes.bool,
+    PropTypes.object,
+  ]),
+};
 
 // MUI
 import { ThemeProvider } from "@mui/material/styles";
@@ -111,13 +142,29 @@ export default function App() {
           element = Component;
         }
 
+        // Proteger rutas administrativas
+
+        // Proteger también rutas de dashboard
+        const isProtectedRoute =
+          route.route.startsWith("/admin") ||
+          route.route.startsWith("/config") ||
+          route.route.startsWith("/billing") ||
+          route.route.startsWith("/data") ||
+          route.route.startsWith("/profile") ||
+          route.route.startsWith("/dashboard");
+
         if (element) {
-          return <Route key={route.key || index} path={route.route} element={element} />;
+          return (
+            <Route
+              key={route.key || index}
+              path={route.route}
+              element={isProtectedRoute ? <PrivateRoute>{element}</PrivateRoute> : element}
+            />
+          );
         }
 
         return null;
       }
-
 
       // Modern routes with children
       if (route.children) {
@@ -134,7 +181,6 @@ export default function App() {
           </Route>
         );
       }
-
 
       // Simple modern route
       if (route.path) {

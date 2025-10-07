@@ -1,15 +1,22 @@
 // src/layouts/data/conversations/ConversationActions.js
 
 import React, { useState, useCallback } from "react";
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import PropTypes from "prop-types";
+import { moveConversationToTrash } from "services/conversationsService";
 
-function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus }) {
+function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus, conversationId, onMovedToTrash }) {
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleClick = useCallback((event) => {
     setAnchorEl(event.currentTarget);
@@ -56,6 +63,27 @@ function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus }
         >
           {blocked ? "Desbloquear Usuario" : "Bloquear Usuario"}
         </MenuItem>
+
+        <MenuItem
+          onClick={() => {
+            setConfirmOpen(true);
+            handleClose();
+          }}
+        >
+          Eliminar conversación
+        </MenuItem>
+        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+          <DialogTitle>¿Estás seguro?</DialogTitle>
+          <DialogContent>¿Deseas eliminar esta conversación? Se moverá a la papelera.</DialogContent>
+          <DialogActions>
+            <Button onClick={() => setConfirmOpen(false)} color="primary">Cancelar</Button>
+            <Button onClick={async () => {
+              setConfirmOpen(false);
+              await moveConversationToTrash(conversationId);
+              if (onMovedToTrash) onMovedToTrash(conversationId);
+            }} color="error">Eliminar</Button>
+          </DialogActions>
+        </Dialog>
       </Menu>
     </>
   );
@@ -66,6 +94,8 @@ ConversationActions.propTypes = {
   onStatusChange: PropTypes.func.isRequired,
   blocked: PropTypes.bool.isRequired,
   currentStatus: PropTypes.string.isRequired,
+  conversationId: PropTypes.string.isRequired,
+  onMovedToTrash: PropTypes.func,
 };
 
 export default ConversationActions;

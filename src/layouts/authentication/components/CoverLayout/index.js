@@ -19,7 +19,7 @@ function CoverLayout({
   const navigate = useNavigate(); // 👈 inicializar navigate
 
   return (
-    <PageLayout background="transparent">
+    <PageLayout background="white">
       <SoftBox
         width="100vw"
         height="100%"

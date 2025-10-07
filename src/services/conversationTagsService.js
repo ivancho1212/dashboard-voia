@@ -1,3 +1,13 @@
+// ✅ Eliminar etiqueta por id
+export async function deleteConversationTag(tagId) {
+  try {
+    await axios.delete(`${BASE_URL}/api/ConversationTags/${tagId}`);
+    return true;
+  } catch (error) {
+    console.error("❌ [deleteConversationTag] Error al eliminar etiqueta:", error);
+    return false;
+  }
+}
 import axios from "axios";
 
 const BASE_URL = "http://localhost:5006"; // ⚠️ Solo para desarrollo

@@ -3,12 +3,14 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import { useNavigate } from "react-router-dom";
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
+
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hydrated, setHydrated] = useState(false); // <- para saber si ya se leyó localStorage
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -27,6 +29,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem("user");
       }
     }
+    setHydrated(true);
   }, []);
 
   const login = (userData, userToken) => {
@@ -46,8 +49,10 @@ export const AuthProvider = ({ children }) => {
     navigate("/authentication/sign-in"); // 🔥 redirige al login
   };
 
+  // No renderizar nada hasta que esté hidratado el estado de auth
+  if (!hydrated) return null;
   return (
-    <AuthContext.Provider value={{ user, token, isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isAuthenticated, login, logout, hydrated }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, Link, Navigate } from "react-router-dom";
 import Switch from "@mui/material/Switch";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
@@ -8,6 +8,7 @@ import SoftButton from "components/SoftButton";
 import CoverLayout from "layouts/authentication/components/CoverLayout";
 import curved9 from "assets/images/curved-images/curved-6.webp";
 import { login } from "services/authService"; // Tu función de login
+import { useAuth } from "contexts/AuthContext";
 
 function SignIn() {
   const [email, setEmail] = useState("");
@@ -15,7 +16,13 @@ function SignIn() {
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const navigate = useNavigate();
+  const { isAuthenticated, hydrated, login: loginContext } = useAuth();
 
+  // Esperar a que el contexto esté hidratado antes de decidir
+  if (!hydrated) return null;
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" replace />;
+  }
   const handleSetRememberMe = () => setRememberMe(!rememberMe);
 
   const handleSubmit = async (e) => {
@@ -24,10 +31,8 @@ function SignIn() {
 
     try {
       const data = await login(email, password);
-
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-
+      // Usa el método del contexto para actualizar el estado global
+      loginContext(data.user, data.token);
       navigate("/dashboard");
     } catch (err) {
       console.error(err);

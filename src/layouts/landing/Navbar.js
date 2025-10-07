@@ -108,28 +108,11 @@ const Navbar = ({ isDarkBackground = false }) => {
 
               {dropdownOpen && !isMobile && (
                 <ul style={styles.dropdownMenu}>
-                  {services.map((srv) => (
-                    <li key={srv.slug}>
-                      <Link
-                        to={`/servicio/${srv.slug}`}
-                        style={styles.dropdownItem}
-                        onMouseEnter={(e) =>
-                          (e.target.style.backgroundColor = "rgba(0, 191, 166, 0.56)")
-                        }
-                        onMouseLeave={(e) =>
-                          (e.target.style.backgroundColor = "transparent")
-                        }
-                        onClick={() => setDropdownOpen(false)}
-                      >
-                        {srv.title}
-                      </Link>
-                    </li>
-                  ))}
+
+
                 </ul>
               )}
             </li>
-
-            {/* VIA */}
             <li>
               <Link
                 to="/via"
@@ -161,6 +144,7 @@ const Navbar = ({ isDarkBackground = false }) => {
               </button>
             </li>
 
+
             {/* Botones de autenticación */}
             {authLinks.map((link) => (
               <li key={link.key}>
@@ -170,31 +154,32 @@ const Navbar = ({ isDarkBackground = false }) => {
                     ...styles.navLinkButton,
                     ...(link.key === "sign-up"
                       ? {
-                        color: hoveredItem === link.key ? "#fff" : "#00bfa5",
-                        borderBottom:
-                          hoveredItem === link.key
-                            ? "1px solid #fff"
-                            : "1px solid transparent",
-                        backgroundColor: "transparent",
-                        transition: "all 0.3s ease",
-                      }
+                          color: hoveredItem === link.key ? "#fff" : "#00bfa5",
+                          borderBottom:
+                            hoveredItem === link.key
+                              ? "1px solid #fff"
+                              : "1px solid transparent",
+                          backgroundColor: "transparent",
+                          transition: "all 0.3s ease",
+                        }
                       : {
-                        color: hoveredItem === link.key ? "#00bfa5" : textColor,
-                        borderBottom:
-                          hoveredItem === link.key
-                            ? "1px solid #00bfa5"
-                            : "1px solid transparent",
-                        backgroundColor: "transparent",
-                      }),
+                          color: hoveredItem === link.key ? "#00bfa5" : textColor,
+                          borderBottom:
+                            hoveredItem === link.key
+                              ? "1px solid #00bfa5"
+                              : "1px solid transparent",
+                          backgroundColor: "transparent",
+                        }),
                     textDecoration: "none",
                   }}
                   onMouseEnter={() => setHoveredItem(link.key)}
                   onMouseLeave={() => setHoveredItem(null)}
                 >
-                  {link.name}
+                  {link.key === "sign-in" ? "Iniciar sesión" : link.key === "sign-up" ? "Registrarse" : ""}
                 </Link>
               </li>
             ))}
+
 
           </ul>
         </nav>

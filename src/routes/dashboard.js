@@ -3,11 +3,6 @@ import SpaceShipIcon from "examples/Icons/SpaceShip";
 
 const dashboardRoutes = [
   {
-    type: "title",
-    title: "Dashboard",
-    key: "dashboard-title",
-  },
-  {
     type: "collapse",
     name: "Inicio",
     key: "dashboard",

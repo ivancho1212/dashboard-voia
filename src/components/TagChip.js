@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
-import { Box, Typography } from "@mui/material";
+import { Box, Typography, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Button } from "@mui/material";
 
-const TagChip = ({ tag, index, isExpanded, onToggle, backgroundColor }) => {
+import { useState as useLocalState } from "react";
+
+const TagChip = ({ tag, index, isExpanded, onToggle, backgroundColor, onDelete }) => {
+    const [hovered, setHovered] = useLocalState(false);
+    const [confirmOpen, setConfirmOpen] = useLocalState(false);
     const [expandDirection, setExpandDirection] = useState("down");
     const tagRef = useRef();
 
@@ -23,10 +27,13 @@ const TagChip = ({ tag, index, isExpanded, onToggle, backgroundColor }) => {
         <Box
             ref={tagRef}
             onClick={handleClick}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             sx={{
                 cursor: "pointer",
                 marginRight: 1,
                 marginBottom: 1,
+                position: 'relative',
             }}
         >
             <Box
@@ -112,6 +119,45 @@ const TagChip = ({ tag, index, isExpanded, onToggle, backgroundColor }) => {
                         >
                             {tag.label}
                         </Typography>
+                                                                        {onDelete && hovered && (
+                                                                            <Box
+                                                                                sx={{
+                                                                                    position: 'absolute',
+                                                                                    top: 2,
+                                                                                    right: 2,
+                                                                                    zIndex: 2,
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                }}
+                                                                            >
+                                                                                <Tooltip title="Eliminar" placement="top">
+                                                                                    <span
+                                                                                        style={{
+                                                                                            color: '#ff1744',
+                                                                                            cursor: 'pointer',
+                                                                                            fontWeight: 'bold',
+                                                                                            fontSize: '1.2em',
+                                                                                            marginRight: 2
+                                                                                        }}
+                                                                                        onClick={e => {
+                                                                                            e.stopPropagation();
+                                                                                            setConfirmOpen(true);
+                                                                                        }}
+                                                                                    >
+                                                                                        ×
+                                                                                    </span>
+                                                                                </Tooltip>
+                                                                            </Box>
+                                                                        )}
+                                                                        {/* Confirmación de eliminación */}
+                                                                        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+                                                                            <DialogTitle>¿Estás seguro?</DialogTitle>
+                                                                            <DialogContent>¿Deseas eliminar esta etiqueta?</DialogContent>
+                                                                            <DialogActions>
+                                                                                <Button onClick={() => setConfirmOpen(false)} color="primary">Cancelar</Button>
+                                                                                <Button onClick={() => { setConfirmOpen(false); onDelete(tag); }} color="error">Eliminar</Button>
+                                                                            </DialogActions>
+                                                                        </Dialog>
                     </Box>
                 )}
             </Box>
@@ -127,6 +173,7 @@ TagChip.propTypes = {
     isExpanded: PropTypes.bool.isRequired,
     onToggle: PropTypes.func.isRequired,
     backgroundColor: PropTypes.string.isRequired,
+    onDelete: PropTypes.func,
 };
 
 export default TagChip;

@@ -448,6 +448,16 @@ const ChatPanel = forwardRef(
                       setExpandedTagIndex((prev) => (prev === index ? null : index))
                     }
                     backgroundColor={getBackgroundColor(status)}
+                    onDelete={async (tagToDelete) => {
+                      try {
+                        await deleteConversationTag(tagToDelete.id);
+                        const updatedTags = await getTagsByConversationId(conversationId);
+                        setConversationTags(updatedTags || []);
+                        setExpandedTagIndex(null);
+                      } catch (error) {
+                        console.error('Error eliminando etiqueta:', error);
+                      }
+                    }}
                   />
                 ))
                 : null}

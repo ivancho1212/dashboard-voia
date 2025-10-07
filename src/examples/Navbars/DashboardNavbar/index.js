@@ -1,5 +1,6 @@
 
 import { useState, useEffect } from "react";
+import { useAuth } from "contexts/AuthContext";
 
 // react-router components
 import { useLocation, Link } from "react-router-dom";
@@ -140,24 +141,50 @@ function DashboardNavbar({ absolute, light, isMini }) {
               />
             </SoftBox>
             <SoftBox color={light ? "white" : "inherit"}>
-              <Link to="/authentication/sign-in">
-                <IconButton sx={navbarIconButton} size="small">
-                  <Icon
-                    sx={({ palette: { dark, white } }) => ({
-                      color: light ? white.main : dark.main,
-                    })}
-                  >
-                    account_circle
-                  </Icon>
-                  <SoftTypography
-                    variant="button"
-                    fontWeight="medium"
-                    color={light ? "white" : "dark"}
-                  >
-                    Sign in
-                  </SoftTypography>
-                </IconButton>
-              </Link>
+              {(() => {
+                const { isAuthenticated, logout } = useAuth();
+                if (isAuthenticated) {
+                  return (
+                    <IconButton sx={navbarIconButton} size="small" onClick={logout}>
+                      <Icon
+                        sx={({ palette: { dark, white } }) => ({
+                          color: light ? white.main : dark.main,
+                        })}
+                      >
+                        logout
+                      </Icon>
+                      <SoftTypography
+                        variant="button"
+                        fontWeight="medium"
+                        color={light ? "white" : "dark"}
+                      >
+                        Cerrar sesión
+                      </SoftTypography>
+                    </IconButton>
+                  );
+                } else {
+                  return (
+                    <Link to="/authentication/sign-in">
+                      <IconButton sx={navbarIconButton} size="small">
+                        <Icon
+                          sx={({ palette: { dark, white } }) => ({
+                            color: light ? white.main : dark.main,
+                          })}
+                        >
+                          account_circle
+                        </Icon>
+                        <SoftTypography
+                          variant="button"
+                          fontWeight="medium"
+                          color={light ? "white" : "dark"}
+                        >
+                          Sign in
+                        </SoftTypography>
+                      </IconButton>
+                    </Link>
+                  );
+                }
+              })()}
               <IconButton
                 size="small"
                 color="inherit"

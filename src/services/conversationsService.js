@@ -1,4 +1,16 @@
-import axios from "axios";
+// ✅ Mover conversación a papelera (soft delete)
+export async function moveConversationToTrash(conversationId) {
+  try {
+    const response = await axios.patch(
+      `${BASE_URL}/api/Conversations/${conversationId}/move-to-trash`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("❌ [moveConversationToTrash] Error al mover a papelera:", error);
+    return null;
+  }
+}
+import axios from "./axiosConfig";
 
 const BASE_URL = "http://localhost:5006"; // ⚠️ Solo para desarrollo
 

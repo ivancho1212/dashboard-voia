@@ -1,3 +1,5 @@
+import TrashView from './TrashView';
+import Button from '@mui/material/Button';
 import { useEffect, useState, useRef } from "react";
 
 import Grid from "@mui/material/Grid";
@@ -30,6 +32,34 @@ import {
 import { useAuth } from "contexts/AuthContext";
 
 function Conversations() {
+  // Mostrar papelera y actualizar lista tras eliminar
+  const handleShowTrash = async () => {
+    setShowTrash(true);
+    await fetchTrash();
+  };
+
+  // Cuando se elimina una conversación, actualizar la lista principal
+  const handleMovedToTrash = (conversationId) => {
+    setConversationList((prev) => prev.filter((c) => c.id !== conversationId));
+    // Opcional: recargar papelera si está abierta
+    if (showTrash) fetchTrash();
+  };
+  // Estado para mostrar papelera
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashConversations, setTrashConversations] = useState([]);
+
+  // Función para cargar conversaciones en papelera (simulado, reemplaza por tu API real)
+  const fetchTrash = async () => {
+    const all = await getConversationsWithLastMessage();
+    setTrashConversations(all.filter(c => c.status === 'trash'));
+  };
+
+  // Función para vaciar papelera (solo userId 1)
+  const handleEmptyTrash = async () => {
+    if (userId !== '1') return;
+    setTrashConversations([]);
+    // TODO: Llama a tu endpoint real para vaciar la papelera
+  };
   const tabContainerRef = useRef(null);
   const tabRefs = useRef({});
   const messageRefs = useRef({});
@@ -98,6 +128,16 @@ function Conversations() {
 
     const setupSignalR = async () => {
       try {
+        connection.on("InitialConversations", (data) => {
+          // data es un array de conversaciones iniciales
+          if (Array.isArray(data)) {
+            setConversationList(data.map(conv => ({
+              ...conv,
+              id: String(conv.id),
+              updatedAt: conv.lastMessage?.timestamp || conv.updatedAt,
+            })));
+          }
+        });
         connection.on("ReceiveTyping", (conversationId, sender) => {
           const convId = String(conversationId);
           if (typingStopTimeout.current) {
@@ -349,24 +389,39 @@ function Conversations() {
       <SoftBox px={2} pt={2}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={4} lg={4}>
-            <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column", borderRadius: 0 }}>
-              <SoftBox p={2} sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-                <ConversationList
-                  conversations={conversationList}
-                  messagesMap={messages}
-                  highlightedIds={highlightedIds}
-                  onClearHighlight={(id) => setHighlightedIds((prev) => prev.filter((cid) => cid !== id))}
-                  onSelect={(id) => {
-                    const conv = conversationList.find((c) => c.id === id);
-                    if (conv) handleSelectConversation(conv);
-                    setHighlightedIds((prev) => prev.filter((cid) => cid !== id));
-                  }}
-                  onStatusChange={handleUpdateConversationStatus}
-                  onBlock={(id) => handleBlockUser(id)}
-                  activeTab={activeTab}
+            {showTrash ? (
+              <>
+                <Button variant="text" color="info" sx={{ mb: 1 }} onClick={() => setShowTrash(false)}>
+                  Volver
+                </Button>
+                <TrashView
+                  conversations={trashConversations}
+                  onEmptyTrash={handleEmptyTrash}
+                  userId={userId}
                 />
-              </SoftBox>
-            </Card>
+              </>
+            ) : (
+              <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column", borderRadius: 0 }}>
+                <SoftBox p={2} sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+                  <ConversationList
+                    conversations={conversationList}
+                    messagesMap={messages}
+                    highlightedIds={highlightedIds}
+                    onClearHighlight={(id) => setHighlightedIds((prev) => prev.filter((cid) => cid !== id))}
+                    onSelect={(id) => {
+                      const conv = conversationList.find((c) => c.id === id);
+                      if (conv) handleSelectConversation(conv);
+                      setHighlightedIds((prev) => prev.filter((cid) => cid !== id));
+                    }}
+                    onStatusChange={handleUpdateConversationStatus}
+                    onBlock={(id) => handleBlockUser(id)}
+                    activeTab={activeTab}
+                    onMovedToTrash={handleMovedToTrash}
+                    onShowTrash={handleShowTrash}
+                  />
+                </SoftBox>
+              </Card>
+            )}
           </Grid>
           <Grid item xs={12} md={8} lg={8}>
             <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column", borderRadius: 0 }}>

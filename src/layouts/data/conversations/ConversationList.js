@@ -11,6 +11,7 @@ import MenuItem from "@mui/material/MenuItem";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import InputAdornment from "@mui/material/InputAdornment";
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FilterListIcon from "@mui/icons-material/FilterList";
 import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -26,6 +27,8 @@ function ConversationList({
   highlightedIds = [],
   onClearHighlight = () => {},
   activeTab,
+  onShowTrash,
+  onMovedToTrash
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
@@ -101,9 +104,16 @@ function ConversationList({
         <SoftTypography variant="h5" color="info" fontWeight="bold">
           Conversaciones
         </SoftTypography>
-        <IconButton onClick={handleOpenMenu} color="info">
-          <FilterListIcon />
-        </IconButton>
+        <Box display="flex" alignItems="center" gap={1}>
+          <IconButton onClick={handleOpenMenu} color="info">
+            <FilterListIcon />
+          </IconButton>
+          <Tooltip title="Ver papelera">
+            <IconButton onClick={onShowTrash} sx={{ color: '#b0b0b0' }}>
+              <DeleteOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
           <MenuItem onClick={() => handleFilterChange("all")}>Todas</MenuItem>
           <MenuItem onClick={() => handleFilterChange("active")}>Activas</MenuItem>
@@ -114,7 +124,7 @@ function ConversationList({
         </Menu>
       </Box>
 
-      <Box mb={2}>
+      <Box mb={2} display="flex" alignItems="center" gap={1}>
         <TextField
           variant="outlined"
           fullWidth
@@ -236,6 +246,8 @@ function ConversationList({
                       onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
                       blocked={conv.blocked}
                       currentStatus={conv.status}
+                      conversationId={conv.id}
+                      onMovedToTrash={onMovedToTrash ? () => onMovedToTrash(conv.id) : undefined}
                     />
                   </Box>
                   <Typography variant="caption" color="secondary" sx={{ fontSize: "9.5px", mt: 0.2 }}>
@@ -280,6 +292,8 @@ ConversationList.propTypes = {
   highlightedIds: PropTypes.arrayOf(PropTypes.string),
   onClearHighlight: PropTypes.func,
   activeTab: PropTypes.string,
-};
+    onShowTrash: PropTypes.func,
+    onMovedToTrash: PropTypes.func,
+  };
 
 export default ConversationList;
