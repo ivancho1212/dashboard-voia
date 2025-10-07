@@ -134,12 +134,7 @@ function DashboardNavbar({ absolute, light, isMini }) {
         </SoftBox>
         {isMini ? null : (
           <SoftBox sx={(theme) => navbarRow(theme, { isMini })}>
-            <SoftBox pr={1}>
-              <SoftInput
-                placeholder="Type here..."
-                icon={{ component: "search", direction: "left" }}
-              />
-            </SoftBox>
+            {/* Removed search bar and settings icon */}
             <SoftBox color={light ? "white" : "inherit"}>
               {(() => {
                 const { isAuthenticated, logout } = useAuth();
@@ -194,14 +189,6 @@ function DashboardNavbar({ absolute, light, isMini }) {
                 <Icon className={light ? "text-white" : "text-dark"}>
                   {miniSidenav ? "menu_open" : "menu"}
                 </Icon>
-              </IconButton>
-              <IconButton
-                size="small"
-                color="inherit"
-                sx={navbarIconButton}
-                onClick={handleConfiguratorOpen}
-              >
-                <Icon>settings</Icon>
               </IconButton>
               <IconButton
                 size="small"

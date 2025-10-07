@@ -189,12 +189,13 @@ function Header({ user }) {
   return (
     <SoftBox position="relative">
       <DashboardNavbar absolute light />
+      {/* Reduce header image space by lowering minHeight and borderRadius */}
       <SoftBox
         display="flex"
         alignItems="center"
         position="relative"
-        minHeight="18.75rem"
-        borderRadius="xl"
+        minHeight="8rem"  // Reduce even more
+        borderRadius="sm"
         sx={{
           backgroundColor: "rgba(255, 255, 255, 0.7)",
           borderRadius: 1,
@@ -211,13 +212,14 @@ function Header({ user }) {
           overflow: "hidden",
         }}
       />
+      {/* Move content up by reducing margin top on Card even more */}
       <Card
         sx={{
           backdropFilter: `saturate(200%) blur(30px)`,
           backgroundColor: ({ functions: { rgba }, palette: { white } }) => rgba(white.main, 0.8),
           boxShadow: ({ boxShadows: { navbarBoxShadow } }) => navbarBoxShadow,
           position: "relative",
-          mt: -8,
+          mt: -7,
           mx: 3,
           py: 2,
           px: 2,

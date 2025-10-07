@@ -67,7 +67,8 @@ function Overview() {
   return (
     <DashboardLayout>
       <Header user={user} />
-      <SoftBox mt={5} mb={3}>
+      {/* Move content up by reducing margin top */}
+      <SoftBox mt={2} mb={3}>
         <Grid container spacing={3}>
           <Grid item xs={12} md={6} xl={4}>
             {user && (
