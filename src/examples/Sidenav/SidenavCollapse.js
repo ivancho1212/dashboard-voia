@@ -31,12 +31,12 @@ function SidenavCollapse({ color, icon, name, children, active, noCollapse, open
   // Si el icono es un react-element (ej: react-icons), clónalo con color especial si está activo
   let renderedIcon = icon;
   if (isValidElement(icon)) {
-    // Para react-icons y SVGs, forzamos color y fill según estado activo
+    // Para react-icons y SVGs, forzamos color permitido por propTypes
     renderedIcon = cloneElement(icon, {
-      color: active ? "#fff" : "#344767", // blanco si activo, gris oscuro si no
+      color: active ? "white" : "dark", // solo valores permitidos
       style: {
         ...(icon.props.style || {}),
-        fill: active ? "#fff" : "#344767",
+        fill: active ? "#fff" : "#344767", // fill visual, pero color prop correcto
       },
     });
   }

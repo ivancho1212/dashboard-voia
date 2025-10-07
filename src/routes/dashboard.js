@@ -8,7 +8,7 @@ const dashboardRoutes = [
     name: "Inicio",
     key: "dashboard",
     route: "/dashboard",
-    icon: <SpaceShipIcon size="12px" />,
+    icon: <SpaceShipIcon size="12px" color="dark" />,
     component: Dashboard,
     noCollapse: true,
     permission: "CanViewDashboard", // <-- Asocia el permiso necesario
