@@ -24,6 +24,10 @@ import IconButton from "@mui/material/IconButton";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Footer from "examples/Footer";
 import { getPermissions, getRoles, createRole, createUser, updateRole, deleteRole } from "../../services/userAdminService";
+import RoleManagement from "./RoleManagement";
+import UserCreation from "./UserCreation";
+import UserInfo from "./UserInfo";
+
 function AdminUserPanel() {
   // Eliminar rol
   const handleDeleteRole = async (roleId) => {
@@ -83,6 +87,9 @@ function AdminUserPanel() {
   const [userSuccess, setUserSuccess] = useState("");
   // Estado para saber qué rol se está editando
   const [editingRoleId, setEditingRoleId] = useState(null);
+  const [showRoleManagement, setShowRoleManagement] = useState(false);
+  const [showUserCreation, setShowUserCreation] = useState(false);
+  const [showUserInfo, setShowUserInfo] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -281,717 +288,96 @@ function AdminUserPanel() {
     <DashboardLayout>
       <DashboardNavbar />
       <SoftBox py={3} px={2}>
-        <Card sx={{ p: 3, mb: 4 }}>
-          <SoftTypography variant="h5" fontWeight="bold" mb={3}>
-            Gestión avanzada de usuarios y roles
-          </SoftTypography>
-          <SoftTypography variant="body2" color="text" mb={2}>
-            Selecciona los permisos que tendrá cada rol. Los usuarios solo podrán acceder a las secciones y acciones que su rol tenga habilitadas.
-          </SoftTypography>
-          {/* Input nombre del rol */}
-          <SoftTypography variant="subtitle2" fontWeight="medium" mb={1}>
-            Nombre del rol
-          </SoftTypography>
-          <Grid container spacing={2} alignItems="center" mb={2}>
-            <Grid item xs={12} md={6} lg={4}>
-              <TextField 
-                placeholder="Ej: Comercial, Soporte..."
-                name="name"
-                value={newRole.name}
-                onChange={handleNewRoleChange}
-                fullWidth 
-                size="small"
-                inputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px', // más padding vertical para centrar el cursor
-                    color: '#495057',
-                  }
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px', // más padding vertical para centrar el cursor
-                    color: '#495057',
-                    
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  }
-                }}
-              />
-            </Grid>
-          </Grid>
-          {/* Tabla de permisos horizontal */}
-          <TableContainer component={Paper} sx={{ mb: 3, borderRadius: 2, boxShadow: 1, maxWidth: '100vw', overflowX: 'auto' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  {permissions.map((perm) => (
-                    <TableCell key={perm.id} align="center" sx={{ fontWeight: 'bold', minWidth: 100, borderBottom: 0, px: 0.5, py: 0.1 }}>
-                      <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>{permissionLabels[perm.key] || perm.name}</span>
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                <TableRow>
-                  {permissions.map((perm) => (
-                    <TableCell key={perm.id} align="center" sx={{ borderTop: 0, px: 0.5, py: 0 }}>
-                      <Checkbox
-                        checked={newRole.permissions.includes(perm.id)}
-                        onChange={() => handleNewRolePermChange(perm.id)}
-                        size="small"
-                        color="primary"
-                        sx={{ mt: 0, mb: 3, p: 0 }}
-                      />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <Grid container justifyContent="flex-end" mb={2}>
-            <Button variant="contained" color="primary" onClick={handleCreateRole} sx={{ minWidth: 180, color: '#fff' }}>CREAR ROL</Button>
-          </Grid>
-          {/* Tabla de roles y permisos existentes */}
-          <SoftTypography variant="h6" fontWeight="medium" mb={2}>Roles existentes</SoftTypography>
-          <TableContainer component={Paper} sx={{ mb: 4, borderRadius: 2, boxShadow: 1, maxWidth: '100vw', overflowX: 'auto' }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ background: '#f5f5f5' }}>
-                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'center', minWidth: 120 }}>Rol</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'center', minWidth: 200 }}>Permisos</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', textAlign: 'center', minWidth: 60 }}></TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {roles.map((role) => (
-                  <React.Fragment key={role.id}>
-                    <TableRow>
-                      <TableCell sx={{ textAlign: 'center', fontWeight: 500 }}>{role.name}</TableCell>
-                      <TableCell sx={{ textAlign: 'center' }}>
-                        {permissions
-                          .filter((perm) => role.permissions.includes(perm.id))
-                          .map((perm) => (
-                            <span key={perm.id} style={{
-                              display: 'inline-block',
-                              background: '#e0e7ef',
-                              color: '#344767',
-                              borderRadius: 12,
-                              padding: '2px 10px',
-                              fontSize: 12,
-                              margin: '2px 4px',
-                            }}>
-                              {permissionLabels[perm.key] || perm.name}
-                            </span>
-                          ))
-                        }
-                        {permissions.filter((perm) => role.permissions.includes(perm.id)).length === 0 && (
-                          <span style={{ color: '#b0b0b0', fontSize: 12 }}>Sin permisos</span>
-                        )}
-                      </TableCell>
-                      <TableCell sx={{ textAlign: 'center' }}>
-                        <IconButton onClick={() => {
-                          setEditingRoleId(role.id);
-                          setEditRolePerms([...role.permissions]);
-                        }}>
-                          <span className="material-icons" style={{ fontSize: 20 }}>edit</span>
-                        </IconButton>
-                        <IconButton color="error" onClick={() => handleDeleteRole(role.id)}>
-                          <span className="material-icons" style={{ fontSize: 20 }}>delete</span>
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                    {editingRoleId === role.id && (
-                      <TableRow>
-                        <TableCell colSpan={3} sx={{ background: '#f9f9f9' }}>
-                          <Table size="small">
-                            <TableHead>
-                              <TableRow>
-                                {permissions.map((perm) => (
-                                  <TableCell key={perm.id} align="center" sx={{ fontWeight: 'bold', minWidth: 100, borderBottom: 0, px: 0.5, py: 0.1 }}>
-                                    <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>{permissionLabels[perm.key] || perm.name}</span>
-                                  </TableCell>
-                                ))}
-                              </TableRow>
-                            </TableHead>
-                            <TableBody>
-                              <TableRow>
-                                {permissions.map((perm) => (
-                                  <TableCell key={perm.id} align="center" sx={{ borderTop: 0, px: 0.5, py: 0 }}>
-                                    <Checkbox
-                                      checked={editRolePerms.includes(perm.id)}
-                                      onChange={() => {
-                                        setEditRolePerms((prev) => prev.includes(perm.id)
-                                          ? prev.filter((p) => p !== perm.id)
-                                          : [...prev, perm.id]);
-                                      }}
-                                      size="small"
-                                      color="primary"
-                                      sx={{ mt: 0, mb: 3, p: 0 }}
-                                    />
-                                  </TableCell>
-                                ))}
-                              </TableRow>
-                            </TableBody>
-                          </Table>
-                          <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-                            <Button 
-                              variant="contained" 
-                              color="primary" 
-                              size="small"
-                              sx={{ color: '#fff', minWidth: 80, px: 1.5, py: 0.5, fontSize: 13 }}
-                              onClick={async () => {
-                                // Guardar cambios de permisos
-                                const selectedPermissionNames = permissions
-                                  .filter((perm) => editRolePerms.includes(perm.id))
-                                  .map((perm) => perm.name);
-                                await updateRole(role.id, {
-                                  name: role.name,
-                                  description: role.description || "",
-                                  permissions: selectedPermissionNames,
-                                });
-                                // Refrescar roles
-                                const perms = await getPermissions();
-                                setPermissions(perms);
-                                const rolesData = await getRoles();
-                                setRoles(
-                                  rolesData.map((r) => {
-                                    let permIds = [];
-                                    if (Array.isArray(r.permissions) && r.permissions.length > 0) {
-                                      permIds = r.permissions.map((permName) => {
-                                        const found = perms.find((p) => p.name === permName || p.key === permName);
-                                        return found ? found.id : null;
-                                      }).filter(Boolean);
-                                    }
-                                    return {
-                                      ...r,
-                                      permissions: permIds,
-                                    };
-                                  })
-                                );
-                                setEditingRoleId(null);
-                              }}
-                            >
-                              Guardar
-                            </Button>
-                            <Button 
-                              variant="contained" 
-                              size="small"
-                              sx={{ background: '#b0b0b0', color: '#fff', '&:hover': { background: '#9e9e9e' }, minWidth: 80, px: 1.5, py: 0.5, fontSize: 13 }}
-                              onClick={() => setEditingRoleId(null)}
-                            >
-                              Cerrar
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </React.Fragment>
-                ))}
-              </TableBody>
-            </Table>
-    </TableContainer>
-    {/* Registrar nuevo usuario */}
-          <SoftTypography variant="h6" fontWeight="medium" mb={2}>Registrar nuevo usuario</SoftTypography>
-          <Grid container spacing={2} mb={2}>
-            {/* Fila 1 */}
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Ej: Juan Pérez"
-                label={null}
-                name="name"
-                value={newUser.name}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.name}
-                helperText={userFormErrors.name}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <Select
-                displayEmpty
-                labelId="document-type-label"
-                name="documentTypeId"
-                value={newUser.documentTypeId}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.documentTypeId}
-                sx={{
-                  fontSize: 13,
-                  color: '#495057',
-                  background: '#fff',
-                  borderRadius: '8px',
-                  '& .MuiSelect-select': {
-                    padding: '14px 12px',
-                    fontSize: 13,
-                    color: '#495057',
-                  },
-                }}
-                renderValue={selected => selected ? (
-                  ["Cédula de Ciudadanía", "NIT", "Pasaporte"][parseInt(selected, 10) - 1] || ""
-                ) : <span style={{ color: '#b0b0b0' }}>Tipo de documento</span>}
-              >
-                <MenuItem value="" disabled>
-                  <span style={{ color: '#b0b0b0' }}>Tipo de documento</span>
-                </MenuItem>
-                <MenuItem value="1">Cédula de Ciudadanía</MenuItem>
-                <MenuItem value="2">NIT</MenuItem>
-                <MenuItem value="3">Pasaporte</MenuItem>
-              </Select>
-              {userFormErrors.documentTypeId && <span style={{ color: 'red', fontSize: 12 }}>{userFormErrors.documentTypeId}</span>}
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Número de Documento"
-                label={null}
-                name="documentNumber"
-                value={newUser.documentNumber}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.documentNumber}
-                helperText={userFormErrors.documentNumber}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            {/* Fila 2 */}
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Dirección"
-                label={null}
-                name="address"
-                value={newUser.address}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.address}
-                helperText={userFormErrors.address}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="País"
-                label={null}
-                name="country"
-                value={newUser.country}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.country}
-                helperText={userFormErrors.country}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Ciudad"
-                label={null}
-                name="city"
-                value={newUser.city}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.city}
-                helperText={userFormErrors.city}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            {/* Fila 3 */}
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Teléfono"
-                label={null}
-                name="phone"
-                value={newUser.phone}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.phone}
-                helperText={userFormErrors.phone}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Email"
-                label={null}
-                name="email"
-                value={newUser.email}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.email}
-                helperText={userFormErrors.email}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Contraseña"
-                label={null}
-                name="password"
-                type="password"
-                value={newUser.password}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.password}
-                helperText={userFormErrors.password}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            {/* Fila 4 */}
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="Confirmar contraseña"
-                label={null}
-                name="confirmPassword"
-                type="password"
-                value={newUser.confirmPassword}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.confirmPassword}
-                helperText={userFormErrors.confirmPassword}
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="URL Foto Documento"
-                label={null}
-                name="documentPhotoUrl"
-                value={newUser.documentPhotoUrl}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                placeholder="URL Avatar"
-                label={null}
-                name="avatarUrl"
-                value={newUser.avatarUrl}
-                onChange={handleNewUserChange}
-                fullWidth
-                size="small"
-                InputProps={{
-                  style: {
-                    fontSize: 13,
-                    textAlign: 'left',
-                    padding: '14px 16px',
-                    color: '#495057',
-                  },
-                }}
-                sx={{
-                  '& .MuiInputBase-input': {
-                    fontSize: 13,
-                    padding: '14px 12px',
-                    color: '#495057',
-                  },
-                  '& .MuiInputBase-input::placeholder': {
-                    color: '#b0b0b0',
-                    opacity: 1,
-                  },
-                }}
-              />
-            </Grid>
-            {/* Fila 5: Checks y rol */}
-            {/* Rol primero, luego checks, luego botón al final */}
-            <Grid item xs={12} md={4}>
-              <Select
-                displayEmpty
-                labelId="role-label"
-                name="roleId"
-                value={newUser.roleId}
-                onChange={handleNewUserRole}
-                fullWidth
-                size="small"
-                error={!!userFormErrors.roleId}
-                sx={{
-                  fontSize: 13,
-                  color: '#495057',
-                  background: '#fff',
-                  borderRadius: '8px',
-                  '& .MuiSelect-select': {
-                    padding: '14px 12px',
-                    fontSize: 13,
-                    color: '#495057',
-                  },
-                }}
-                renderValue={selected => selected ? (
-                  roles.find(r => r.id === parseInt(selected))?.name || ""
-                ) : <span style={{ color: '#b0b0b0' }}>Rol</span>}
-              >
-                <MenuItem value="" disabled>
-                  <span style={{ color: '#b0b0b0' }}>Rol</span>
-                </MenuItem>
-                {roles.map((role) => (
-                  <MenuItem key={role.id} value={role.id}>{role.name}</MenuItem>
-                ))}
-              </Select>
-              {userFormErrors.roleId && <span style={{ color: 'red', fontSize: 12 }}>{userFormErrors.roleId}</span>}
-            </Grid>
-            <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center', height: '40px', pl: 1 }}>
-              <FormControlLabel
-                control={<Checkbox checked={newUser.isVerified} name="isVerified" onChange={handleNewUserChange} size="small" sx={{ p: 0.5 }} />}
-                label={<span style={{ fontSize: 11, fontWeight: 500, color: '#344767', display: 'flex', alignItems: 'center', height: '40px' }}>Verificado</span>}
-                sx={{ m: 0, alignItems: 'center', height: '40px' }}
-                labelPlacement="end"
-              />
-            </Grid>
-            <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center', height: '40px', pl: 1 }}>
-              <FormControlLabel
-                control={<Checkbox checked={newUser.dataConsent} name="dataConsent" onChange={handleNewUserChange} size="small" sx={{ p: 0.5 }} />}
-                label={<span style={{ fontSize: 11, fontWeight: 500, color: '#344767', display: 'flex', alignItems: 'center', height: '40px' }}>Autorizo uso de datos</span>}
-                sx={{ m: 0, alignItems: 'center', height: '40px' }}
-                labelPlacement="end"
-              />
-            </Grid>
-            <Grid item xs={12} md={4} />
-            <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleCreateUser}
-                size="small"
-                sx={{
-                  minWidth: 110,
-                  height: '38px',
-                  color: '#fff',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  borderRadius: '8px',
-                  boxShadow: 1,
-                  textTransform: 'none',
-                  px: 2
-                }}
-              >
-                REGISTRAR USUARIO
-              </Button>
-            </Grid>
-            {userError && <Grid item xs={12}><span style={{ color: 'red' }}>{userError}</span></Grid>}
-            {userSuccess && <Grid item xs={12}><span style={{ color: 'green' }}>{userSuccess}</span></Grid>}
-          </Grid>
-        </Card>
-        <Grid container spacing={3} mt={1}>
-          <Grid item xs={12}>
-            <SoftBox
-              p={2}
-              shadow="md"
-              borderRadius="lg"
-              bgColor="white"
-              sx={{ cursor: "pointer", transition: "all 0.2s", "&:hover": { boxShadow: 6 } }}
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
-              onClick={() => navigate("/admin/users/info")}
-              mt={2}
-            >
-              <span>
-                <SoftTypography variant="h6" fontWeight="medium">
-                  Información del Usuario
-                </SoftTypography>
-                <SoftTypography variant="body2" color="text" mt={1}>
-                  Gestion los usuarios registrados.
-                </SoftTypography>
-              </span>
-              <IconButton size="small">
-                <ExpandMoreIcon style={{ opacity: 0.5 }} />
-              </IconButton>
+        {/* Gestión avanzada de usuarios y roles (Acordeón) */}
+        <Card sx={{ p: 0, mb: 4, boxShadow: 1, borderRadius: 2, transition: 'box-shadow 0.2s', cursor: 'pointer', '&:hover': { boxShadow: 6 } }}>
+          <SoftBox
+            p={2}
+            borderRadius="lg"
+            bgColor="white"
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+            onClick={() => setShowRoleManagement((prev) => !prev)}
+            mt={2}
+          >
+            <span>
+              <SoftTypography variant="h6" fontWeight="medium">
+                Gestión avanzada de usuarios y roles
+              </SoftTypography>
+              <SoftTypography variant="body2" color="text" mt={1}>
+                Selecciona los permisos que tendrá cada rol. Los usuarios solo podrán acceder a las secciones y acciones que su rol tenga habilitadas.
+              </SoftTypography>
+            </span>
+            <IconButton size="small">
+              <ExpandMoreIcon style={{ opacity: 0.5, transform: showRoleManagement ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+            </IconButton>
+          </SoftBox>
+          {showRoleManagement && (
+            <SoftBox p={3}>
+              <RoleManagement />
             </SoftBox>
-          </Grid>
-        </Grid>
+          )}
+        </Card>
+        {/* Registrar nuevo usuario (Acordeón) */}
+        <Card sx={{ p: 0, mb: 4, boxShadow: 1, borderRadius: 2, transition: 'box-shadow 0.2s', cursor: 'pointer', '&:hover': { boxShadow: 6 } }}>
+          <SoftBox
+            p={2}
+            borderRadius="lg"
+            bgColor="white"
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+            onClick={() => setShowUserCreation((prev) => !prev)}
+            mt={2}
+          >
+            <span>
+              <SoftTypography variant="h6" fontWeight="medium">
+                Registrar nuevo usuario
+              </SoftTypography>
+              <SoftTypography variant="body2" color="text" mt={1}>
+                Complete el formulario para registrar un nuevo usuario en el sistema.
+              </SoftTypography>
+            </span>
+            <IconButton size="small">
+              <ExpandMoreIcon style={{ opacity: 0.5, transform: showUserCreation ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+            </IconButton>
+          </SoftBox>
+          {showUserCreation && (
+            <SoftBox p={3}>
+              <UserCreation />
+            </SoftBox>
+          )}
+        </Card>
+        {/* Información del Usuario (igual estilo, ahora acordeón con tabla de usuarios) */}
+        <Card sx={{ p: 0, mb: 4, boxShadow: 1, borderRadius: 2, transition: 'box-shadow 0.2s', cursor: 'pointer', '&:hover': { boxShadow: 6 } }}>
+          <SoftBox
+            p={2}
+            borderRadius="lg"
+            bgColor="white"
+            display="flex"
+            alignItems="center"
+            justifyContent="space-between"
+            onClick={() => setShowUserInfo((prev) => !prev)}
+            mt={2}
+          >
+            <span>
+              <SoftTypography variant="h6" fontWeight="medium">
+                Información del Usuario
+              </SoftTypography>
+              <SoftTypography variant="body2" color="text" mt={1}>
+                Gestion los usuarios registrados.
+              </SoftTypography>
+            </span>
+            <IconButton size="small">
+              <ExpandMoreIcon style={{ opacity: 0.5, transform: showUserInfo ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
+            </IconButton>
+          </SoftBox>
+          {showUserInfo && (
+            <SoftBox p={3}>
+              <UserInfo />
+            </SoftBox>
+          )}
+        </Card>
       </SoftBox>
       <Footer />
     </DashboardLayout>

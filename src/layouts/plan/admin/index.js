@@ -26,6 +26,11 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import {
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tooltip
+} from "@mui/material";
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 
 // Definición fija de la URL base de la API
 const API_URL = "http://localhost:5006/api/plans";
@@ -47,7 +52,7 @@ function AdminPlans() {
     isActive: true,
   });
 
-  const [message, setMessage] = useState("");
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
   useEffect(() => {
     fetchPlans();
@@ -78,12 +83,12 @@ function AdminPlans() {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      setMessage("No se encontró el token de autenticación.");
+  setSnackbar({ open: true, message: "No se encontró el token de autenticación.", severity: 'error' });
       return;
     }
 
     try {
-      await axios.post(
+  await axios.post(
         API_URL,
         {
           ...newPlan,
@@ -99,7 +104,7 @@ function AdminPlans() {
         }
       );
 
-      setMessage("✅ Plan creado correctamente.");
+  setSnackbar({ open: true, message: "✅ Plan creado correctamente.", severity: 'success' });
       setNewPlan({
         name: "",
         description: "",
@@ -112,7 +117,7 @@ function AdminPlans() {
       fetchPlans();
     } catch (error) {
       const errorMsg = error?.response?.data?.message || "Error al crear el plan.";
-      setMessage(`❌ ${errorMsg}`);
+  setSnackbar({ open: true, message: `❌ ${errorMsg}`, severity: 'error' });
       console.error("❌ Error al crear el plan:", error);
     }
   };
@@ -129,7 +134,7 @@ function AdminPlans() {
 
   const saveEdit = async () => {
     if (!editingId) {
-      setMessage("Error interno: ID del plan no encontrado.");
+  setSnackbar({ open: true, message: "Error interno: ID del plan no encontrado.", severity: 'error' });
       return;
     }
 
@@ -138,7 +143,7 @@ function AdminPlans() {
     const parsedBotsLimit = Number(editData.botsLimit);
 
     if (isNaN(parsedPrice) || isNaN(parsedMaxTokens) || isNaN(parsedBotsLimit)) {
-      setMessage("Por favor ingresa valores numéricos válidos en precio, tokens y límite de bots.");
+  setSnackbar({ open: true, message: "Por favor ingresa valores numéricos válidos en precio, tokens y límite de bots.", severity: 'error' });
       return;
     }
 
@@ -146,7 +151,7 @@ function AdminPlans() {
     const token = localStorage.getItem("token");
 
     if (!token) {
-      setMessage("No se encontró el token de autenticación.");
+  setSnackbar({ open: true, message: "No se encontró el token de autenticación.", severity: 'error' });
       return;
     }
 
@@ -167,13 +172,13 @@ function AdminPlans() {
         }
       );
 
-      setMessage("✅ Plan actualizado correctamente.");
+  setSnackbar({ open: true, message: "✅ Plan actualizado correctamente.", severity: 'success' });
       setEditingId(null);
       setEditData({});
       fetchPlans();
     } catch (error) {
       const errorMsg = error?.response?.data?.message || "Error al actualizar el plan.";
-      setMessage(`❌ ${errorMsg}`);
+  setSnackbar({ open: true, message: `❌ ${errorMsg}`, severity: 'error' });
       console.error("❌ Error al hacer PUT:", error);
     }
   };
@@ -204,6 +209,17 @@ function AdminPlans() {
 
   return (
     <DashboardLayout>
+      {/* Snackbar para feedback visual */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
       <DashboardNavbar />
 
       <SoftBox py={3} px={3}></SoftBox>
@@ -214,105 +230,89 @@ function AdminPlans() {
       {loading ? (
         <SoftTypography>Cargando planes...</SoftTypography>
       ) : (
-        <SoftBox mb={4} overflow="auto">
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                {[
-                  "Nombre",
-                  "Descripción",
-                  "Precio",
-                  "Max Tokens",
-                  "Bots Límite",
-                  "Activo",
-                  "Acciones",
-                ].map((title) => (
-                  <th key={title} style={{ border: "1px solid #ccc", padding: 8 }}>
-                    {title}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+        <TableContainer component={Paper} sx={{ mb: 4 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ background: '#f5f5f5' }}>
+                <TableCell>Nombre</TableCell>
+                <TableCell>Descripción</TableCell>
+                <TableCell>Precio</TableCell>
+                <TableCell>Max Tokens</TableCell>
+                <TableCell>Bots Límite</TableCell>
+                <TableCell>Activo</TableCell>
+                <TableCell>Acciones</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {plans.map((plan) => (
-                <tr key={plan.id}>
+                <TableRow
+                  key={plan.id}
+                  style={
+                    plan.isActive
+                      ? { background: '#fff', color: '#222' }
+                      : { background: '#e0e0e0', color: '#757575' }
+                  }
+                >
                   {editingId === plan.id ? (
                     <>
-                      <td>
-                        <TextField name="name" value={editData.name} onChange={handleEditChange} />
-                      </td>
-                      <td>
-                        <TextField
-                          name="description"
-                          value={editData.description}
-                          onChange={handleEditChange}
-                        />
-                      </td>
-                      <td>
-                        <TextField
-                          type="number"
-                          name="price"
-                          value={editData.price}
-                          onChange={handleEditChange}
-                        />
-                      </td>
-                      <td>
-                        <TextField
-                          type="number"
-                          name="maxTokens"
-                          value={editData.maxTokens}
-                          onChange={handleEditChange}
-                        />
-                      </td>
-                      <td>
-                        <TextField
-                          type="number"
-                          name="botsLimit"
-                          value={editData.botsLimit}
-                          onChange={handleEditChange}
-                        />
-                      </td>
-                      <td>
-                        <Checkbox
-                          checked={editData.isActive}
-                          onChange={handleEditChange}
-                          name="isActive"
-                        />
-                      </td>
-                      <td>
-                        <IconButton onClick={saveEdit} color="success">
-                          <CheckIcon />
-                        </IconButton>
-                        <IconButton onClick={cancelEdit} color="error">
-                          <CloseIcon />
-                        </IconButton>
-                      </td>
+                      <TableCell>
+                        <TextField name="name" value={editData.name} onChange={handleEditChange} size="small" />
+                      </TableCell>
+                      <TableCell>
+                        <TextField name="description" value={editData.description} onChange={handleEditChange} size="small" />
+                      </TableCell>
+                      <TableCell>
+                        <TextField type="number" name="price" value={editData.price} onChange={handleEditChange} size="small" />
+                      </TableCell>
+                      <TableCell>
+                        <TextField type="number" name="maxTokens" value={editData.maxTokens} onChange={handleEditChange} size="small" />
+                      </TableCell>
+                      <TableCell>
+                        <TextField type="number" name="botsLimit" value={editData.botsLimit} onChange={handleEditChange} size="small" />
+                      </TableCell>
+                      <TableCell>
+                        <Checkbox checked={editData.isActive} onChange={handleEditChange} name="isActive" />
+                      </TableCell>
+                      <TableCell>
+                        <Tooltip title="Guardar">
+                          <IconButton onClick={saveEdit} color="success" size="small">
+                            <CheckIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Cancelar">
+                          <IconButton onClick={cancelEdit} color="error" size="small">
+                            <CloseIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
                     </>
                   ) : (
                     <>
-                      <td>{plan.name}</td>
-                      <td>{plan.description}</td>
-                      <td>
-                        {plan.price.toLocaleString("es-CO", { style: "currency", currency: "COP" })}
-                      </td>
-                      <td>{plan.maxTokens}</td>
-                      <td>{plan.botsLimit}</td>
-                      <td>{plan.isActive ? "Sí" : "No"}</td>
-                      <td>
-                        <IconButton onClick={() => startEdit(plan)}>
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton onClick={() => handleDelete(plan.id)} color="error">
-                          <DeleteIcon />
-                        </IconButton>
-                      </td>
+                      <TableCell>{plan.name}</TableCell>
+                      <TableCell>{plan.description}</TableCell>
+                      <TableCell>{plan.price.toLocaleString("es-CO", { style: "currency", currency: "COP" })}</TableCell>
+                      <TableCell>{plan.maxTokens}</TableCell>
+                      <TableCell>{plan.botsLimit}</TableCell>
+                      <TableCell>{plan.isActive ? "Sí" : "No"}</TableCell>
+                      <TableCell>
+                        <Tooltip title="Editar">
+                          <IconButton onClick={() => startEdit(plan)} color="primary" size="small">
+                            <EditIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Eliminar">
+                          <IconButton onClick={() => handleDelete(plan.id)} color="error" size="small">
+                            <DeleteIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
                     </>
                   )}
-                </tr>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </SoftBox>
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
 
       <SoftTypography variant="h5" mb={2} mt={5}>
@@ -324,13 +324,50 @@ function AdminPlans() {
 
       {showForm && (
         <form onSubmit={createPlan} style={{ marginTop: 16 }}>
-          <Grid container spacing={2}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={6}>
               <TextField
                 label="Nombre"
                 name="name"
                 value={newPlan.name}
                 onChange={handleInputChange}
+                variant="standard"
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    '&.Mui-focused': { color: 'info.main' },
+                    color: 'text.secondary',
+                    fontSize: 16,
+                    background: '#fff',
+                    px: 0.5,
+                    zIndex: 1
+                  }
+                }}
+                sx={{
+                  background: '#fff',
+                  borderRadius: 1,
+                  mb: 3,
+                  '& .MuiInput-underline:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:hover:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-disabled:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-focused:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  }
+                }}
                 fullWidth
                 required
               />
@@ -341,6 +378,43 @@ function AdminPlans() {
                 name="description"
                 value={newPlan.description}
                 onChange={handleInputChange}
+                variant="standard"
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    '&.Mui-focused': { color: 'info.main' },
+                    color: 'text.secondary',
+                    fontSize: 16,
+                    background: '#fff',
+                    px: 0.5,
+                    zIndex: 1
+                  }
+                }}
+                sx={{
+                  background: '#fff',
+                  borderRadius: 1,
+                  mb: 3,
+                  '& .MuiInput-underline:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:hover:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-disabled:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-focused:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  }
+                }}
                 fullWidth
                 required
               />
@@ -352,6 +426,51 @@ function AdminPlans() {
                 type="number"
                 value={newPlan.price}
                 onChange={handleInputChange}
+                variant="standard"
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    '&.Mui-focused': { color: 'info.main' },
+                    color: 'text.secondary',
+                    fontSize: 16,
+                    background: '#fff',
+                    px: 0.5,
+                    zIndex: 1
+                  }
+                }}
+                sx={{
+                  background: '#fff',
+                  borderRadius: 1,
+                  mb: 3,
+                  '& .MuiInput-underline:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:hover:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-disabled:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-focused:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  // Oculta los spinners de number
+                  '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                    WebkitAppearance: 'none',
+                    margin: 0
+                  },
+                  '& input[type=number]': {
+                    MozAppearance: 'textfield'
+                  }
+                }}
                 fullWidth
                 required
               />
@@ -363,6 +482,51 @@ function AdminPlans() {
                 type="number"
                 value={newPlan.maxTokens}
                 onChange={handleInputChange}
+                variant="standard"
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    '&.Mui-focused': { color: 'info.main' },
+                    color: 'text.secondary',
+                    fontSize: 16,
+                    background: '#fff',
+                    px: 0.5,
+                    zIndex: 1
+                  }
+                }}
+                sx={{
+                  background: '#fff',
+                  borderRadius: 1,
+                  mb: 3,
+                  '& .MuiInput-underline:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:hover:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-disabled:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-focused:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  // Oculta los spinners de number
+                  '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                    WebkitAppearance: 'none',
+                    margin: 0
+                  },
+                  '& input[type=number]': {
+                    MozAppearance: 'textfield'
+                  }
+                }}
                 fullWidth
                 required
               />
@@ -374,37 +538,77 @@ function AdminPlans() {
                 type="number"
                 value={newPlan.botsLimit}
                 onChange={handleInputChange}
+                variant="standard"
+                InputLabelProps={{
+                  shrink: true,
+                  sx: {
+                    '&.Mui-focused': { color: 'info.main' },
+                    color: 'text.secondary',
+                    fontSize: 16,
+                    background: '#fff',
+                    px: 0.5,
+                    zIndex: 1
+                  }
+                }}
+                sx={{
+                  background: '#fff',
+                  borderRadius: 1,
+                  mb: 3,
+                  '& .MuiInput-underline:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline:hover:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-disabled:before': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  '& .MuiInput-underline.Mui-focused:after': {
+                    borderBottomColor: 'transparent !important',
+                    borderBottomWidth: 0,
+                  },
+                  // Oculta los spinners de number
+                  '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                    WebkitAppearance: 'none',
+                    margin: 0
+                  },
+                  '& input[type=number]': {
+                    MozAppearance: 'textfield'
+                  }
+                }}
                 fullWidth
                 required
               />
             </Grid>
             <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={newPlan.isActive}
-                    onChange={handleInputChange}
-                    name="isActive"
-                    inputProps={{ "aria-label": "Activo" }}
-                  />
-                }
-                label="Activo"
-              />
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 16 }}>
+                <Checkbox
+                  checked={newPlan.isActive}
+                  onChange={handleInputChange}
+                  name="isActive"
+                  inputProps={{ "aria-label": "Activo" }}
+                  sx={{ mr: 1 }}
+                />
+                <span style={{ fontWeight: 700, color: '#222', fontSize: 18 }}>Activo</span>
+              </div>
             </Grid>
             <Grid item xs={12}>
-              <Button variant="contained" color="primary" type="submit">
-                Crear Plan
+              <Button variant="contained" color="primary" type="submit" sx={{ color: '#fff' }}>
+                CREAR PLAN
               </Button>
             </Grid>
           </Grid>
         </form>
       )}
 
-      {message && (
-        <SoftTypography color="info" mt={2}>
-          {message}
-        </SoftTypography>
-      )}
+
 
       <Footer />
     </DashboardLayout>
