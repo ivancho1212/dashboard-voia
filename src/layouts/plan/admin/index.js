@@ -331,14 +331,20 @@ function AdminPlans() {
                           value={editData.aiProviders || []}
                           onChange={e => setEditData(prev => ({ ...prev, aiProviders: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value }))}
                           input={<OutlinedInput label="AI Providers" />}
-                          renderValue={selected => (
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                              {selected.map((v) => (<Chip key={v} label={v} size="small" />))}
-                            </div>
-                          )}
+                          renderValue={selected => {
+                            let arr = [];
+                            if (Array.isArray(selected)) arr = selected;
+                            else if (typeof selected === 'string') arr = selected.split(',');
+                            else if (selected == null) arr = [];
+                            return (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                {arr.map((v) => (<Chip key={v} label={v} size="small" />))}
+                              </div>
+                            );
+                          }}
                           size="small"
                         >
-                          {AI_PROVIDERS.map((prov) => (
+                          {aiProvidersDb.map((prov) => (
                             <MenuItem key={prov} value={prov}>{prov}</MenuItem>
                           ))}
                         </Select>

@@ -143,14 +143,12 @@ const Plans = () => {
           </SoftTypography>
         )}
 
-        <Grid container spacing={4} justifyContent="center">
-          {plans.map((plan) => {
+  <Grid container spacing={2} justifyContent="center" alignItems="stretch">
+          {plans.map((plan, idx) => {
             const isCurrentPlan = userPlanId === plan.id;
-
             let buttonLabel = "Suscribirme";
             let isDisabled = false;
             let onClickAction = () => handleSubscribe(plan.id);
-
             if (isAuthenticated) {
               if (userPlanId) {
                 if (isCurrentPlan) {
@@ -166,66 +164,128 @@ const Plans = () => {
               buttonLabel = "Suscribirme";
               onClickAction = () => navigate("/register");
             }
-
+            // Resaltar el plan destacado: Premium o el primero
+            const isPro = plan.name && plan.name.toLowerCase().includes("pro");
+            const isFeatured = isPro;
+            // Mostrar proveedor IA como texto plano
+            let aiProvidersText = "-";
+            if (Array.isArray(plan.aiProviders)) {
+              aiProvidersText = plan.aiProviders.filter(Boolean).join(', ');
+            } else if (typeof plan.aiProviders === 'string') {
+              aiProvidersText = plan.aiProviders;
+            }
+            // Si es el plan actual, header blanco y texto info
+            const headerBg = isCurrentPlan
+              ? (theme) => theme.palette.common.white
+              : (theme) => `linear-gradient(90deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%)`;
+            const headerTextColor = isCurrentPlan
+              ? (theme) => theme.palette.info.main
+              : '#fff';
             return (
-              <Grid item xs={12} sm={10} md={6} lg={4} key={plan.id}>
+              <Grid
+                item
+                key={plan.id}
+                xs={12}
+                sm={6}
+                md={3}
+                lg={3}
+                sx={{
+                  display: 'flex',
+                  px: { xs: 0.5, sm: 1, md: 1.5, lg: 1.5 },
+                  mb: { xs: 2, md: 2 },
+                  width: '100%',
+                  boxSizing: 'border-box',
+                  zIndex: isFeatured ? 2 : 1,
+                }}
+              >
                 <Card
                   sx={{
-                    p: 3,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    minHeight: isFeatured ? 540 : 480,
+                    minWidth: 220,
+                    maxWidth: 350,
+                    width: '100%',
+                    mx: 'auto',
+                    boxShadow: isFeatured ? 12 : 3,
                     borderRadius: 4,
-                    background: getPlanColor(plan.name),
-                    boxShadow: "0 6px 20px rgba(0,0,0,0.1)",
-                    minHeight: "320px",
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    transition: "transform 0.3s",
-                    "&:hover": {
-                      transform: "scale(1.03)",
-                    },
+                    border: isFeatured ? '2.5px solid #d4af37' : '1px solid',
+                    borderColor: isFeatured ? '#d4af37' : 'grey.200',
+                    p: 0,
+                    background: isFeatured
+                      ? 'linear-gradient(145deg, #fffbe6 0%, #fff 100%)'
+                      : '#fff',
+                    position: 'relative',
+                    transition: 'box-shadow 0.2s, border 0.2s',
+                    '&:hover': { boxShadow: 16 },
                   }}
                 >
-                  <SoftBox>
-                    <SoftTypography variant="h5" fontWeight="bold" gutterBottom>
+                  {/* Precio fijo arriba */}
+                  <SoftBox sx={{
+                    width: '100%',
+                    pt: 4,
+                    pb: 2,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    background: headerBg,
+                    borderTopLeftRadius: 16,
+                    borderTopRightRadius: 16,
+                  }}>
+                    <SoftTypography variant="h2" fontWeight="bold" sx={{ fontSize: 38, mb: 0, color: headerTextColor, textShadow: isCurrentPlan ? 'none' : '0 2px 8px rgba(0,0,0,0.18)' }}>
+                      ${plan.price}
+                    </SoftTypography>
+                    <SoftTypography variant="button" sx={{ fontSize: 18, color: headerTextColor, opacity: 1, letterSpacing: 1, mb: 0.5, textShadow: isCurrentPlan ? 'none' : '0 2px 8px rgba(0,0,0,0.18)' }}>
                       {plan.name}
                     </SoftTypography>
-                    <SoftTypography variant="body2" color="text.primary" mb={2}>
+                  </SoftBox>
+                  {/* Contenido debajo del precio */}
+                  <SoftBox sx={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', px: 3, py: 2 }}>
+                    <SoftTypography variant="body2" color="text.primary" mb={2} sx={{ fontSize: 14, textAlign: 'left' }}>
                       {plan.description || "Este plan ofrece características útiles."}
                     </SoftTypography>
-                    <SoftTypography variant="h6" color="dark" mb={1}>
-                      Precio: ${plan.price}
-                    </SoftTypography>
-                    <SoftTypography variant="body2">
-                      <strong>Máx Tokens:</strong> {plan.maxTokens}
-                    </SoftTypography>
-                    <SoftTypography variant="body2">
-                      <strong>Límite de Bots:</strong> {plan.botsLimit ?? "Ilimitado"}
-                    </SoftTypography>
-                    <SoftTypography variant="body2">
-                      <strong>Activo:</strong> {plan.isActive ? "Sí" : "No"}
-                    </SoftTypography>
+                    <ul style={{ paddingLeft: 0, margin: 0, marginBottom: 18, listStyle: 'none', width: '100%' }}>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Máx Tokens:</b> {plan.maxTokens}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Límite de Bots:</b> {plan.botsLimit ?? "Ilimitado"}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Tamaño máx. archivo (MB):</b> {plan.fileUploadLimit ?? "-"}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Campos de captura de datos:</b> {plan.dataCaptureLimit ?? "-"}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Proveedores IA:</b> {aiProvidersText}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Custom Styles:</b> {plan.customStyles ? "Sí" : "No"}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Analytics:</b> {plan.analyticsDashboard ? "Sí" : "No"}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Priority Support:</b> {plan.prioritySupport ? "Sí" : "No"}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>API Ext:</b> {plan.integrationApi ? "Sí" : "No"}</li>
+                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Activo:</b> {plan.isActive ? "Sí" : "No"}</li>
+                    </ul>
                   </SoftBox>
-
-                  <SoftBox mt={3} textAlign="center">
+                  {/* Botón siempre abajo */}
+                  <SoftBox sx={{ width: '100%', display: 'flex', justifyContent: 'center', pb: 3, px: 3 }}>
                     <Button
                       variant="contained"
                       onClick={onClickAction}
                       disabled={isDisabled || subscribing}
                       sx={{
-                        background: "linear-gradient(145deg, #d3d3d3, #000000)",
-                        color: "#fff",
-                        borderRadius: 2,
-                        px: 4,
-                        boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
-                        textTransform: "none",
-                        fontWeight: "bold",
-                        border: "none",
-                        "&:hover": {
-                          background: "linear-gradient(145deg, #e0e0e0, #111111)",
+                        background: (theme) => `linear-gradient(90deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%)`,
+                        color: '#fff',
+                        borderRadius: 6,
+                        px: 3,
+                        py: 0.5,
+                        minWidth: 120,
+                        minHeight: 36,
+                        fontSize: 15,
+                        fontWeight: 'bold',
+                        textTransform: 'none',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+                        border: 'none',
+                        mt: 1,
+                        transition: 'background 0.2s',
+                        '&:hover': {
+                          background: (theme) => `linear-gradient(90deg, ${theme.palette.info.dark} 0%, ${theme.palette.info.main} 100%)`,
                         },
                       }}
                     >
-                      {subscribing && !isDisabled ? "Procesando..." : buttonLabel}
+                      {subscribing && !isDisabled ? 'Procesando...' : buttonLabel}
                     </Button>
                   </SoftBox>
                 </Card>
