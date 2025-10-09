@@ -2,6 +2,23 @@ import axios from "axios";
 
 const API_URL = "http://localhost:5006/api/plans"; // o usar process.env si ya tienes .env
 
+// Obtiene los proveedores de IA desde la API
+export const getAiProviders = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch("http://localhost:5006/api/botiaProviders", {
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    });
+    if (!res.ok) throw new Error("No se pudo obtener AI Providers");
+    const data = await res.json();
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    return [];
+  }
+};
+
 // Obtiene el plan actual del usuario
 export const getMyPlan = async () => {
   const token = localStorage.getItem("token");
