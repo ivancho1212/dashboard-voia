@@ -28,6 +28,15 @@ function BotStylePage() {
   const { id: botId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const location = useLocation();
+
+  // Protección: solo acceso por flujo guiado
+  useEffect(() => {
+    // Si no hay contexto válido (ejemplo: location.state.botId), redirige
+    if (!location.state?.botId) {
+      navigate("/bots", { replace: true });
+    }
+  }, [location, navigate]);
 
   const [activeTab, setActiveTab] = useState(0);
   const [viewMode, setViewMode] = useState("list");

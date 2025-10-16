@@ -1,3 +1,32 @@
+// Obtiene un bot por su ID
+export async function getBotById(botId) {
+  try {
+    const token = localStorage.getItem("token");
+    const response = await axios.get(`http://localhost:5006/api/Bots/${botId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "No se pudo obtener el bot");
+  }
+}
+// Marca el bot como listo (IsReady = true)
+// Actualiza el bot con el payload completo requerido por UpdateBotDto
+export async function updateBotReady(botId, botData) {
+  try {
+    const token = localStorage.getItem("token");
+  const response = await axios.put(`${API_URL}/${botId}`, botData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("❌ Error en updateBotReady:", error.response?.data || error.message);
+    throw error;
+  }
+}
 // src/services/botService.js
 import axios from "axios";
 
@@ -27,7 +56,10 @@ export async function createBot(botData) {
   try {
     const token = localStorage.getItem("token"); // 🔥 tomar token guardado
     const response = await axios.post(API_URL, botData, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
     return response.data;
   } catch (error) {

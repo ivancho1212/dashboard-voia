@@ -12,7 +12,7 @@ import Tooltip from "@mui/material/Tooltip";
 import EditIcon from "@mui/icons-material/Edit";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
-import { IconButton, Link } from "@mui/material";
+import { IconButton } from "@mui/material";
 import TextField from "@mui/material/TextField";
 
 // Soft UI Dashboard React components
@@ -31,84 +31,52 @@ function Header({ user }) {
   const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
   const [avatarUrl, setAvatarUrl] = useState("/default-avatar.png");
   const [editingName, setEditingName] = useState(false);
+  const [tempName, setTempName] = useState("");
+  const [localUser, setLocalUser] = useState(user || {});
+  const [errorOpen, setErrorOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
   const navigate = useNavigate();
 
+  // ✅ Obtener datos del usuario
   useEffect(() => {
     const fetchUser = async () => {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_BASE_URL}/api/users/me`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/users/me`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      const userData = await response.json();
+        const userData = await response.json();
 
-      if (response.ok) {
-        setLocalUser(userData); // Actualiza el estado con los datos del usuario
-      } else {
-        console.error("Error al obtener datos del usuario:", userData.message);
+        if (response.ok) {
+          setLocalUser(userData);
+          setTempName(userData.name || "");
+          if (userData.avatarUrl) {
+            setAvatarUrl(`${API_BASE_URL}${userData.avatarUrl}`);
+          }
+        } else {
+          console.error("Error al obtener datos del usuario:", userData.message);
+        }
+      } catch (error) {
+        console.error("Error de red:", error);
       }
     };
 
     fetchUser();
-  }, []);
+  }, [API_BASE_URL]);
 
-  const [tempName, setTempName] = useState(user?.name || "");
-  const [localUser, setLocalUser] = useState(user);
-
-  useEffect(() => {
-    if (user?.avatarUrl) {
-      setAvatarUrl(`${API_BASE_URL}${user.avatarUrl}`);
-    }
-  }, [user]);
-
-  const handleAvatarClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  const handleSave = async () => {
-    try {
-      const token = localStorage.getItem("token"); // o de donde sea que guardas el token
-      const response = await fetch(`${API_BASE_URL}/api/users/me`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          name: tempName,
-          email: user.email,
-          phone: user.phone,
-          address: user.address,
-          documentNumber: user.documentNumber,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        alert(result.Message || "Error al actualizar");
-      } else {
-        alert("Perfil actualizado correctamente");
-      }
-    } catch (error) {
-      console.error("Error:", error);
-      alert("Error al conectar con el servidor");
-    }
-  };
-
+  // ✅ Manejar edición de nombre
   const handleCancelEdit = () => {
-    setTempName(user?.name || "");
+    setTempName(localUser?.name || "");
     setEditingName(false);
   };
 
   const handleSaveName = async () => {
-    if (tempName.trim() && tempName !== user.name) {
+    if (tempName.trim() && tempName !== localUser.name) {
       const token = localStorage.getItem("token");
 
       try {
@@ -120,20 +88,19 @@ function Header({ user }) {
           },
           body: JSON.stringify({
             name: tempName,
-            email: user.email,
-            phone: user.phone,
-            address: user.address,
-            documentNumber: user.documentNumber,
+            email: localUser.email,
+            phone: localUser.phone,
+            address: localUser.address,
+            documentNumber: localUser.documentNumber,
           }),
         });
 
         const result = await response.json();
 
         if (response.ok) {
-          // Si la actualización fue exitosa, actualiza el estado local
           setLocalUser((prevUser) => ({
             ...prevUser,
-            name: tempName, // Actualiza solo el nombre
+            name: tempName,
           }));
           alert("Nombre actualizado correctamente");
         } else {
@@ -149,6 +116,7 @@ function Header({ user }) {
     setEditingName(false);
   };
 
+  // ✅ Subir imagen de perfil
   const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -161,7 +129,6 @@ function Header({ user }) {
     const token = localStorage.getItem("token");
 
     try {
-      const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
       const response = await axios.put(`${API_BASE_URL}/api/Users/me/avatar`, formData, {
         headers: {
           "Content-Type": "multipart/form-data",
@@ -176,32 +143,35 @@ function Header({ user }) {
     }
   };
 
-  const isSubscriptionActive = () => {
-    if (!user?.subscription?.expiresAt || !user?.subscription?.status) return false;
-    const now = new Date();
-    const expiresAt = new Date(user.subscription.expiresAt);
-    return user.subscription.status === "active" && expiresAt > now;
-  }; 
+  // ✅ Activar input file
+  const handleAvatarClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
 
-  const [errorOpen, setErrorOpen] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
+  // ✅ Verificar suscripción
+  const isSubscriptionActive = () => {
+    if (!localUser?.subscription?.expiresAt || !localUser?.subscription?.status)
+      return false;
+    const now = new Date();
+    const expiresAt = new Date(localUser.subscription.expiresAt);
+    return localUser.subscription.status === "active" && expiresAt > now;
+  };
 
   return (
     <SoftBox position="relative">
       <DashboardNavbar absolute light />
-      {/* Reduce header image space by lowering minHeight and borderRadius */}
       <SoftBox
         display="flex"
         alignItems="center"
         position="relative"
-        minHeight="8rem"  // Reduce even more
+        minHeight="8rem"
         borderRadius="sm"
         sx={{
           backgroundColor: "rgba(255, 255, 255, 0.7)",
           borderRadius: 1,
-          input: {
-            color: "#000",
-          },
+          input: { color: "#000" },
           backgroundImage: ({ functions: { rgba, linearGradient }, palette: { gradients } }) =>
             `${linearGradient(
               rgba(gradients.info.main, 0.6),
@@ -212,11 +182,11 @@ function Header({ user }) {
           overflow: "hidden",
         }}
       />
-      {/* Move content up by reducing margin top on Card even more */}
       <Card
         sx={{
           backdropFilter: `saturate(200%) blur(30px)`,
-          backgroundColor: ({ functions: { rgba }, palette: { white } }) => rgba(white.main, 0.8),
+          backgroundColor: ({ functions: { rgba }, palette: { white } }) =>
+            rgba(white.main, 0.8),
           boxShadow: ({ boxShadows: { navbarBoxShadow } }) => navbarBoxShadow,
           position: "relative",
           mt: -7,
@@ -227,14 +197,7 @@ function Header({ user }) {
       >
         <Grid container spacing={3} alignItems="center">
           <Grid item>
-            <SoftBox
-              position="relative"
-              sx={{
-                width: "100px",
-                height: "100px",
-              }}
-            >
-              {/* Imagen de perfil */}
+            <SoftBox position="relative" sx={{ width: "100px", height: "100px" }}>
               <SoftAvatar
                 src={avatarUrl}
                 alt="Imagen de perfil"
@@ -243,15 +206,9 @@ function Header({ user }) {
                 sx={{
                   width: "100%",
                   height: "100%",
-                  "& img": {
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                  },
+                  "& img": { width: "100%", height: "100%", objectFit: "cover" },
                 }}
               />
-
-              {/* Icono flotante */}
               <Tooltip title="Cambiar imagen">
                 <IconButton
                   size="small"
@@ -263,16 +220,12 @@ function Header({ user }) {
                     zIndex: 2,
                     backgroundColor: "#17c1e8",
                     boxShadow: 2,
-                    "&:hover": {
-                      backgroundColor: "#f0f0f0",
-                    },
+                    "&:hover": { backgroundColor: "#f0f0f0" },
                   }}
                 >
                   <Icon>add</Icon>
                 </IconButton>
               </Tooltip>
-
-              {/* Input oculto */}
               <input
                 type="file"
                 accept="image/*"
@@ -297,33 +250,31 @@ function Header({ user }) {
                       }}
                       variant="standard"
                       autoFocus
-                      InputProps={{
-                        disableUnderline: false,
-                      }}
+                      fullWidth
+                      InputProps={{ disableUnderline: false }}
                       sx={{
-                        maxWidth: "200px",
                         mr: 1,
-                        "& .MuiInputBase-root": {
-                          backgroundColor: "transparent !important", // Forzamos que el fondo sea transparente
-                          boxShadow: "none !important", // Forzamos la eliminación de la sombra
-                          border: "none !important", // Eliminamos cualquier borde que pudiera aparecer
-                          marginTop: "-5px !important", // Forzamos el margin-top
+                        flex: 1,
+                        '& .MuiInputBase-root': {
+                          backgroundColor: 'transparent !important',
+                          boxShadow: 'none !important',
+                          border: 'none !important',
+                          marginTop: '-5px !important',
                         },
-                        "& .MuiInputBase-input": {
-                          backgroundColor: "transparent !important", // También forzamos el fondo del input
+                        '& .MuiInputBase-input': {
+                          backgroundColor: 'transparent !important',
                         },
-                        "& .MuiInput-underline:before": {
-                          borderBottom: "1px solid #ccc !important", // Línea debajo en estado normal
+                        '& .MuiInput-underline:before': {
+                          borderBottom: '1px solid #ccc !important',
                         },
-                        "& .MuiInput-underline:hover:before": {
-                          borderBottom: "1px solid #999 !important", // Línea debajo en hover
+                        '& .MuiInput-underline:hover:before': {
+                          borderBottom: '1px solid #999 !important',
                         },
-                        "& .MuiInput-underline:after": {
-                          borderBottom: "2px solid #1976d2 !important", // Línea debajo después de editar
+                        '& .MuiInput-underline:after': {
+                          borderBottom: '2px solid #1976d2 !important',
                         },
                       }}
                     />
-
                     <IconButton onClick={handleSaveName} size="small" sx={{ color: "green" }}>
                       <CheckIcon />
                     </IconButton>
@@ -334,17 +285,25 @@ function Header({ user }) {
                 ) : (
                   <>
                     {localUser?.name || "Cargando..."}
-                    <IconButton size="small" onClick={() => setEditingName(true)} sx={{ ml: 1 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        setTempName(localUser?.name || "");
+                        setEditingName(true);
+                      }}
+                      sx={{ ml: 1 }}
+                    >
                       <EditIcon fontSize="small" />
                     </IconButton>
                   </>
                 )}
               </SoftTypography>
 
-              {/* SUSCRIPCIÓN */}
+              {/* Suscripción */}
               {isSubscriptionActive() ? (
                 <SoftTypography variant="caption" color="text">
-                  Tu plan vence el {new Date(user.subscription.expiresAt).toLocaleDateString()}
+                  Tu plan vence el{" "}
+                  {new Date(localUser.subscription.expiresAt).toLocaleDateString()}
                 </SoftTypography>
               ) : (
                 <>
@@ -355,7 +314,9 @@ function Header({ user }) {
                     variant="button"
                     color="secondary"
                     sx={{ display: "block", mt: 0.5, cursor: "pointer" }}
-                    onClick={() => navigate("/plans", { state: { currentPlanId: user?.plan?.id } })}
+                    onClick={() =>
+                      navigate("/plans", { state: { currentPlanId: localUser?.plan?.id } })
+                    }
                   >
                     Suscríbete
                   </SoftTypography>
@@ -369,7 +330,7 @@ function Header({ user }) {
   );
 }
 
-// Validación de props
+// ✅ Validación de props
 Header.propTypes = {
   user: PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
@@ -380,20 +341,17 @@ Header.propTypes = {
     documentNumber: PropTypes.string,
     avatarUrl: PropTypes.string,
     plan: PropTypes.shape({
-      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // <--- Agregado id aquí
+      id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
       name: PropTypes.string,
       subscription: PropTypes.shape({
         expiresAt: PropTypes.string,
         status: PropTypes.string,
       }),
-      plan: PropTypes.shape({
-        name: PropTypes.string,
-      }),
     }),
     subscription: PropTypes.shape({
       expiresAt: PropTypes.string,
       status: PropTypes.string,
-      isActive: PropTypes.bool, // ✅ Bien agregado
+      isActive: PropTypes.bool,
     }),
   }),
 };

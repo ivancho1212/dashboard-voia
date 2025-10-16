@@ -17,7 +17,7 @@ function Controls({ onToggle, iaPaused }) {
     >
       <Typography
         variant="caption"
-        color="text.secondary"
+  color="text"
         sx={{
           fontWeight: "bold",
           textAlign: "center",

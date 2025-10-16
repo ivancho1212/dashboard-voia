@@ -1,21 +1,35 @@
+// Obtener documentos por botId
+export const getUploadedDocumentsByBot = async (botId) => {
+  const token = localStorage.getItem("token");
+  const response = await axios.get(`${API_URL}/by-bot/${botId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
 import axios from "axios";
 
 const BASE_URL = "http://localhost:5006/api";
 const API_URL = `${BASE_URL}/UploadedDocuments`;
 
 // 🔼 Subir archivo
-export const uploadFile = async (file, botId, userId) => {
+
+// file: File/Blob, botId: int, botTemplateId: int, userId: int, templateTrainingSessionId: int|null
+export const uploadFile = async (file, botId, botTemplateId, userId, templateTrainingSessionId = null) => {
   const formData = new FormData();
   formData.append("File", file);
   formData.append("BotId", botId);
-  // TODO: El BotTemplateId no debería estar hardcodeado a 1.
-  formData.append("BotTemplateId", botId > 0 ? 1 : null); 
+  formData.append("BotTemplateId", botTemplateId);
   formData.append("UserId", userId);
+  if (templateTrainingSessionId !== null && templateTrainingSessionId !== undefined) {
+    formData.append("TemplateTrainingSessionId", templateTrainingSessionId);
+  }
 
   console.log('Enviando archivo con datos:', {
     fileName: file.name,
     botId,
-    userId
+    botTemplateId,
+    userId,
+    templateTrainingSessionId
   });
 
   try {
@@ -28,14 +42,16 @@ export const uploadFile = async (file, botId, userId) => {
       console.warn(`⚠️ Archivo duplicado: ${file.name}. Ya existe en la plantilla.`);
       return { duplicate: true, message: error.response.data.message };
     }
-    // Para cualquier otro error, relánzalo para que el catch principal lo maneje
     throw error;
   }
 };
 
 // 🔍 Obtener archivos por plantilla
 export const getUploadedDocumentsByTemplate = async (templateId) => {
-  const response = await axios.get(`${API_URL}/by-template/${templateId}`);
+  const token = localStorage.getItem("token");
+  const response = await axios.get(`${API_URL}/by-template/${templateId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   return response.data;
 };
 

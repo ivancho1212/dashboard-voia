@@ -7,13 +7,17 @@ import Footer from "examples/Footer";
 import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 
+
 import BotPreview from "./preview";
 import { getAvailableBotTemplates } from "services/botTemplateService";
+import MyBotsList from "./components/MyBotsList";
+import { useAuth } from "contexts/AuthContext";
+
 
 function BotsDashboard() {
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -38,14 +42,18 @@ function BotsDashboard() {
           Modelos de Bots
         </SoftTypography>
 
+        {/* Solo mostrar plantillas disponibles, sin sección de bots */}
+        <SoftTypography variant="h5" fontWeight="bold" mt={4} mb={2}>
+          Plantillas disponibles
+        </SoftTypography>
+
         {loading ? (
           <SoftTypography>Cargando plantillas...</SoftTypography>
         ) : (
-          // Eliminamos el Grid innecesario ya que BotPreview ya es un Grid container
           <BotPreview
             templates={templates}
             onSelectTemplate={(template) => {
-              navigate(`/bots/training/${template.id}`);
+              navigate(`/bots/training/${template.id}`, { state: { template } });
             }}
           />
         )}

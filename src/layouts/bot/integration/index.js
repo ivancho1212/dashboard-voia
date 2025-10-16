@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
@@ -53,6 +54,17 @@ function BotAdminDashboard() {
   const [editingUrl, setEditingUrl] = useState({});
   const [tempUrls, setTempUrls] = useState({});
   const [integrationIds, setIntegrationIds] = useState({}); // Para almacenar IDs de integraciones
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Protección: solo acceso por flujo guiado (solo si realmente lo necesitas)
+  // Si quieres permitir acceso libre desde el sidebar, puedes eliminar este efecto
+  // Si quieres proteger solo cuando se navega con estado, descomenta lo siguiente:
+  // useEffect(() => {
+  //   if (!location.state?.botId) {
+  //     navigate("/bots", { replace: true });
+  //   }
+  // }, [location, navigate]);
 
   useEffect(() => {
     if (user && user.id) {
@@ -64,7 +76,12 @@ function BotAdminDashboard() {
           loadIntegrationsForBots(res);
         })
         .catch((err) => {
-          console.error("❌ Error al traer bots:", err);
+          // Solo loguear, no mostrar alert si no hay bots
+          if (err?.response?.data?.message?.includes("No se encontraron bots")) {
+            console.info("No se encontraron bots para el usuario (OK si es primer bot)");
+          } else {
+            console.error("❌ Error al traer bots:", err);
+          }
         });
     }
   }, [user]);

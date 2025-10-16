@@ -133,6 +133,14 @@ export default function App() {
     document.body.setAttribute("dir", direction);
   }, [direction]);
 
+  // Rutas internas de bots que nunca deben aparecer en el sidebar
+  // Permitimos /bots/styles y /bots/integration en el sidebar, pero ocultamos solo las rutas con :id y pasos internos
+  const BOT_INTERNAL_ROUTES = [
+    "/bots/training/:id",
+    "/bots/captured-data/:id",
+    "/bots/style/:id"
+  ];
+
   // Generador de rutas con protección
   const getRoutes = (allRoutes) =>
     allRoutes.flatMap((route, index) => {
@@ -232,7 +240,12 @@ export default function App() {
                 <Sidenav
                   color={sidenavColor}
                   brand={brand}
-                  routes={routes}
+                  routes={routes.filter(
+                    r =>
+                      r.icon &&
+                      (!r.permission || (user && user.permissions && user.permissions.includes(r.permission))) &&
+                      !BOT_INTERNAL_ROUTES.includes(r.route)
+                  )}
                   onMouseEnter={handleOnMouseEnter}
                   onMouseLeave={handleOnMouseLeave}
                 />
@@ -259,7 +272,12 @@ export default function App() {
               color={sidenavColor}
               brand={brand}
               brandName="VOIA"
-              routes={routes.filter(r => r.icon && (!r.permission || (user && user.permissions && user.permissions.includes(r.permission))))}
+              routes={routes.filter(
+                r =>
+                  r.icon &&
+                  (!r.permission || (user && user.permissions && user.permissions.includes(r.permission))) &&
+                  !BOT_INTERNAL_ROUTES.includes(r.route)
+              )}
               onMouseEnter={handleOnMouseEnter}
               onMouseLeave={handleOnMouseLeave}
             />

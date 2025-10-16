@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   getCapturedFields,
   createCapturedField,
@@ -36,6 +36,15 @@ function DefineCapturedData() {
   const [editingField, setEditingField] = useState({ id: null, name: "" }); // 1. Estado para la edición
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Protección: solo acceso por flujo guiado
+  useEffect(() => {
+    // Si no hay contexto válido (ejemplo: location.state.botId), redirige
+    if (!location.state?.botId) {
+      navigate("/bots", { replace: true });
+    }
+  }, [location, navigate]);
 
   const handleContinue = () => {
     navigate(`/bots/style/${id}`);

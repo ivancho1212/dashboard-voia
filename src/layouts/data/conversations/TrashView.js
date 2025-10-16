@@ -26,7 +26,7 @@ function TrashView({ conversations = [], onEmptyTrash, userId }) {
       </Box>
       <List>
         {conversations.length === 0 ? (
-          <Typography color="text.secondary">No hay conversaciones en la papelera.</Typography>
+          <Typography color="text">No hay conversaciones en la papelera.</Typography>
         ) : (
           conversations.map((conv) => (
             <ListItem key={conv.id} divider>

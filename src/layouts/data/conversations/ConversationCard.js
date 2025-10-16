@@ -55,7 +55,7 @@ function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick 
         </Typography>
         <Typography
           variant="body2"
-          color="text.secondary"
+          color="text"
           noWrap
           title={lastMessage}
           sx={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis" }}
@@ -85,7 +85,7 @@ function ConversationCard({ userName, lastMessage, updatedAt, isActive, onClick 
         />
         <Typography
           variant="caption"
-          color="text.secondary"
+          color="text"
           noWrap
           sx={{ maxWidth: "100%", flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis" }}
         >

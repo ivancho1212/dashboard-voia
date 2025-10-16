@@ -287,7 +287,7 @@ const ProfessionalAvatarPicker = ({ onAvatarSelect, selectedAvatar }) => {
 
       {!professionalEmojis[selectedCategory]?.length && (
         <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text">
             No se encontraron avatares para esta categoría
           </Typography>
         </Box>

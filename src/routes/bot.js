@@ -2,6 +2,7 @@ import BotsList from "layouts/bot";
 import CapturedData from "layouts/bot/captured-data";
 import BotTraining from "layouts/bot/training";
 import BotStyle from "layouts/bot/style";
+import BotStylesDashboard from "layouts/bot/styles";
 import BotIntegration from "layouts/bot/integration";
 import BotPreview from "layouts/bot/preview";
 import BotUsageLogs from "layouts/bot/usage-logs";
@@ -54,11 +55,17 @@ const botRoutes = [
   {
     type: "collapse",
     name: "Estilos",
+    key: "bot-styles-dashboard",
+    route: "/bots/styles",
+    icon: <FaPalette size={14} />,
+    component: BotStylesDashboard,
+    noCollapse: true,
+  },
+  // Ruta directa para ver/editar estilo de un bot específico (no en sidebar)
+  {
     key: "bot-style",
     route: "/bots/style/:id",
-    icon: <FaPalette size={14} />,
-    component: BotStyle, // ✅ corregido
-    noCollapse: true,
+    component: BotStyle,
   },
   {
     type: "collapse",
