@@ -1,3 +1,8 @@
+import axios from "axios";
+
+const BASE_URL = "http://localhost:5006/api";
+const API_URL = `${BASE_URL}/UploadedDocuments`;
+
 // Obtener documentos por botId
 export const getUploadedDocumentsByBot = async (botId) => {
   const token = localStorage.getItem("token");
@@ -6,15 +11,11 @@ export const getUploadedDocumentsByBot = async (botId) => {
   });
   return response.data;
 };
-import axios from "axios";
-
-const BASE_URL = "http://localhost:5006/api";
-const API_URL = `${BASE_URL}/UploadedDocuments`;
 
 // 🔼 Subir archivo
-
 // file: File/Blob, botId: int, botTemplateId: int, userId: int, templateTrainingSessionId: int|null
-export const uploadFile = async (file, botId, botTemplateId, userId, templateTrainingSessionId = null) => {
+// onUploadProgress: optional callback function(progressEvent)
+export const uploadFile = async (file, botId, botTemplateId, userId, templateTrainingSessionId = null, onUploadProgress = undefined) => {
   const formData = new FormData();
   formData.append("File", file);
   formData.append("BotId", botId);
@@ -23,6 +24,8 @@ export const uploadFile = async (file, botId, botTemplateId, userId, templateTra
   if (templateTrainingSessionId !== null && templateTrainingSessionId !== undefined) {
     formData.append("TemplateTrainingSessionId", templateTrainingSessionId);
   }
+
+  const token = localStorage.getItem("token");
 
   console.log('Enviando archivo con datos:', {
     fileName: file.name,
@@ -33,9 +36,13 @@ export const uploadFile = async (file, botId, botTemplateId, userId, templateTra
   });
 
   try {
-    const response = await axios.post(API_URL, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const config = {
+      headers: { "Content-Type": "multipart/form-data", Authorization: `Bearer ${token}` },
+    };
+    if (onUploadProgress && typeof onUploadProgress === 'function') {
+      config.onUploadProgress = onUploadProgress;
+    }
+    const response = await axios.post(API_URL, formData, config);
     return response.data;
   } catch (error) {
     if (error.response && error.response.status === 409) {
@@ -57,6 +64,9 @@ export const getUploadedDocumentsByTemplate = async (templateId) => {
 
 // 🗑️ Eliminar archivo por ID
 export const deleteUploadedDocument = async (id) => {
-  const response = await axios.delete(`${API_URL}/${id}`);
+  const token = localStorage.getItem("token");
+  const response = await axios.delete(`${API_URL}/${id}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
   return response.data;
 };

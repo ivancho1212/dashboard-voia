@@ -7,16 +7,9 @@ import PropTypes from "prop-types";
 // Custom styles for SoftAvatar
 import SoftAvatarRoot from "components/SoftAvatar/SoftAvatarRoot";
 
-const SoftAvatar = forwardRef(({ bgColor, size, shadow, ...rest }, ref) => (
+const SoftAvatar = forwardRef(({ bgColor = "transparent", size = "md", shadow = "none", ...rest }, ref) => (
   <SoftAvatarRoot ref={ref} ownerState={{ shadow, bgColor, size }} {...rest} />
 ));
-
-// Setting default values for the props of SoftAvatar
-SoftAvatar.defaultProps = {
-  bgColor: "transparent",
-  size: "md",
-  shadow: "none",
-};
 
 // Typechecking props for the SoftAvatar
 SoftAvatar.propTypes = {

@@ -19,7 +19,25 @@ function isEmoji(str) {
 }
 
 function WidgetFrame() {
-  // Debug hooks (deben estar dentro del componente)
+  // Debug hooks will be declared after state hooks to avoid TDZ
+  if (!window.widgetFrameRenderCount) window.widgetFrameRenderCount = 0;
+  window.widgetFrameRenderCount++;
+  console.log(`[RENDER] WidgetFrame renderizado #${window.widgetFrameRenderCount} en`, new Date().toISOString());
+  const searchParams = new URLSearchParams(window.location.search);
+  const botId = parseInt(searchParams.get("bot"), 10);
+  let tokenParam = searchParams.get("token");
+  const userId = parseInt(searchParams.get("user"), 10) || null; // Para widgets, userId puede ser null
+
+  // HOOKS SIEMPRE AL INICIO
+  const [styleConfig, setStyleConfig] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [realToken, setRealToken] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(false); // Desactivar auto-refresh por defecto
+  // Estado de visibilidad del chat
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Debug hooks (deben estar dentro del componente y después de las declaraciones de estado)
   React.useEffect(() => {
     console.log('[DEBUG WidgetFrame] Cambio en styleConfig:', styleConfig);
   }, [styleConfig]);
@@ -38,22 +56,6 @@ function WidgetFrame() {
   React.useEffect(() => {
     console.log('[DEBUG WidgetFrame] Cambio en autoRefresh:', autoRefresh);
   }, [autoRefresh]);
-  if (!window.widgetFrameRenderCount) window.widgetFrameRenderCount = 0;
-  window.widgetFrameRenderCount++;
-  console.log(`[RENDER] WidgetFrame renderizado #${window.widgetFrameRenderCount} en`, new Date().toISOString());
-  const searchParams = new URLSearchParams(window.location.search);
-  const botId = parseInt(searchParams.get("bot"), 10);
-  const tokenParam = searchParams.get("token");
-  const userId = parseInt(searchParams.get("user"), 10) || null; // Para widgets, userId puede ser null
-
-  // HOOKS SIEMPRE AL INICIO
-  const [styleConfig, setStyleConfig] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [realToken, setRealToken] = useState(null);
-  const [autoRefresh, setAutoRefresh] = useState(false); // Desactivar auto-refresh por defecto
-  // Estado de visibilidad del chat
-  const [isOpen, setIsOpen] = useState(false);
 
   // useMemo para estilos, antes de cualquier return
   const styleToPass = useMemo(() => {
@@ -111,10 +113,20 @@ function WidgetFrame() {
     try {
       console.log("🔧 WidgetFrame - Cargando configuración del bot...", { 
         botId, 
-        tokenParam: tokenParam?.substring(0, 20) + '...' 
+        tokenParam: tokenParam ? (String(tokenParam).substring(0, 20) + '...') : null
       });
       
+      // Fallback: try to find a token in localStorage (e.g., when embedding from dashboard)
       let finalToken = tokenParam;
+      if ((!finalToken || finalToken === 'undefined') && typeof window !== 'undefined') {
+        const stored = localStorage.getItem('widgetToken') || localStorage.getItem('jwt') || localStorage.getItem('token');
+        if (stored && stored !== 'undefined') {
+          finalToken = stored;
+          console.log('🔁 Usando token desde localStorage como fallback.');
+          // Set early so child can consume it when mounting
+          setRealToken(stored);
+        }
+      }
       
       // Si el token es "auto", generar un JWT real
       if (tokenParam === "auto") {
@@ -131,12 +143,53 @@ function WidgetFrame() {
       
       let botConfig = null;
       
-      // Intentar obtener configuración
+      // Intentar obtener configuración vía endpoint widget-settings (si se pasó token)
       try {
         botConfig = await getBotDataWithToken(botId, finalToken);
         console.log("✅ Configuración obtenida:", botConfig);
       } catch (configError) {
-        console.warn("⚠️ Error obteniendo configuración:", configError);
+        console.warn("⚠️ Error obteniendo configuración vía widget-settings (se intentó con token):", configError?.response?.status || configError.message || configError);
+        // Si el token dio 401, limpiarlo para no reutilizarlo
+        const status = configError?.response?.status;
+        if (status === 401 && finalToken) {
+          try {
+            // Limpiar token guardado para evitar negociaciones con token inválido
+            if (localStorage.getItem('widgetToken') === finalToken) localStorage.removeItem('widgetToken');
+            if (localStorage.getItem('jwt') === finalToken) localStorage.removeItem('jwt');
+            if (localStorage.getItem('token') === finalToken) localStorage.removeItem('token');
+          } catch (e) {
+            // ignore
+          }
+        }
+
+        // Intentar cargar configuración directamente desde widgetAuthService cuando no hay token válido
+        try {
+          const fallback = await widgetAuthService.getWidgetSettings(botId, finalToken);
+          console.log("ℹ️ Configuración obtenida vía widgetAuthService fallback:", fallback);
+          botConfig = fallback?.settings || fallback;
+
+          // Si el fallback devolvió un token válido, úsalo
+          if (fallback && fallback.isValid && fallback.token) {
+            setRealToken(fallback.token);
+            finalToken = fallback.token;
+            try { localStorage.setItem('widgetToken', fallback.token); } catch(e) {}
+          } else {
+            // Si no se devolvió token, solicitar uno nuevo al endpoint de generación
+            try {
+              const generated = await widgetAuthService.getWidgetToken(botId);
+              if (generated) {
+                console.log("🔑 Token generado por fallback:", generated?.substring(0,20) + '...');
+                setRealToken(generated);
+                finalToken = generated;
+                try { localStorage.setItem('widgetToken', generated); } catch(e) {}
+              }
+            } catch (genErr) {
+              console.warn("⚠️ No se pudo generar token de widget tras fallback:", genErr);
+            }
+          }
+        } catch (err2) {
+          console.warn("⚠️ Error fallback widgetAuthService:", err2);
+        }
       }
       
       // Si aún no hay configuración, usar fallback
@@ -275,9 +328,9 @@ function WidgetFrame() {
 
   console.log('🔧 WidgetFrame Debug:', { 
     botId, 
-    tokenParam: tokenParam?.substring(0, 20) + '...', 
-    realToken: realToken?.substring(0, 20) + '...',
-    finalTokenToUse: (realToken || tokenParam)?.substring(0, 20) + '...',
+    tokenParam: tokenParam ? (String(tokenParam).substring(0, 20) + '...') : null, 
+    realToken: realToken ? (String(realToken).substring(0, 20) + '...') : null,
+    finalTokenToUse: (realToken || tokenParam) ? (String(realToken || tokenParam).substring(0, 20) + '...') : null,
     userId, 
     loading, 
     error, 
@@ -385,7 +438,10 @@ function WidgetFrame() {
     styleToPass.title = styleConfig?.name || styleConfig?.settings?.styles?.name || "Asistente Virtual";
   }
 
-  return (
+    // Normalize token: prefer realToken (from generation/localStorage), but ensure we never pass 'undefined' string
+    const widgetTokenToPass = (realToken && String(realToken) !== 'undefined') ? realToken : (tokenParam && String(tokenParam) !== 'undefined' ? tokenParam : null);
+
+    return (
     <ChatWidget
       key={"main-widget"}
       botId={botId}
@@ -393,7 +449,7 @@ function WidgetFrame() {
       style={styleToPass}
       isDemo={false} // Siempre false para widgets - no usar modo demo
       isWidget={true}
-      widgetToken={realToken || tokenParam}
+      widgetToken={widgetTokenToPass}
       isOpen={isOpen}
       setIsOpen={setIsOpen}
     />

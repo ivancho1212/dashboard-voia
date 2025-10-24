@@ -1,4 +1,5 @@
 import { getTemplateTrainingSessionsByTemplate } from "../../../services/templateTrainingSessionsService.js";
+import { getBotTemplateById } from "services/botTemplateService";
 import TextsSection from "./components/TextsSection";
 import UrlsSection from "./components/UrlsSection";
 import FilesSection from "./components/FilesSection";
@@ -46,7 +47,7 @@ import {
   createBotCustomPrompt,
   deleteBotCustomPrompt
 } from "services/botCustomPromptsService";
-import { getTrainingTextsByTemplate, getTrainingTextsByBot, createTrainingCustomText } from "services/trainingCustomTextsService";
+import { getTrainingTextsByTemplate, getTrainingTextsByBot, createTrainingCustomText, deleteTrainingText } from "services/trainingCustomTextsService";
 
 
 function BotTraining() {
@@ -92,36 +93,158 @@ function BotTraining() {
   const [bot, setBot] = useState(null);
   const [style, setStyle] = useState(null);
 
+  // Si venimos de la lista de plantillas (navigate con location.state.template), usarla
+  useEffect(() => {
+    if (location.state && location.state.template) {
+      setTemplate(location.state.template);
+    }
+  }, [location.state, botParamId, editMode]);
+
   // --- FUNCIONES DE VALIDACIÓN ---
   // --- CREAR BOT ---
   const handleCreateBot = async () => {
+    // Implementación limpia y balanceada
+    setCreatingBot(true);
     try {
-      setCreatingBot(true);
-      // Construir el payload para crear el bot
+      // Validar plantilla
+      const botTemplateId = template?.id || bot?.botTemplateId;
+      if (!botTemplateId) {
+        Swal.fire({ icon: 'error', title: 'Falta plantilla', text: 'No se ha seleccionado una plantilla válida para crear el bot.' });
+        return;
+      }
+
+      // Generar o reutilizar apiKey (requerido por CreateBotDto)
+      const apiKeyToUse = (bot && bot.apiKey) || `apikey-${Math.random().toString(36).slice(2,10)}`;
+
       const botData = {
         name: botName,
         description: botDescription,
+        apiKey: apiKeyToUse,
+        isActive: true,
+        botTemplateId,
         iaProviderName,
         aiModelConfigName,
-        // Puedes agregar más campos según el DTO requerido
       };
+
       const createdBot = await createBot(botData);
+      // Guardar estado básico del bot creado
       setCreatedBotId(createdBot.id);
-      Swal.fire({
-        icon: 'success',
-        title: 'Bot creado',
-        text: 'El bot ha sido creado correctamente.'
-      });
-      setCreatingBot(false);
-      // Opcional: Navegar o refrescar
+      setBot(createdBot);
+
+      // Persistir URLs pendientes que se agregaron localmente durante la creación
+      try {
+        if (urls && urls.length > 0) {
+          const pendingUrls = urls.filter(u => !(u && typeof u === 'object' && u.id));
+          for (const u of pendingUrls) {
+            try {
+              const payload = {
+                botId: createdBot.id,
+                botTemplateId: template?.id || createdBot.botTemplateId,
+                templateTrainingSessionId: null,
+                userId: userId,
+                url: typeof u === 'string' ? u : (u.url || '')
+              };
+              const resp = await createTrainingUrl(payload);
+              // replace placeholder in state with returned object when possible
+              setUrls(prev => prev.map(item => (item === u ? resp : item)));
+            } catch (err) {
+              console.warn('No se pudo persistir URL pendiente', u, err);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error al procesar URLs pendientes tras crear bot', err);
+      }
+
+      // Persistir textos pendientes que se agregaron localmente durante la creación
+      try {
+        if (texts && texts.length > 0) {
+          const pendingTexts = texts.filter(t => !(t && typeof t === 'object' && t.id));
+          for (const t of pendingTexts) {
+            try {
+              const payload = {
+                botId: createdBot.id,
+                botTemplateId: template?.id || createdBot.botTemplateId,
+                templateTrainingSessionId: null,
+                userId: userId,
+                content: typeof t === 'string' ? t : (t.content || '')
+              };
+              const resp = await createTrainingCustomText(payload);
+              setTexts(prev => prev.map(item => (item === t ? resp : item)));
+            } catch (err) {
+              console.warn('No se pudo persistir texto pendiente', t, err);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error al procesar textos pendientes tras crear bot', err);
+      }
+      // Persistir interacciones pendientes (aquellas sin id numérico)
+      if (interactions && interactions.length > 0) {
+        const pending = interactions.filter(i => !(i.id && Number.isInteger(i.id)));
+        for (let i = 0; i < pending.length; i += 2) {
+          const userPrompt = pending[i];
+          const assistantPrompt = pending[i + 1];
+          if (!userPrompt) continue;
+          try {
+            // Crear user prompt
+            const payloadUser = {
+              botId: createdBot.id,
+              role: 'user',
+              content: userPrompt.content,
+              botTemplateId: template?.id || null,
+              templateTrainingSessionId: bot?.templateTrainingSessionId || null,
+            };
+            const respUser = await createBotCustomPrompt(payloadUser);
+
+            // Crear assistant prompt si existe
+            let respAssistant = null;
+            if (assistantPrompt) {
+              const payloadAssistant = {
+                botId: createdBot.id,
+                role: 'assistant',
+                content: assistantPrompt.content,
+                botTemplateId: template?.id || null,
+                templateTrainingSessionId: bot?.templateTrainingSessionId || null,
+              };
+              respAssistant = await createBotCustomPrompt(payloadAssistant);
+            }
+
+            // Reemplazar placeholders en el estado de interacciones
+            setInteractions((prev) => prev.map((p) => {
+              if (p === userPrompt && respUser) return { id: respUser.id, role: respUser.role?.toLowerCase?.() || 'user', content: respUser.content };
+              if (p === assistantPrompt && respAssistant) return { id: respAssistant.id, role: respAssistant.role?.toLowerCase?.() || 'assistant', content: respAssistant.content };
+              return p;
+            }));
+          } catch (innerErr) {
+            console.error('Error persisting one pair of pending interactions', innerErr);
+            // No abortar todo el proceso por un fallo en una interacción; continuar con las siguientes
+          }
+        }
+      }
+
+      Swal.fire({ icon: 'success', title: 'Bot creado', text: 'El bot ha sido creado correctamente.' });
+      // Opcional: navegar o refrescar
       // navigate(`/bots/captured-data/${createdBot.id}`, { state: { botId: createdBot.id } });
     } catch (error) {
+      // Manejo de errores: 401 -> sugerir login; 400 -> mostrar detalles de validación
+      if (error && error.status === 401) {
+        Swal.fire({ icon: 'error', title: 'No autorizado', text: 'Tu sesión ha expirado o no tienes permisos. Por favor, inicia sesión nuevamente.' });
+      } else if (error && error.status === 400 && error.details) {
+        let message = error.details.title || 'Error de validación';
+        if (error.details.errors) {
+          const errs = [];
+          for (const k of Object.keys(error.details.errors)) {
+            errs.push(`${k}: ${error.details.errors[k].join(', ')}`);
+          }
+          message += '\n' + errs.join('\n');
+        }
+        Swal.fire({ icon: 'error', title: 'Error al crear (validación)', text: message });
+      } else {
+        Swal.fire({ icon: 'error', title: 'Error al crear', text: error?.message || 'No se pudo crear el bot.' });
+      }
+    } finally {
       setCreatingBot(false);
-      Swal.fire({
-        icon: 'error',
-        title: 'Error al crear',
-        text: error?.message || 'No se pudo crear el bot.'
-      });
     }
   };
 
@@ -134,8 +257,11 @@ function BotTraining() {
       const botData = {
         name: botName,
         description: botDescription,
-        iaProviderName,
-        aiModelConfigName,
+        // UpdateBotDto en el servidor exige ApiKey y Name (required). Usar el apiKey existente del bot.
+        apiKey: bot?.apiKey || "",
+        // Enviar estado y styleId si están disponibles
+        isActive: typeof bot?.isActive !== 'undefined' ? bot.isActive : true,
+        styleId: typeof bot?.styleId !== 'undefined' ? bot.styleId : null,
         // Puedes agregar más campos según el DTO requerido
       };
       await updateBotReady(botParamId, botData);
@@ -158,9 +284,111 @@ function BotTraining() {
 
   // --- HANDLERS ---
   const handleFileChange = (e) => {
-  const selectedFiles = Array.from(e.target.files);
-  const newFiles = selectedFiles.filter((file) => validateFile(file, ALLOWED_FILE_TYPES, MAX_FILE_SIZE, setFileErrors));
-  setFiles((prev) => [...prev, ...newFiles]);
+  const selectedFiles = Array.from(e.target.files || []);
+  const validFiles = selectedFiles.filter((file) => validateFile(file, ALLOWED_FILE_TYPES, MAX_FILE_SIZE, setFileErrors));
+
+  // Si no hay bot o usuario, solo agregar al estado (se subirá después al crear el bot)
+  if (!createdBotId && !editMode) {
+    setFiles((prev) => [...prev, ...validFiles]);
+    return;
+  }
+
+  // Subir archivos en paralelo con progreso
+    const uploadPromises = validFiles.map((file) => new Promise(async (resolve) => {
+    try {
+      let validSessionId = null;
+      if (bot?.templateTrainingSessionId && Number.isInteger(bot?.templateTrainingSessionId)) {
+        const sessions = await getTemplateTrainingSessionsByTemplate(template?.id || bot?.botTemplateId);
+        if (sessions.some(s => s.id === bot.templateTrainingSessionId)) {
+          validSessionId = bot.templateTrainingSessionId;
+        }
+      }
+
+      // Añadir un placeholder con progress 0 para que aparezca en la UI
+      const placeholder = { name: file.name, fileObject: file, uploadProgress: 0 };
+      setFiles((prev) => [...prev, placeholder]);
+
+      const onUploadProgress = (ev) => {
+        const percent = Math.round((ev.loaded * 100) / ev.total);
+        setFiles((prev) => prev.map((f) => (f === placeholder ? { ...f, uploadProgress: percent } : f)));
+      };
+
+      const resp = await uploadFile(file, createdBotId || botParamId, template?.id || bot?.botTemplateId, userId, validSessionId, onUploadProgress);
+
+      if (resp && resp.id) {
+        // reemplazar placeholder por la respuesta real
+        setFiles((prev) => prev.map((f) => (f === placeholder ? resp : f)));
+        try {
+          const bid = Number(createdBotId || botParamId);
+          localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+          window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+        } catch (e) { /* ignore */ }
+      } else if (resp && resp.duplicate) {
+        // key by filename so UI can match
+        setFileErrors((prev) => {
+          const m = new Map(prev);
+          m.set(file.name, resp.message || 'Archivo duplicado');
+          return m;
+        });
+        setFiles((prev) => prev.filter((f) => f !== placeholder));
+      } else {
+        setFiles((prev) => prev.map((f) => (f === placeholder ? { ...f, uploadProgress: 100 } : f)));
+      }
+      resolve(resp);
+      } catch (err) {
+      console.error('Error subiendo archivo', file.name, err);
+      // Key errors by filename so they map to displayed items
+      setFileErrors((prev) => {
+        const m = new Map(prev);
+        m.set(file.name, err?.response?.data?.message || err.message || 'Error al subir');
+        return m;
+      });
+      Swal.fire({ icon: 'error', title: 'Error al subir archivo', text: `No se pudo subir ${file.name}: ${err?.response?.data?.message || err.message || ''}` });
+      // eliminar placeholder (identificado por fileObject)
+      setFiles((prev) => prev.filter((f) => !(f.fileObject && f.fileObject === file)));
+      resolve({ error: true });
+    }
+  }));
+
+  // Esperar todos (no es necesario usar resultados aquí)
+  Promise.all(uploadPromises).then(() => {
+    console.log('Todos los uploads finalizados');
+  });
+  };
+
+  // Reintentar un archivo que falló por error transitorio
+  const handleRetryFile = async (fileEntry) => {
+    if (!fileEntry || !fileEntry.fileObject) return;
+    const file = fileEntry.fileObject;
+    try {
+      // reset state for this placeholder
+      setFiles((prev) => prev.map((f) => (f === fileEntry ? { ...f, uploadProgress: 0, error: undefined, canRetry: false } : f)));
+      const validSessionId = (bot?.templateTrainingSessionId && Number.isInteger(bot?.templateTrainingSessionId)) ? bot.templateTrainingSessionId : null;
+      const onUploadProgress = (ev) => {
+        const percent = Math.round((ev.loaded * 100) / ev.total);
+        setFiles((prev) => prev.map((f) => (f === fileEntry ? { ...f, uploadProgress: percent } : f)));
+      };
+      const resp = await uploadFile(file, createdBotId || botParamId, template?.id || bot?.botTemplateId, userId, validSessionId, onUploadProgress);
+      if (resp && resp.id) {
+        setFiles((prev) => prev.map((f) => (f === fileEntry ? resp : f)));
+        const newErrors = new Map(fileErrors);
+        newErrors.delete(file.name);
+        setFileErrors(newErrors);
+        try {
+          const bid = Number(createdBotId || botParamId);
+          localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+          window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+        } catch (e) { /* ignore */ }
+      } else {
+        setFiles((prev) => prev.map((f) => (f === fileEntry ? { ...f, uploadProgress: 100 } : f)));
+      }
+    } catch (err) {
+      console.error('Retry failed', err);
+      const message = err?.response?.data?.message || err.message || 'Error al reintentar';
+      setFiles((prev) => prev.map((f) => (f === fileEntry ? { ...f, error: message, canRetry: true } : f)));
+      setFileErrors((prev) => new Map(prev).set(file.name, message));
+      Swal.fire({ icon: 'error', title: 'Error al reintentar', text: message });
+    }
   };
 
 
@@ -178,6 +406,14 @@ function BotTraining() {
         return;
       }
       try {
+        // Si estamos en modo creación y no hay createdBotId, solo agregar al estado local y postergar la persistencia
+        if (!createdBotId && !editMode) {
+          setUrls(prev => [...prev, currentUrl]);
+          Swal.fire({ icon: 'success', title: 'URL añadida (pendiente)', text: 'La URL se guardó localmente y se persistirá cuando se cree el bot.' });
+          setCurrentUrl("");
+          return;
+        }
+
         let validSessionId = null;
         if (bot?.templateTrainingSessionId && Number.isInteger(bot?.templateTrainingSessionId)) {
           // Validar que la sesión pertenezca a la plantilla
@@ -186,18 +422,25 @@ function BotTraining() {
             validSessionId = bot.templateTrainingSessionId;
           }
         }
+        const botIdToUse = Number(createdBotId || bot?.id || botParamId);
+        const botTemplateIdToUse = Number(template?.id || bot?.botTemplateId);
         const payload = {
-          botId: botParamId,
-          botTemplateId: template?.id || bot?.botTemplateId,
+          botId: botIdToUse,
+          botTemplateId: botTemplateIdToUse,
           templateTrainingSessionId: validSessionId,
-          userId: userId,
+          userId: Number(userId),
           url: currentUrl
         };
         console.log('DEBUG payload URL:', payload);
-        await createTrainingUrl(payload);
-        setUrls((prev) => [...prev, { url: currentUrl }]);
+  const urlResp = await createTrainingUrl(payload);
+  setUrls((prev) => [...prev, urlResp || { url: currentUrl }]);
         Swal.fire({ icon: 'success', title: 'URL añadida', text: 'La URL se guardó correctamente.' });
         setCurrentUrl("");
+        try {
+          const bid = Number(payload.botId);
+          localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+          window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+        } catch (e) { /* ignore */ }
       } catch (error) {
         Swal.fire({ icon: 'error', title: 'Error al guardar URL', text: error?.response?.data?.message || error?.message || 'No se pudo guardar la URL.' });
       }
@@ -217,6 +460,14 @@ function BotTraining() {
         return;
       }
       try {
+        // Si estamos creando el bot y aún no existe, guardar localmente y persistir después
+        if (!createdBotId && !editMode) {
+          setTexts(prev => [...prev, currentText]);
+          Swal.fire({ icon: 'success', title: 'Texto añadido (pendiente)', text: 'El texto se guardó localmente y se persistirá cuando se cree el bot.' });
+          setCurrentText("");
+          return;
+        }
+
         let validSessionId = null;
         if (bot?.templateTrainingSessionId && Number.isInteger(bot?.templateTrainingSessionId)) {
           const sessions = await getTemplateTrainingSessionsByTemplate(template?.id || bot?.botTemplateId);
@@ -224,57 +475,190 @@ function BotTraining() {
             validSessionId = bot.templateTrainingSessionId;
           }
         }
+        const botIdToUse = Number(createdBotId || bot?.id || botParamId);
+        const botTemplateIdToUse = Number(template?.id || bot?.botTemplateId);
         const payload = {
-          botId: botParamId,
-          botTemplateId: template?.id || bot?.botTemplateId,
+          botId: botIdToUse,
+          botTemplateId: botTemplateIdToUse,
           templateTrainingSessionId: validSessionId,
-          userId: userId,
+          userId: Number(userId),
           content: currentText
         };
         console.log('DEBUG payload TEXT:', payload);
-        await createTrainingCustomText(payload);
-        setTexts((prev) => [...prev, { content: currentText }]);
-        Swal.fire({ icon: 'success', title: 'Texto añadido', text: 'El texto se guardó correctamente.' });
-        setCurrentText("");
+        const resp = await createTrainingCustomText(payload);
+        // createTrainingCustomText may return a duplicate object or the created resource with id
+        if (resp && resp.duplicate) {
+          Swal.fire({ icon: 'warning', title: 'Texto duplicado', text: resp.message || 'El texto ya existe.' });
+        } else if (resp) {
+          const toPush = typeof resp === 'object' && (resp.id || resp.content) ? resp : { content: currentText };
+          setTexts((prev) => [...prev, toPush]);
+          Swal.fire({ icon: 'success', title: 'Texto añadido', text: 'El texto se guardó correctamente.' });
+          setCurrentText("");
+        } else {
+          setTexts((prev) => [...prev, { content: currentText }]);
+          Swal.fire({ icon: 'success', title: 'Texto añadido', text: 'El texto se guardó correctamente (sin id retornado).' });
+          setCurrentText("");
+        }
+        // notify that training/data may have updated
+        try {
+          const bid = Number(payload.botId);
+          localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+          window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+        } catch (e) { /* ignore */ }
       } catch (error) {
         Swal.fire({ icon: 'error', title: 'Error al guardar texto', text: error?.response?.data?.message || error?.message || 'No se pudo guardar el texto.' });
       }
     }
   }
 
-  const handleAddInteraction = () => {
+  const handleAddInteraction = async () => {
     if (!question.trim() || !answer.trim()) {
       Swal.fire("Campos incompletos", "La pregunta y la respuesta no pueden estar vacías.", "warning");
       return;
     }
-    const newInteractions = [
-      { id: `user-${Date.now()}`, role: "user", content: question },
-      { id: `assistant-${Date.now()}`, role: "assistant", content: answer },
-    ];
-    setInteractions((prev) => [...prev, ...newInteractions]);
-    setQuestion("");
-    setAnswer("");
+    setIsAddingInteraction(true);
+    try {
+      // If bot exists on server (edit mode or already created), persist prompts
+      const botIdToUse = createdBotId || botParamId;
+      let validSessionId = null;
+      if (bot?.templateTrainingSessionId && Number.isInteger(bot?.templateTrainingSessionId)) {
+        const sessions = await getTemplateTrainingSessionsByTemplate(template?.id || bot?.botTemplateId);
+        if (sessions.some(s => s.id === bot.templateTrainingSessionId)) {
+          validSessionId = bot.templateTrainingSessionId;
+        }
+      }
+
+      if (botIdToUse) {
+        // Create user prompt on server
+        const payloadUser = {
+          botId: botIdToUse,
+          role: 'user',
+          content: question,
+          botTemplateId: template?.id || bot?.botTemplateId,
+          templateTrainingSessionId: validSessionId,
+        };
+        const respUser = await createBotCustomPrompt(payloadUser);
+
+        // Create assistant prompt on server
+        const payloadAssistant = {
+          botId: botIdToUse,
+          role: 'assistant',
+          content: answer,
+          botTemplateId: template?.id || bot?.botTemplateId,
+          templateTrainingSessionId: validSessionId,
+        };
+        const respAssistant = await createBotCustomPrompt(payloadAssistant);
+
+        // Append created prompts to state (use server response when available)
+        setInteractions((prev) => [
+          ...prev,
+          { id: respUser?.id || null, role: respUser?.role?.toLowerCase?.() || 'user', content: respUser?.content || question },
+          { id: respAssistant?.id || null, role: respAssistant?.role?.toLowerCase?.() || 'assistant', content: respAssistant?.content || answer },
+        ]);
+      } else {
+        // No bot yet: keep local placeholders; they will be persisted after bot creation
+        setInteractions((prev) => [
+          ...prev,
+          { id: null, role: 'user', content: question },
+          { id: null, role: 'assistant', content: answer },
+        ]);
+      }
+
+      setQuestion('');
+      setAnswer('');
+      Swal.fire({ icon: 'success', title: 'Interacción añadida', text: 'La interacción fue añadida.' });
+    } catch (err) {
+      console.error('Error guardando interacción', err);
+      Swal.fire({ icon: 'error', title: 'Error al guardar interacción', text: err?.response?.data?.message || err.message || 'No se pudo guardar la interacción.' });
+    } finally {
+      setIsAddingInteraction(false);
+    }
   };
 
   const handleDeleteInteraction = (index) => {
-    const userPrompt = interactions[index];
-    const assistantPrompt = interactions[index + 1];
-    setInteractions((prev) => prev.filter((p) => p.id !== userPrompt.id && p.id !== assistantPrompt.id));
+    (async () => {
+      try {
+        const userPrompt = interactions[index];
+        const assistantPrompt = interactions[index + 1];
+        // If persisted prompts have numeric ids, delete them on backend
+        if (userPrompt && userPrompt.id && Number.isInteger(userPrompt.id)) {
+          await deleteBotCustomPrompt(userPrompt.id);
+        }
+        if (assistantPrompt && assistantPrompt.id && Number.isInteger(assistantPrompt.id)) {
+          await deleteBotCustomPrompt(assistantPrompt.id);
+        }
+        setInteractions((prev) => prev.filter((p, i) => i !== index && i !== index + 1));
+      } catch (err) {
+        console.error('Error eliminando interacción', err);
+        Swal.fire({ icon: 'error', title: 'Error al eliminar interacción', text: err?.response?.data?.message || err.message || 'No se pudo eliminar la interacción.' });
+      }
+    })();
   };
 
   const handleDeleteFile = (fileToDelete) => {
-    setFiles((prev) => prev.filter((file) => file !== fileToDelete));
-    const newErrors = new Map(fileErrors);
-    newErrors.delete(fileToDelete);
-    setFileErrors(newErrors);
+    (async () => {
+      try {
+        // Si el archivo tiene id, eliminar en backend
+        if (fileToDelete && fileToDelete.id) {
+          await deleteUploadedDocument(fileToDelete.id);
+        }
+        setFiles((prev) => prev.filter((file) => file !== fileToDelete));
+        const newErrors = new Map(fileErrors);
+        newErrors.delete(fileToDelete);
+        setFileErrors(newErrors);
+      } catch (err) {
+        console.error('Error eliminando archivo', err);
+        Swal.fire({ icon: 'error', title: 'Error al eliminar', text: err?.response?.data?.message || err.message || 'No se pudo eliminar el archivo.' });
+      }
+    })();
   };
 
   const handleDeleteUrl = (urlToDelete) => {
-    setUrls((prev) => prev.filter((url) => url !== urlToDelete));
+    (async () => {
+      try {
+        // urlToDelete puede ser string (url) o un objeto { id, url }
+        const id = urlToDelete && typeof urlToDelete === 'object' ? urlToDelete.id : null;
+        if (id) {
+          await deleteTrainingUrl(id);
+        } else if (typeof urlToDelete === 'string') {
+          // No tenemos id: intentar buscar en la lista actual si el item tiene id
+          const found = urls.find(u => (typeof u === 'object' ? u.url === urlToDelete : u === urlToDelete));
+          if (found && typeof found === 'object' && found.id) {
+            await deleteTrainingUrl(found.id);
+          } else {
+            // No hay id en el backend: simplemente eliminar localmente
+            console.warn('Eliminar URL localmente (no se encontró id en backend)');
+          }
+        }
+        setUrls((prev) => prev.filter((u) => (typeof u === 'object' ? u.id !== id && u.url !== urlToDelete : u !== urlToDelete)));
+      } catch (err) {
+        console.error('Error eliminando URL', err);
+        Swal.fire({ icon: 'error', title: 'Error al eliminar URL', text: err?.response?.data?.message || err.message || 'No se pudo eliminar la URL.' });
+      }
+    })();
   };
 
   const handleDeleteText = (textToDelete) => {
-    setTexts((prev) => prev.filter((text) => text !== textToDelete));
+    (async () => {
+      try {
+        // textToDelete puede ser string o objeto { id, content }
+        const id = textToDelete && typeof textToDelete === 'object' ? textToDelete.id : null;
+        if (id) {
+          await deleteTrainingText(id);
+        } else if (typeof textToDelete === 'string') {
+          const found = texts.find(t => (typeof t === 'object' ? t.content === textToDelete : t === textToDelete));
+          if (found && typeof found === 'object' && found.id) {
+            await deleteTrainingText(found.id);
+          } else {
+            console.warn('Eliminar texto localmente (no se encontró id en backend)');
+          }
+        }
+        setTexts((prev) => prev.filter((t) => (typeof t === 'object' ? t.id !== id && t.content !== textToDelete : t !== textToDelete)));
+      } catch (err) {
+        console.error('Error eliminando texto', err);
+        Swal.fire({ icon: 'error', title: 'Error al eliminar texto', text: err?.response?.data?.message || err.message || 'No se pudo eliminar el texto.' });
+      }
+    })();
   };
 
   const handleCancelEdit = () => navigate(-1);
@@ -350,17 +734,35 @@ function BotTraining() {
           }
         }
       } catch (err) {
-        console.error("Error cargando bot:", err);
-        // Si el error es 403, no cambiar a modo creación
-        if (err?.response?.status !== 403) {
+        // Handle not-found as creation flow: no bot to edit
+        if (err && err.status === 404) {
+          // silently switch to create mode
           setEditMode(false);
           setBot(null);
-        } else {
+          // If bot not found, the URL id may actually be a template id (creation flow).
+          // Try to load the template by that id so creation can proceed.
+          (async () => {
+            try {
+              const tpl = await getBotTemplateById(botParamId);
+              if (tpl) setTemplate(tpl);
+            } catch (errTpl) {
+              console.warn('No se pudo cargar la plantilla por id (fallback):', botParamId, errTpl);
+            }
+          })();
+          return;
+        }
+        console.error("Error cargando bot:", err);
+        // Si el error es 403, show permission alert and keep editMode false
+        if (err && err.status === 403) {
           Swal.fire({
             icon: 'error',
             title: 'Permiso denegado',
             text: 'No tienes permisos para ver este bot.'
           });
+        } else {
+          // Generic fallback: switch to creation to avoid blocking the page
+          setEditMode(false);
+          setBot(null);
         }
       }
     };
@@ -429,6 +831,7 @@ function BotTraining() {
               fileErrors={fileErrors}
               handleFileChange={handleFileChange}
               handleDeleteFile={handleDeleteFile}
+              handleRetryFile={handleRetryFile}
               ALLOWED_FILE_TYPES={ALLOWED_FILE_TYPES}
             />
 
@@ -452,15 +855,16 @@ function BotTraining() {
             />
 
             {/* Botón para pasar a la etapa de captación de datos */}
-            <SoftButton
-              variant="gradient"
-              color="info"
-              fullWidth
-              sx={{ mt: 3, fontWeight: 'bold' }}
-              onClick={() => navigate(`/bots/captured-data/${createdBotId || botParamId}`, { state: { botId: createdBotId || botParamId } })}
-            >
-              Continuar
-            </SoftButton>
+            <SoftBox display="flex" justifyContent="flex-end">
+              <SoftButton
+                variant="gradient"
+                color="info"
+                sx={{ mt: 3, fontWeight: 'bold', width: 260 }}
+                onClick={() => navigate(`/bots/captured-data/${createdBotId || botParamId}`, { state: { botId: createdBotId || botParamId } })}
+              >
+                Continuar
+              </SoftButton>
+            </SoftBox>
           </Card>
         )}
 

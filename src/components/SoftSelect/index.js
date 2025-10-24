@@ -2,7 +2,7 @@ import { forwardRef } from "react";
 import PropTypes from "prop-types";
 import SoftSelectRoot from "./SoftSelectRoot";
 
-const SoftSelect = forwardRef(({ color, variant, children, ...rest }, ref) => {
+const SoftSelect = forwardRef(({ color = "dark", variant = "outlined", children, ...rest }, ref) => {
   return (
     <SoftSelectRoot
       {...rest}
@@ -14,10 +14,7 @@ const SoftSelect = forwardRef(({ color, variant, children, ...rest }, ref) => {
   );
 });
 
-SoftSelect.defaultProps = {
-  color: "dark",
-  variant: "outlined",
-};
+// Note: defaults handled via parameter defaults above to avoid defaultProps on forwardRef
 
 SoftSelect.propTypes = {
   color: PropTypes.oneOf([

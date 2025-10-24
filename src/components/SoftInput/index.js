@@ -22,7 +22,7 @@ const SoftInput = forwardRef((props, ref) => {
     error = false,
     success = false,
     disabled = false,
-    helperText, // <--- Extract helperText here
+    helperText = "",
     ...rest
   } = props;
 
@@ -87,18 +87,8 @@ const SoftInput = forwardRef((props, ref) => {
 });
 
 
-// Setting default values for the props of SoftInput
-SoftInput.defaultProps = {
-  size: "medium",
-  icon: {
-    component: false,
-    direction: "none",
-  },
-  error: false,
-  success: false,
-  disabled: false,
-  helperText: "", // <--- Add default value for helperText
-};
+// Note: default props are handled via parameter defaults above to avoid using `defaultProps` on
+// function components wrapped with forwardRef (React is deprecating defaultProps on memo components).
 
 // Typechecking props for the SoftInput
 SoftInput.propTypes = {

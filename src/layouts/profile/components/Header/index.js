@@ -8,6 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import Card from "@mui/material/Card";
 import Grid from "@mui/material/Grid";
 import Icon from "@mui/material/Icon";
+import AddIcon from '@mui/icons-material/Add';
 import Tooltip from "@mui/material/Tooltip";
 import EditIcon from "@mui/icons-material/Edit";
 import CheckIcon from "@mui/icons-material/Check";
@@ -213,17 +214,20 @@ function Header({ user }) {
                 <IconButton
                   size="small"
                   onClick={handleAvatarClick}
+                  aria-label="Cambiar imagen"
                   sx={{
                     position: "absolute",
-                    bottom: 4,
-                    right: 4,
+                    bottom: 8,
+                    right: 8,
                     zIndex: 2,
-                    backgroundColor: "#17c1e8",
+                    backgroundColor: "#fff",
                     boxShadow: 2,
-                    "&:hover": { backgroundColor: "#f0f0f0" },
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    "&:hover": { backgroundColor: "#f5f5f5" },
+                    p: 0.6,
                   }}
                 >
-                  <Icon>add</Icon>
+                  <AddIcon sx={{ color: 'info.main', fontSize: 20 }} />
                 </IconButton>
               </Tooltip>
               <input

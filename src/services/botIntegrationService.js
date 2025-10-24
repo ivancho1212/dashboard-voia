@@ -6,6 +6,7 @@ export async function createBotIntegration(dto) {
   const token = localStorage.getItem("token");
   const response = await axios.put(`${API_URL}/upsert`, {
     botId: dto.botId,
+    framework: dto.framework,
     settings: {
       allowedDomain: dto.allowedDomain
     }
@@ -31,6 +32,21 @@ export async function getBotIntegrationByBotId(botId) {
     if (error.response?.status === 404) {
       return null;
     }
+    throw error;
+  }
+}
+
+export async function getBotsWithScript() {
+  try {
+    const token = localStorage.getItem("token");
+    const response = await axios.get(`${API_URL}/with-script`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching bots with script', error);
     throw error;
   }
 }

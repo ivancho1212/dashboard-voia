@@ -14,7 +14,7 @@ import SoftPaginationItemRoot from "components/SoftPagination/SoftPaginationItem
 const Context = createContext(null);
 
 const SoftPagination = forwardRef(
-  ({ item, variant, color, size, active, children, ...rest }, ref) => {
+  ({ item = false, variant = "gradient", color = "info", size = "medium", active = false, children, ...rest }, ref) => {
     const context = item ? useContext(Context) : null;
     const paginationSize = context ? context.size : null;
     const value = useMemo(() => ({ variant, color, size }), [variant, color, size]);
@@ -48,14 +48,7 @@ const SoftPagination = forwardRef(
   }
 );
 
-// Setting default values for the props of SoftPagination
-SoftPagination.defaultProps = {
-  item: false,
-  variant: "gradient",
-  color: "info",
-  size: "medium",
-  active: false,
-};
+// Default props are handled via the function parameter defaults above to avoid using defaultProps
 
 // Typechecking props for the SoftPagination
 SoftPagination.propTypes = {

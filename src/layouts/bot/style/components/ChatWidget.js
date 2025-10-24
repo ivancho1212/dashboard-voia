@@ -59,10 +59,11 @@ function ChatWidget({
   botId: propBotId,
   userId: propUserId,
   isDemo: initialDemo = false,
+  widgetToken: propWidgetToken = null,
 }) {
   const connectionRef = useRef(null);
   const botId = propBotId ?? 2;
-  const userId = propUserId ?? 2;
+  const userId = propUserId ?? null;
   const conversationIdRef = useRef(null);
 
   // Move isOpen to the top so it's available for all hooks
@@ -548,15 +549,63 @@ useEffect(() => {
       try {
         const convId = await createConversation(userId, botId);
         if (!convId) throw new Error("No se recibió conversationId");
-        
+
         conversationIdRef.current = convId;
         setConversationId(convId);
 
-        connection = createHubConnection(convId);
+        // Fetch conversation history so widget displays messages that arrived while closed
+        try {
+          const histRes = await fetch(`http://localhost:5006/api/conversations/history/${convId}`);
+          if (histRes.ok) {
+            const histJson = await histRes.json();
+            const history = histJson.history || [];
+
+            // Normalize and merge into state, avoiding duplicates by uniqueKey (id/tempId)
+            const normalized = history.map(h => normalizeMessage({
+              id: h.id,
+              from: h.fromRole === 'user' ? 'user' : (h.fromRole === 'admin' ? 'admin' : 'bot'),
+              text: h.text || h.fileName || '',
+              timestamp: h.timestamp,
+              status: 'sent'
+            }));
+
+            setMessages(prev => {
+              const map = new Map();
+              prev.forEach(m => map.set(m.uniqueKey, m));
+              normalized.forEach(m => map.set(m.uniqueKey, m));
+              return Array.from(map.values());
+            });
+          }
+        } catch (e) {
+          console.warn('No se pudo cargar el historial de conversación:', e);
+        }
+
+  connection = createHubConnection(convId, propWidgetToken || undefined);
         connectionRef.current = connection;
 
         // ✅ REGISTRO DE EVENTOS CORRECTO
         connection.on("ReceiveMessage", handleReceiveMessage);
+
+        // Handle ack that the message was queued (contains conversationId, messageId, tempId)
+        const handleMessageQueued = (payload) => {
+          try {
+            console.log("📬 MessageQueued recibido:", payload);
+            const { conversationId: cqId, messageId, tempId } = payload || {};
+            if (cqId !== conversationIdRef.current) return;
+
+            setMessages(prev => prev.map(m => {
+              if (m.tempId && tempId && m.tempId === tempId) {
+                // Update the temp message with the real id and mark as queued
+                return { ...m, id: messageId || m.id, status: 'queued' };
+              }
+              return m;
+            }));
+          } catch (e) {
+            console.error("Error manejando MessageQueued:", e);
+          }
+        };
+
+        connection.on("MessageQueued", handleMessageQueued);
 
         connection.on("ReceiveTyping", (convId, sender) => {
           if (convId === conversationIdRef.current) {
@@ -597,10 +646,11 @@ useEffect(() => {
 
     initConnection();
 
-    return () => {
+        return () => {
       console.log("🧹 Limpiando conexión SignalR.");
       if (connectionRef.current) {
         connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
+            connectionRef.current.off("MessageQueued", handleMessageQueued);
         // ✅ Limpiar listeners correctos
         connectionRef.current.off("ReceiveTyping");
         connectionRef.current.off("ReceiveStopTyping");
@@ -610,7 +660,7 @@ useEffect(() => {
     };
     // Se eliminan dependencias que causaban re-conexiones innecesarias.
     // La lógica de `handleReceiveMessage` ahora es más robusta con callbacks de estado.
-  }, [isOpen, isDemo, userId, botId]);
+  }, [isOpen, isDemo, userId, botId, propWidgetToken]);
 
 
   useEffect(() => {
@@ -1313,6 +1363,7 @@ ChatWidget.propTypes = {
   botId: PropTypes.number.isRequired,
   style: PropTypes.object,
   userId: PropTypes.number,
+  widgetToken: PropTypes.string,
   title: PropTypes.string,
   theme: PropTypes.oneOf(["light", "dark", "custom"]),
   primaryColor: PropTypes.string,

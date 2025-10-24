@@ -24,8 +24,9 @@ import Avatar from '@mui/material/Avatar';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import CheckIcon from '@mui/icons-material/Check';
-import { deleteBot } from "services/botService";
+import { deleteBot, getBotPhases as fetchBotPhases } from "services/botService";
 import { getMyProfile, updateMyProfile } from "services/authService";
+import { getBotById } from "services/botService";
 import { getMyPlan } from "services/planService";
 import { getBotDataCaptureFields } from "services/botDataCaptureService";
 
@@ -38,23 +39,68 @@ function Overview() {
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
   const [botFields, setBotFields] = useState({});
+  const [phasesByBot, setPhasesByBot] = useState({});
+
+  // shared button style for consistent look; text color set to info.main
+  const commonBtnSx = { borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, minWidth: 120, color: 'info.main' };
 
   useEffect(() => {
     async function fetchAll() {
       setLoading(true);
       try {
         const data = await getMyProfile();
+        // If bots are present, attempt to enrich each bot by fetching full bot details from the API
+        if (data?.bots && Array.isArray(data.bots) && data.bots.length > 0) {
+          const enriched = [];
+          for (const b of data.bots) {
+            try {
+              const full = await getBotById(b.id);
+              enriched.push({ ...b, ...full });
+            } catch (err) {
+              // If fetch fails for any bot, fall back to the original minimal bot object
+              console.warn('[profile] could not fetch full bot info for', b.id, err?.message || err);
+              enriched.push(b);
+            }
+          }
+          data.bots = enriched;
+        }
         setUser(data);
         setEditedUser(data);
         const planData = await getMyPlan();
         setPlan(planData);
-        // Si hay bots, obtener campos de captura para cada uno
+        // If there are bots, try to fetch authoritative phases first.
+        // Only if fetching phases fails for a bot do we call getBotDataCaptureFields to fallback to heuristics.
         if (data?.bots?.length) {
           const fieldsByBot = {};
+          const phasesMap = {};
           for (const bot of data.bots) {
-            fieldsByBot[bot.id] = await getBotDataCaptureFields(bot.id);
+            let gotPhases = false;
+            try {
+              const res = await fetchBotPhases(bot.id);
+              const p = (res && res.phases) || {};
+              phasesMap[bot.id] = {
+                training: !!(p.training && p.training.completed),
+                dataCapture: !!(p.data_capture && p.data_capture.completed) || !!(p.dataCapture && p.dataCapture.completed),
+                styles: !!(p.styles && p.styles.completed),
+                integration: !!(p.integration && p.integration.completed),
+                finished: !!(p.finished && p.finished.completed),
+              };
+              gotPhases = true;
+            } catch (err) {
+              // will fallback to heuristic below
+            }
+
+            if (!gotPhases) {
+              // only call the potentially heavy fields API when we don't have server phases
+              try {
+                fieldsByBot[bot.id] = await getBotDataCaptureFields(bot.id);
+              } catch (err) {
+                // ignore field fetch failures
+              }
+            }
           }
           setBotFields(fieldsByBot);
+          if (Object.keys(phasesMap).length) setPhasesByBot(phasesMap);
         }
       } catch (error) {
         if (error.response && error.response.status === 401) {
@@ -69,6 +115,43 @@ function Overview() {
     }
     fetchAll();
   }, [logout]);
+
+  // Listen for updates from other pages (training/upload) to refresh phases
+  useEffect(() => {
+    const handler = async (ev) => {
+      try {
+        const botId = ev?.detail?.botId;
+        if (!botId) return;
+        const res = await fetchBotPhases(botId);
+        const p = (res && res.phases) || {};
+        setPhasesByBot((prev) => ({ ...prev, [botId]: {
+          training: !!(p.training && p.training.completed),
+          dataCapture: !!(p.data_capture && p.data_capture.completed) || !!(p.dataCapture && p.dataCapture.completed),
+          styles: !!(p.styles && p.styles.completed),
+          integration: !!(p.integration && p.integration.completed),
+          finished: !!(p.finished && p.finished.completed),
+        } }));
+      } catch (e) { console.warn('Error refreshing bot phases', e); }
+    };
+
+    const storageHandler = (ev) => {
+      try {
+        if (!ev.key) return;
+        const m = ev.key.match(/^bot_phases_refresh_(\d+)$/);
+        if (m) {
+          const botId = Number(m[1]);
+          window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId } }));
+        }
+      } catch (e) { }
+    };
+
+    window.addEventListener('botPhasesUpdated', handler);
+    window.addEventListener('storage', storageHandler);
+    return () => {
+      window.removeEventListener('botPhasesUpdated', handler);
+      window.removeEventListener('storage', storageHandler);
+    };
+  }, []);
 
   const handleChange = (field, value) => {
     setEditedUser((prev) => ({ ...prev, [field]: value }));
@@ -107,19 +190,76 @@ function Overview() {
     }
   };
 
-  // Lógica para determinar fases completadas (simulada, reemplazar por lógica real si tienes flags en el bot)
+  // Lógica para determinar fases completadas (úsese solo indicadores explícitos)
   const getBotPhases = (bot) => {
-    // Simulación: si el bot está listo, todas las fases están completas
-    // Si no, solo entrenamiento está completo
-    // Puedes reemplazar esto por flags reales: bot.hasTraining, bot.hasDataCapture, etc.
-    // Se asume que si el bot está listo, pasó integración
-    return {
-      training: true,
-      dataCapture: bot.isReady || (botFields[bot.id] && botFields[bot.id].length > 0),
-      styles: bot.isReady, // Simulación: solo si está listo
-      integration: bot.isReady, // Simulación: solo si está listo
-      finished: bot.isReady // finished = pasó integración
+    // Prefer authoritative server-side phases when available
+    if (phasesByBot && phasesByBot[bot.id]) return phasesByBot[bot.id];
+    // Detect styles robustly (varios caminos que podría devolver la API)
+    const styleIdCandidates = [bot.styleId, bot.style_id, bot.StyleId, bot.botStyleId];
+    const hasNumericStyleId = styleIdCandidates.some((v) => {
+      if (v === undefined || v === null) return false;
+      const n = Number(v);
+      return !Number.isNaN(n) && n > 0;
+    });
+
+    const hasNestedStyle = !!(bot.style && ((bot.style.id && Number(bot.style.id) > 0) || Object.keys(bot.style).length > 0)) || !!(bot.Style && ((bot.Style.id && Number(bot.Style.id) > 0) || Object.keys(bot.Style).length > 0));
+
+    const hasStyle = hasNumericStyleId || hasNestedStyle || !!bot.hasStyle || (Array.isArray(bot.styles) && bot.styles.length > 0);
+
+    // detect data capture fields (explicit)
+    const hasDataCapture = !!(botFields[bot.id] && Array.isArray(botFields[bot.id]) && botFields[bot.id].length > 0) || !!bot.hasDataCapture || !!bot.dataCapture || !!bot.data_capture;
+
+    // detect integration explicitly
+    const hasIntegration = (() => {
+      try {
+        if (bot.hasIntegration || bot.isReady) return true;
+        if (bot.integration) return true;
+        if (Array.isArray(bot.integrations) && bot.integrations.length > 0) return true;
+        if (Array.isArray(bot.botIntegrations) && bot.botIntegrations.length > 0) return true;
+        if (Array.isArray(bot.bot_integrations) && bot.bot_integrations.length > 0) return true;
+        if (bot.botIntegration || bot.BotIntegration) return true;
+        if (bot.api_token_hash || bot.apiTokenHash || bot.apiToken) return true;
+        const settings = bot.settings_json || bot.settings || (bot.integrations && bot.integrations[0] && bot.integrations[0].settings_json);
+        if (settings) {
+          if (typeof settings === 'string') {
+            try {
+              const parsed = JSON.parse(settings);
+              if (parsed && Object.keys(parsed).length > 0) return true;
+            } catch (e) {
+              return true;
+            }
+          } else if (typeof settings === 'object' && Object.keys(settings).length > 0) {
+            return true;
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      return false;
+    })();
+
+    const finished = !!bot.isReady || !!bot.finished || !!bot.is_ready;
+
+    // Use explicit flags only (do not infer earlier phases from later ones)
+    const training = !!(bot.hasTraining || bot.trainingConfigured || bot.training || bot.trainingCompleted || bot.training_done);
+    const dataCapture = hasDataCapture;
+    const stylesPhase = hasStyle;
+    const integrationPhase = hasIntegration;
+
+    const phases = {
+      training,
+      dataCapture,
+      styles: stylesPhase,
+      integration: integrationPhase,
+      finished,
     };
+
+    // debug info
+    try {
+      console.debug('[profile] bot phase detection', bot.id, { phases, bot });
+    } catch (e) {}
+
+    return phases;
   };
 
   // Navegación por fase
@@ -132,13 +272,37 @@ function Overview() {
         navigate(`/bots/captured-data/${bot.id}`, { state: { botId: bot.id } });
         break;
       case 'styles':
-        navigate(`/bots/styles/${bot.id}`, { state: { botId: bot.id } });
+        // single "style" route (matches pages that use `/bots/style/:id`)
+        navigate(`/bots/style/${bot.id}`, { state: { botId: bot.id } });
         break;
       case 'integration':
-        navigate(`/bots/integration/${bot.id}`, { state: { botId: bot.id } });
+  navigate(`/bots/integration`, { state: { botId: bot.id } });
         break;
       default:
         break;
+    }
+  };
+
+  // Decide the next incomplete phase and navigate there
+  const handleContinue = (bot) => {
+    const phases = getBotPhases(bot);
+    // If all phases complete, do nothing
+    if (phases.training && phases.dataCapture && phases.styles && phases.integration) return;
+    if (!phases.training) {
+      navigate(`/bots/training/${bot.id}`, { state: { botId: bot.id } });
+      return;
+    }
+    if (!phases.dataCapture) {
+      navigate(`/bots/captured-data/${bot.id}`, { state: { botId: bot.id } });
+      return;
+    }
+    if (!phases.styles) {
+      navigate(`/bots/style/${bot.id}`, { state: { botId: bot.id } });
+      return;
+    }
+    if (!phases.integration) {
+  navigate(`/bots/integration`, { state: { botId: bot.id } });
+      return;
     }
   };
   return (
@@ -195,15 +359,15 @@ function Overview() {
                     </>
                   ) : (
                     <Button
-                      variant="contained"
+                      variant="outlined"
                       color="info"
                       size="small"
                       onClick={() => {
                         setEditedUser(user); // Siempre refresca los datos a editar
                         setEditMode(true);
                       }}
-                      startIcon={<EditIcon />}
-                      sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, minWidth: 120 }}
+                      startIcon={<EditIcon sx={{ color: 'info.main' }} />}
+                      sx={{ ...commonBtnSx, boxShadow: '0 6px 16px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.08)', backgroundColor: '#fff', color: 'info.main' }}
                     >
                       Editar perfil
                     </Button>
@@ -212,63 +376,78 @@ function Overview() {
               </Grid>
               {/* Columna derecha: plan actual */}
               <Grid item xs={12} md={6}>
-                <SoftTypography variant="subtitle1" fontWeight="bold" mb={2} sx={{ fontSize: 18 }}>Mi plan actual</SoftTypography>
-                <Divider sx={{ mb: 2 }} />
-                {plan && plan.isActive ? (
-                  <>
-                    <SoftBox mb={0.5} sx={{ fontSize: 15 }}><b>Nombre:</b> {plan.name}</SoftBox>
-                    <SoftBox mb={0.5} sx={{ fontSize: 15 }}><b>Precio:</b> ${plan.price}</SoftBox>
-                    <SoftBox mt={2}>
-                      <Link to="/plans" style={{ textDecoration: 'none' }}>
-                        <Button variant="contained" color="info" size="small" sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, minWidth: 120 }}>Detalles</Button>
-                      </Link>
-                      <Button variant="contained" color="error" size="small" sx={{ ml: 1, borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, minWidth: 120 }} onClick={() => window.confirm('¿Seguro que deseas cancelar tu plan?') && window.location.reload()}>Cancelar plan</Button>
-                    </SoftBox>
-                    {/* Barra de consumo de tokens */}
+                {/* Split the plan area: main plan details (left) and vertical tokens card (right) */}
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={8}>
+                    <SoftTypography variant="subtitle1" fontWeight="bold" mb={2} sx={{ fontSize: 18 }}>Mi plan actual</SoftTypography>
+                    <Divider sx={{ mb: 2 }} />
+                    {plan && plan.isActive ? (
+                      <>
+                        <SoftBox mb={0.5} sx={{ fontSize: 15 }}><b>Nombre:</b> {plan.name}</SoftBox>
+                        <SoftBox mb={0.5} sx={{ fontSize: 15 }}><b>Precio:</b> ${plan.price}</SoftBox>
+                        <SoftBox mt={2}>
+                          <Link to="/plans" style={{ textDecoration: 'none' }}>
+                            <Button
+                              variant="outlined"
+                              color="info"
+                              size="small"
+                              sx={{
+                                ...commonBtnSx,
+                                boxShadow: '0 6px 16px rgba(0,0,0,0.06)',
+                                border: '1px solid rgba(0,0,0,0.08)',
+                                backgroundColor: '#fff',
+                                color: 'info.main'
+                              }}
+                            >
+                              Detalles
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="outlined"
+                            color="info"
+                            size="small"
+                            sx={{ ml: 1, ...commonBtnSx, boxShadow: '0 6px 16px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.08)', backgroundColor: '#fff', color: 'info.main' }}
+                            onClick={() => window.confirm('¿Seguro que deseas cancelar tu plan?') && window.location.reload()}
+                          >
+                            Cancelar plan
+                          </Button>
+                        </SoftBox>
+
+                        {/* Replaced tokens area: show Datos captados title + button linking to data resources */}
+                        <SoftBox mt={3}>
+                          <SoftTypography variant="subtitle2" fontWeight="600" sx={{ mb: 1 }}>Datos captados</SoftTypography>
+                          <Link to="/data/resources" style={{ textDecoration: 'none' }}>
+                            <Button variant="outlined" color="info" size="small" sx={{ ...commonBtnSx, boxShadow: '0 6px 16px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.08)', backgroundColor: '#fff', color: 'info.main' }}>Datos captados</Button>
+                          </Link>
+                        </SoftBox>
+                      </>
+                    ) : (
+                      <SoftTypography color="text" sx={{ fontSize: 15 }}>No tienes un plan activo.</SoftTypography>
+                    )}
+                  </Grid>
+
+                  <Grid item xs={12} md={4}>
+                    {/* Vertical tokens card placed to the right */}
                     {(() => {
-                      // Buscar el primer valor válido de límite de tokens
                       const limit = plan?.tokensLimit ?? plan?.tokenLimit ?? plan?.limit ?? plan?.token_limit ?? plan?.maxTokens ?? 0;
                       const used = plan?.tokensUsed ?? plan?.tokenUsed ?? plan?.used ?? plan?.token_used ?? 0;
                       if (limit > 0) {
                         const percent = Math.min(100, (used / limit) * 100);
                         return (
-                          <SoftBox mt={4} mb={1}>
-                            <SoftTypography variant="subtitle2" fontWeight="bold" sx={{ fontSize: 15, mb: 1 }}>
-                              Tokens consumidos: {used.toLocaleString()} / {limit.toLocaleString()} ({Math.round(percent)}%)
-                            </SoftTypography>
-                            <LinearProgress
-                              variant="determinate"
-                              value={percent}
-                              sx={{
-                                height: 10,
-                                borderRadius: 5,
-                                mt: 1,
-                                background: '#bdbdbd',
-                                '& .MuiLinearProgress-bar': used === 0
-                                  ? { background: '#bdbdbd' }
-                                  : {
-                                      background: 'repeating-linear-gradient(135deg, #1976d2 0 20px, #2196f3 20px 40px)',
-                                      animation: 'wave 2s linear infinite',
-                                      transition: 'background-color 0.3s',
-                                    },
-                              }}
-                            />
-                            {/* Animación de onda para efecto líquido */}
-                            <style>{`
-                              @keyframes wave {
-                                0% { background-position-x: 0; }
-                                100% { background-position-x: 40px; }
-                              }
-                            `}</style>
-                          </SoftBox>
+                          <Card sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                            <SoftTypography variant="caption" sx={{ mb: 1, fontWeight: 700 }}>Tokens consumidos</SoftTypography>
+                            <SoftTypography variant="h6" sx={{ mb: 1 }}>{used.toLocaleString()} / {limit.toLocaleString()}</SoftTypography>
+                            <Box sx={{ width: 24, height: 160, background: '#f1f1f1', borderRadius: 2, position: 'relative', overflow: 'hidden' }}>
+                              <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${percent}%`, background: 'linear-gradient(180deg, var(--mui-palette-info-main, #00897b), rgba(0,0,0,0.05))', transition: 'height 0.4s' }} />
+                            </Box>
+                            <SoftTypography variant="caption" sx={{ mt: 1 }}>{Math.round(percent)}%</SoftTypography>
+                          </Card>
                         );
                       }
                       return null;
                     })()}
-                  </>
-                ) : (
-                  <SoftTypography color="text" sx={{ fontSize: 15 }}>No tienes un plan activo.</SoftTypography>
-                )}
+                  </Grid>
+                </Grid>
               </Grid>
             </Grid>
           )}
@@ -285,7 +464,7 @@ function Overview() {
               {/* Mostrar siempre la card de crear nuevo bot */}
               <Grid item xs={12} sm={6} md={3} lg={3} xl={3}>
                 <Link to="/bots" style={{ textDecoration: 'none' }}>
-                  <Card sx={{ height: 340, minHeight: 340, maxHeight: 340, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #ccc', cursor: 'pointer', '&:hover': { borderColor: '#1976d2' } }}>
+                  <Card sx={{ height: 340, minHeight: 400, maxHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #ccc', cursor: 'pointer', '&:hover': { borderColor: '#1976d2' } }}>
                     <SoftBox p={2} textAlign="center">
                       <AddIcon sx={{ fontSize: 40, color: '#1976d2' }} />
                       <SoftTypography variant="h6" color="info" sx={{ fontSize: 16 }}>Crear Nuevo Bot</SoftTypography>
@@ -295,24 +474,26 @@ function Overview() {
               </Grid>
               {/* Si hay bots, mostrar las cards, si no, no mostrar nada más */}
               {user.bots && Array.isArray(user.bots) && user.bots.length > 0 && user.bots.map((bot) => {
+                // Debug: log style-related fields so we can detect what the API returns
+                try {
+                  console.debug('[profile] bot fields', bot.id, {
+                    styleId: bot.styleId,
+                    style_id: bot.style_id,
+                    botStyleId: bot.botStyleId,
+                    hasStyle: bot.hasStyle,
+                    styleObj: bot.style,
+                    stylesArr: bot.styles,
+                  });
+                } catch (err) {
+                  console.debug('[profile] bot debug error', err);
+                }
+
                 const phases = getBotPhases(bot);
                 return (
+                  
                   <Grid item xs={12} sm={6} md={3} lg={3} xl={3} key={bot.id}>
-                    <Card sx={{
-                      height: 340,
-                      minHeight: 340,
-                      maxHeight: 340,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      justifyContent: 'space-between',
-                      p: 2,
-                      borderRadius: 4,
-                      boxShadow: 3,
-                      position: 'relative',
-                      transition: 'box-shadow 0.3s, transform 0.3s',
-                      '&:hover': { boxShadow: 6, transform: 'translateY(-4px)' }
-                    }}>
-                      {/* Top right actions */}
+                    <Card sx={{ height: 400, minHeight: 400, maxHeight: 400, display: 'flex', flexDirection: 'column' }}>
+                      {/* Top-right delete stays absolute */}
                       <SoftBox position="absolute" top={10} right={10} zIndex={2} display="flex" gap={1}>
                         <Tooltip title="Eliminar bot">
                           <IconButton
@@ -324,190 +505,217 @@ function Overview() {
                           </IconButton>
                         </Tooltip>
                       </SoftBox>
-                      {/* Bot name and description */}
-                      <SoftBox mt={2} mb={1} textAlign="left">
-                        <SoftTypography variant="h6" fontWeight="bold" mb={1} sx={{ textAlign: 'left', color: 'info.main', fontSize: 18 }}>{bot.name}</SoftTypography>
-                        <SoftTypography variant="body2" color="text" mb={2} sx={{ minHeight: 40, textAlign: 'left', fontSize: 13 }}>{bot.description || 'Sin descripción'}</SoftTypography>
+
+                      {/* Row 1: Title (moved down a bit) */}
+                      <SoftBox sx={{ height: { xs: 60, md: 64 }, overflow: 'hidden', px: 2, pt: 2, pr: 6 }} textAlign="left">
+                        <SoftTypography variant="h6" fontWeight="bold" mb={1} sx={{ textAlign: 'left', color: 'info.main', fontSize: { xs: 13, md: 15 }, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bot.name}</SoftTypography>
                       </SoftBox>
-                      {/* Fases del bot */}
-                      <SoftBox mb={2} display="flex" flexDirection="row" alignItems="center" gap={2}>
-                        {/* Fase actual: muestra el icono y nombre de la última fase completada */}
-                        {(() => {
-                          // Determinar la última fase completada
-                          const phaseOrder = [
-                            { key: 'training', icon: SchoolIcon, label: 'Entrenamiento' },
-                            { key: 'dataCapture', icon: StorageIcon, label: 'Datos' },
-                            { key: 'styles', icon: PaletteIcon, label: 'Estilos' },
-                            { key: 'integration', icon: IntegrationInstructionsIcon, label: 'Integración' }
-                          ];
-                          let lastPhase = phaseOrder[0];
-                          for (let i = 0; i < phaseOrder.length; i++) {
-                            if (phases[phaseOrder[i].key]) {
-                              lastPhase = phaseOrder[i];
-                            } else {
-                              break;
-                            }
-                          }
-                          const PhaseIcon = lastPhase.icon;
-                          // Handler para editar la fase actual: navega a la vista de edición de la fase
-                          const handleEdit = () => {
-                            switch (lastPhase.key) {
-                              case 'training':
-                                navigate(`/bots/training/${bot.id}`, { state: { botId: bot.id, edit: true } });
-                                break;
-                              case 'dataCapture':
-                                navigate(`/bots/captured-data/${bot.id}`, { state: { botId: bot.id, edit: true } });
-                                break;
-                              case 'styles':
-                                navigate(`/bots/style/${bot.id}`, { state: { botId: bot.id, edit: true } });
-                                break;
-                              case 'integration':
-                                navigate(`/bots/integration/${bot.id}`, { state: { botId: bot.id, edit: true } });
-                                break;
-                              default:
-                                break;
-                            }
-                          };
-                          return (
-                            <SoftBox display="flex" flexDirection="column" alignItems="center" gap={0.5}>
-                              <Box position="relative" width={70} height={70} display="flex" alignItems="center" justifyContent="center">
-                                {/* Arco SVG más pequeño y gris */}
-                                <svg width="70" height="70" style={{ position: 'absolute', top: 0, left: 0, zIndex: 1 }}>
-                                  <circle
-                                    cx="35" cy="35" r="27"
-                                    fill="none"
-                                    stroke="#bdbdbd"
-                                    strokeWidth="2.2"
-                                    strokeDasharray="170 60"
-                                    strokeLinecap="round"
-                                  />
-                                </svg>
-                                {/* Icono de la fase actual */}
-                                <PhaseIcon sx={{ fontSize: '35px !important', color: 'info.main', zIndex: 2 }} />
-                                {/* Engranaje superpuesto, aún más pequeño y gris */}
-                                {!phases.finished && (
-                                  <Tooltip title={`Configurar ${lastPhase.label.toLowerCase()}`}>
-                                    <IconButton
-                                      onClick={handleEdit}
-                                      sx={{
-                                        position: 'absolute',
-                                        top: 8,
-                                        right: 0,
-                                        bgcolor: '#fff',
-                                        p: 0,
-                                        zIndex: 3,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        border: '2px solid #bdbdbd',
-                                        boxShadow: 1,
-                                        transition: 'box-shadow 0.2s',
-                                        '&:hover .settings-gear': { color: 'info.main' },
-                                        '&:hover': { bgcolor: '#f5f5f5' }
-                                      }}
-                                    >
-                                      <SettingsIcon className="settings-gear" sx={{ fontSize: '18px !important', color: '#bdbdbd', transition: 'color 0.2s' }} />
-                                    </IconButton>
-                                  </Tooltip>
-                                )}
-                              </Box>
-                              {/* Palabra de la fase debajo del icono, centrada y visible */}
-                              <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 11, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lastPhase.label}</SoftTypography>
-                            </SoftBox>
-                          );
-                        })()}
-                       
-                        {/* Integración */}
-                        {phases.integration && !phases.finished && (
-                          <Tooltip title="Integración completada">
-                            <span>
-                              <IconButton
-                                onClick={() => handlePhaseClick(bot, 'integration')}
-                                sx={{
-                                  color: '#f57c00',
-                                  transition: 'transform 0.5s',
-                                  '&:hover': { transform: 'rotate(360deg)', background: '#fff3e0' },
-                                }}
-                              >
-                                <IntegrationInstructionsIcon />
-                                <AddCircleOutlineIcon sx={{ fontSize: 18, ml: -1, color: '#f57c00' }} />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                        )}
+
+                      {/* Row 2: Description (clamped) */}
+                      <SoftBox sx={{ height: { xs: 72, md: 88 }, overflow: 'hidden', px: 2 }} textAlign="left">
+                        <SoftTypography
+                          variant="body2"
+                          color="text"
+                          sx={{
+                            textAlign: 'left',
+                            fontSize: { xs: 11, md: 12 },
+                            display: '-webkit-box',
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {bot.description || 'Sin descripción'}
+                        </SoftTypography>
                       </SoftBox>
-                      {/* Estado actual de fases alineado a la izquierda, compacto, con tooltips */}
-                      <SoftBox display="flex" flexDirection="column" alignItems="flex-center" ml={20}>
-                        <SoftTypography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 12, mb: 0.5 }}>Estado actual</SoftTypography>
-                        <Box display="flex" flexDirection="row" gap={1}>
-                          <Tooltip title="Entrenamiento" arrow>
-                            <span>
-                              <SchoolIcon sx={{ fontSize: '15px !important', color: phases.training ? 'info.main' : '#bdbdbd', cursor: 'pointer' }} />
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Datos" arrow>
-                            <span>
-                              <StorageIcon sx={{ fontSize: '15px !important', color: phases.dataCapture ? 'info.main' : '#bdbdbd', cursor: 'pointer' }} />
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Estilos" arrow>
-                            <span>
-                              <PaletteIcon sx={{ fontSize: '15px !important', color: phases.styles ? 'info.main' : '#bdbdbd', cursor: 'pointer' }} />
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Integración" arrow>
-                            <span>
-                              <IntegrationInstructionsIcon
-                                sx={{
-                                  fontSize: '15px !important',
-                                  color: phases.integration ? 'info.main' : '#bdbdbd',
-                                  cursor: 'pointer',
-                                  transition: 'color 0.2s',
-                                  '&:hover': phases.integration ? { color: 'info.dark' } : {},
-                                }}
-                              />
-                            </span>
-                          </Tooltip>
+
+                      {/* separator between description and phases */}
+                      <Divider sx={{ my: 1, mx: 2 }} />
+
+                      {/* Row 3: process icons (4-slot fixed area). Show up to 4 phases in fixed positions; unreached phases render as muted placeholders */}
+                      {/* Phases: explicit 2x2 layout (Entrenamiento + Datos on top; Estilos + Integración below) */}
+                      <SoftBox sx={{ px: 2, pt: 0.5 }}>
+                        {/* Top row: Entrenamiento | Datos */}
+                        <SoftBox sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mb: 1 }}>
+                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.training ? 'pointer' : 'default' }} onClick={() => phases.training && handlePhaseClick(bot, 'training')}>
+                            {phases.training ? (
+                              <>
+                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
+                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
+                                  </svg>
+                                  <SchoolIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
+                                  {!phases.finished && (
+                                    <Tooltip title={`Configurar Entrenamiento`}>
+                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/training/${bot.id}`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
+                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </Box>
+                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Entrenamiento</SoftTypography>
+                              </>
+                            ) : (
+                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
+                            )}
+                          </SoftBox>
+
+                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.dataCapture ? 'pointer' : 'default' }} onClick={() => phases.dataCapture && handlePhaseClick(bot, 'dataCapture')}>
+                            {phases.dataCapture ? (
+                              <>
+                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
+                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
+                                  </svg>
+                                  <StorageIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
+                                  {!phases.finished && (
+                                    <Tooltip title={`Configurar Datos`}>
+                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/captured-data/${bot.id}`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
+                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </Box>
+                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Datos</SoftTypography>
+                              </>
+                            ) : (
+                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
+                            )}
+                          </SoftBox>
+                        </SoftBox>
+
+                        {/* Bottom row: Estilos | Integración */}
+                        <SoftBox sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.styles ? 'pointer' : 'default' }} onClick={() => phases.styles && handlePhaseClick(bot, 'styles')}>
+                            {phases.styles ? (
+                              <>
+                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
+                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
+                                  </svg>
+                                  <PaletteIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
+                                  {!phases.finished && (
+                                    <Tooltip title={`Configurar Estilos`}>
+                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/style/${bot.id}`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
+                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </Box>
+                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Estilos</SoftTypography>
+                              </>
+                            ) : (
+                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
+                            )}
+                          </SoftBox>
+
+                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.integration ? 'pointer' : 'default' }} onClick={() => phases.integration && handlePhaseClick(bot, 'integration')}>
+                            {phases.integration ? (
+                              <>
+                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
+                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
+                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
+                                  </svg>
+                                  <IntegrationInstructionsIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
+                                  {!phases.finished && (
+                                    <Tooltip title={`Configurar Integración`}>
+                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/integration`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
+                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </Box>
+                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Integración</SoftTypography>
+                              </>
+                            ) : (
+                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
+                            )}
+                          </SoftBox>
+                        </SoftBox>
+
+                        </SoftBox>
+
+                      {/* divider between phases and bottom row */}
+                      <Divider sx={{ my: 1.5, mx: 2 }} />
+
+                      {/* Spacer: flexible area to push Estado actual and button toward bottom (increased so bottom row sits lower) */}
+                      <SoftBox sx={{ flex: 2.4 }} />
+
+                      {/* Row 4: Estado actual (left) + action button (right) */}
+                      <SoftBox sx={{ height: { xs: 80, md: 104 }, display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2 }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 160, maxWidth: 160 }}>
+                          <SoftTypography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 12, mb: 0.5 }}>Estado actual</SoftTypography>
+                          <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, alignItems: 'center', width: '100%', justifyContent: 'flex-start', overflow: 'hidden' }}>
+                            <Tooltip title="Entrenamiento" arrow>
+                                <span>
+                                  <SchoolIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.training ? 'info.main' : '#bdbdbd' }} />
+                                </span>
+                              </Tooltip>
+                              <Tooltip title="Datos" arrow>
+                                <span>
+                                  <StorageIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.dataCapture ? 'info.main' : '#bdbdbd' }} />
+                                </span>
+                              </Tooltip>
+                              <Tooltip title="Estilos" arrow>
+                                <span>
+                                  <PaletteIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.styles ? 'info.main' : '#bdbdbd' }} />
+                                </span>
+                              </Tooltip>
+                              <Tooltip title="Integración" arrow>
+                                <span>
+                                  <IntegrationInstructionsIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.integration ? 'info.main' : '#bdbdbd' }} />
+                                </span>
+                              </Tooltip>
+                          </Box>
                         </Box>
-                      </SoftBox>
-                      {/* Acciones: Ver o Continuar configuración */}
-                      <SoftBox position="absolute" bottom={16} right={16} zIndex={2}>
-                        {bot.isReady ? (
-                          <Link to={`/bots/captured-data/${bot.id}`} state={{ botId: bot.id }} style={{ textDecoration: 'none' }}>
-                            <Button
-                              variant="contained"
-                              color="info"
-                              size="small"
-                              startIcon={<VisibilityOutlinedIcon />}
-                              sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14 }}
-                            >
-                              Ver Bot
-                            </Button>
-                          </Link>
-                        ) : (
-                          <Link to={`/bots/captured-data/${bot.id}`} state={{ botId: bot.id }} style={{ textDecoration: 'none' }}>
-                            <Tooltip title="Continuar configuración">
-                              <span>
-                                <IconButton
-                                  color="info"
-                                  sx={{
-                                    backgroundColor: 'info.main',
-                                    color: '#fff',
-                                    width: 56,
-                                    height: 56,
-                                    transition: 'transform 0.2s',
-                                    '&:hover': {
-                                      backgroundColor: 'info.dark',
-                                      transform: 'translateX(8px) scale(1.08)',
-                                    },
-                                  }}
-                                >
-                                  <ArrowForwardIcon sx={{ fontSize: 32 }} />
-                                </IconButton>
-                              </span>
-                            </Tooltip>
-                          </Link>
-                        )}
+                        <Box>
+                          {bot.isReady ? (
+                            <Link to={`/bots/captured-data/${bot.id}`} state={{ botId: bot.id }} style={{ textDecoration: 'none' }}>
+                              <Button
+                                variant="contained"
+                                color="info"
+                                size="small"
+                                startIcon={<VisibilityOutlinedIcon />}
+                                sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: { xs: 12, md: 14 } }}
+                              >
+                                Ver Bot
+                              </Button>
+                            </Link>
+                          ) : (
+                              <>
+                                {(() => {
+                                  const p = getBotPhases(bot);
+                                  const allDone = p.training && p.dataCapture && p.styles && p.integration;
+                                  if (allDone) return null;
+                                  return (
+                                    <Tooltip title="Continuar configuración">
+                                      <span>
+                                        <IconButton
+                                          color="info"
+                                          onClick={() => handleContinue(bot)}
+                                          sx={{
+                                            backgroundColor: 'info.main',
+                                            color: '#fff',
+                                            width: { xs: 38, md: 48 },
+                                            height: { xs: 38, md: 48 },
+                                            transition: 'transform 0.2s',
+                                            '&:hover': {
+                                              backgroundColor: 'info.dark',
+                                              transform: 'translateX(8px) scale(1.06)',
+                                            },
+                                          }}
+                                        >
+                                          <ArrowForwardIcon sx={{ fontSize: { xs: 16, md: 24 } }} />
+                                        </IconButton>
+                                      </span>
+                                    </Tooltip>
+                                  );
+                                })()}
+                              </>
+                          )}
+                        </Box>
                       </SoftBox>
                     </Card>
                   </Grid>

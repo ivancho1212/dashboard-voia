@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 
 import { getBotStylesByUser, getBotStyleById, createBotStyle } from "services/botStylesService";
 import { getBotsByUserId, updateBotStyle } from "services/botService";
+import { getBotDataCaptureFields } from "services/botDataCaptureService";
 
 
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
@@ -210,22 +211,51 @@ function BotStylePage() {
 
       // Mergear y eliminar duplicados por ID
       const mergedBots = Array.from(new Map([...bots, currentBot].map(b => [b.id, b])).values());
-      console.log("📌 Bots finales para mostrar en modal:", mergedBots);
+      console.log("📌 Bots iniciales para modal:", mergedBots);
 
-      if (mergedBots.length === 0) {
-        alert("No tienes bots disponibles para aplicar el estilo.");
+      // Filtrar bots elegibles: usar primero la info que ya viene con los bots
+      // para evitar N llamadas. Solo hacemos la comprobación por id si no hay datos.
+      const eligible = [];
+      const ineligible = [];
+      for (const b of mergedBots) {
+        // Condiciones rápidas de elegibilidad (si alguno aplica, considerarlo elegible):
+        // - ya tiene styleId (ya fue asignado)
+        // - tiene un flag explícito hasCapture === true
+        // - está marcado como isReady (completó flujo)
+        const sid = Number(b.styleId ?? b.style_id ?? b.StyleId ?? 0);
+        if (!Number.isNaN(sid) && sid > 0) {
+          eligible.push(b);
+          continue;
+        }
+        if (b.hasCapture === true) {
+          eligible.push(b);
+          continue;
+        }
+        if (b.isReady === true) {
+          eligible.push(b);
+          continue;
+        }
+
+        // Fallback: si no tenemos indicios en el objeto del bot, consultar campos de captura
+        try {
+          const fields = await getBotDataCaptureFields(b.id);
+          if (Array.isArray(fields) && fields.length > 0) eligible.push(b);
+          else ineligible.push(b);
+        } catch (err) {
+          console.warn('No se pudo comprobar campos de captura para bot', b.id, err);
+          ineligible.push(b);
+        }
+      }
+      console.log('📌 Bots elegibles:', eligible, 'No elegibles:', ineligible);
+
+      if (eligible.length === 0) {
+        alert("Ninguno de tus bots ha completado la etapa de captura de datos. No es posible asignar este estilo todavía.");
         return;
       }
 
-      if (mergedBots.length === 1) {
-        await updateBotStyle(mergedBots[0].id, styleId);
-        alert(`Estilo aplicado al bot "${mergedBots[0].name}".`);
-        await fetchBotAndStyles();
-        return;
-      }
-
-      // Mostrar todos los bots en el modal
-      setSelectedBotForStyle({ styleId, userBots: mergedBots, selectedBotId: mergedBots[0].id });
+      // Mostrar modal para que el usuario confirme la asignación.
+      // Mostrar solo los bots elegibles en el modal (el usuario debe confirmar).
+      setSelectedBotForStyle({ styleId, userBots: eligible, selectedBotId: eligible[0].id, eligibleIds: eligible.map(b => b.id) });
       setShowBotSelectModal(true);
     } catch (err) {
       console.error("❌ Error al preparar la aplicación de estilo:", err);
@@ -405,22 +435,31 @@ function BotStylePage() {
               Selecciona el bot para aplicar el estilo
             </SoftTypography>
 
-            <select
-              style={{ width: "100%", padding: "10px", marginBottom: "16px" }}
-              onChange={(e) =>
-                setSelectedBotForStyle((prev) => ({ ...prev, selectedBotId: e.target.value }))
-              }
-              value={selectedBotForStyle.selectedBotId || ""}
-            >
-              <option value="" disabled>
-                -- Selecciona un bot --
-              </option>
-              {selectedBotForStyle.userBots.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name}
+              <select
+                style={{ width: "100%", padding: "10px", marginBottom: "16px" }}
+                onChange={(e) =>
+                  setSelectedBotForStyle((prev) => ({ ...prev, selectedBotId: e.target.value }))
+                }
+                value={selectedBotForStyle.selectedBotId || ""}
+              >
+                <option value="" disabled>
+                  -- Selecciona un bot --
                 </option>
-              ))}
-            </select>
+                {selectedBotForStyle.userBots.map((b) => {
+                  const disabled = selectedBotForStyle.eligibleIds ? !selectedBotForStyle.eligibleIds.includes(b.id) : false;
+                  return (
+                    <option key={b.id} value={b.id} disabled={disabled} title={disabled ? 'Este bot no ha completado la etapa de captura de datos' : ''}>
+                      {b.name}{disabled ? ' (no elegible aún)' : ''}
+                    </option>
+                  );
+                })}
+              </select>
+
+              {selectedBotForStyle.userBots.some(b => !selectedBotForStyle.eligibleIds?.includes(b.id)) && (
+                <SoftTypography variant="caption" color="text" sx={{ display: 'block', mb: 1 }}>
+                  Algunos bots están deshabilitados porque no han completado la etapa de captación de datos.
+                </SoftTypography>
+              )}
 
             <SoftBox display="flex" justifyContent="flex-end" gap={1}>
               <SoftButton

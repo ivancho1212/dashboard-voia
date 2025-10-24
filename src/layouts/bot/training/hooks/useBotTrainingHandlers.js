@@ -27,6 +27,14 @@ export function useBotTrainingHandlers({
 
   const handleAddUrl = async (currentUrl) => {
     if (currentUrl && validateUrl(currentUrl, setUrlErrors, urlErrors)) {
+      // Si no existe un bot persistido aún (creación flow), agregar localmente y postergar la persistencia
+      if (!bot || !bot.id) {
+        setUrls((prev) => [...prev, currentUrl]);
+        Swal.fire({ icon: 'success', title: 'URL añadida (pendiente)', text: 'La URL se guardó localmente y se persistirá cuando se cree el bot.' });
+        setCurrentUrl("");
+        return;
+      }
+
       if (!botParamId || !(template?.id || bot?.botTemplateId) || !userId) {
         Swal.fire({ icon: 'error', title: 'Datos incompletos', text: 'Faltan datos requeridos para guardar la URL. Verifica que el bot, plantilla y usuario estén correctamente cargados.' });
         return;
@@ -59,6 +67,14 @@ export function useBotTrainingHandlers({
 
   const handleAddText = async (currentText) => {
     if (currentText) {
+      // Si no existe aún un bot persistido, guardar local y posponer
+      if (!bot || !bot.id) {
+        setTexts(prev => [...prev, currentText]);
+        Swal.fire({ icon: 'success', title: 'Texto añadido (pendiente)', text: 'El texto se guardó localmente y se persistirá cuando se cree el bot.' });
+        setCurrentText("");
+        return;
+      }
+
       if (!botParamId || !(template?.id || bot?.botTemplateId) || !userId) {
         Swal.fire({ icon: 'error', title: 'Datos incompletos', text: 'Faltan datos requeridos para guardar el texto. Verifica que el bot, plantilla y usuario estén correctamente cargados.' });
         return;

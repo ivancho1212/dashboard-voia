@@ -169,6 +169,12 @@ function ConversationList({
                     {hasUnread && (
                       <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ff7dabff', flexShrink: 0 }} />
                     )}
+                    {/* Badge para conversaciones creadas desde el widget (visitantes públicos) */}
+                    {conv.isWidget && (
+                      <Box sx={{ px: 0.5, py: 0.2, backgroundColor: '#e8f4ff', borderRadius: 1, mr: 0.5 }}>
+                        <Typography variant="caption" sx={{ fontSize: '11px', color: '#1976d2' }}>Widget</Typography>
+                      </Box>
+                    )}
                     <Typography variant="subtitle2" fontWeight={hasUnread ? "bold" : "600"} color={conv.blocked ? "error" : "text.primary"} noWrap>
                       {conv.alias || `Usuario ${conv.id.slice(-4)}`}
                     </Typography>
@@ -274,6 +280,8 @@ ConversationList.propTypes = {
       blocked: PropTypes.bool.isRequired,
       unreadCount: PropTypes.number,
       isWithAI: PropTypes.bool,
+      isWidget: PropTypes.bool,
+      publicUserId: PropTypes.number,
       lastHeartbeatTime: PropTypes.string, // Added for heartbeat
     })
   ).isRequired,

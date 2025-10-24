@@ -177,7 +177,18 @@ function Conversations() {
             return; // Ignore echoed admin messages (already handled optimistically)
           }
 
-          console.log(`📨 Nuevo mensaje recibido:`, msg);
+          // Debug: log raw incoming message for troubleshooting
+          console.log(`📨 Nuevo mensaje recibido (raw):`, msg);
+          try {
+            console.debug("📨 Nuevo mensaje recibido (details):", {
+              conversationId: msg.conversationId,
+              id: msg.id,
+              from: msg.from,
+              text: msg.text,
+              files: msg.files,
+              images: msg.images
+            });
+          } catch (e) { console.warn("Debug log failed", e); }
           const convId = String(msg.conversationId);
 
           const newMsg = { ...msg };
@@ -197,9 +208,11 @@ function Conversations() {
 
           setMessages((prev) => {
             const existing = prev[convId] || [];
-            if (existing.some((m) => m.id === newMsg.id)) return prev;
+            // Compare IDs as strings to avoid type mismatches (number vs string)
+            if (existing.some((m) => String(m.id) === String(newMsg.id))) return prev;
             const normalizedMsg = { ...newMsg, text: newMsg.text || "" };
-            return { ...prev, [convId]: [...existing, { ...normalizedMsg, id: normalizedMsg.id || crypto.randomUUID() }] };
+            const finalId = normalizedMsg.id ? String(normalizedMsg.id) : crypto.randomUUID();
+            return { ...prev, [convId]: [...existing, { ...normalizedMsg, id: finalId }] };
           });
 
           setConversationList((prevList) =>
@@ -284,14 +297,33 @@ function Conversations() {
       setLoadingConversationId(idStr);
       try {
         const fetchedHistory = await getConversationHistory(conv.id);
-        if (fetchedHistory && Array.isArray(fetchedHistory.history)) {
-          const normalized = fetchedHistory.history.map((msg) => ({
-            ...msg,
-            id: msg.id || `${idStr}-${Date.now()}`,
-            text: msg.text || "",
-          }));
+        // Debug: log the API payload returned for history
+        console.log("🔎 [getConversationHistory] payload for conv", conv.id, fetchedHistory);
+        if (fetchedHistory && Array.isArray(fetchedHistory.history) && fetchedHistory.history.length > 0) {
+          const normalized = fetchedHistory.history.map((msg) => {
+            // support API returning PascalCase (C#) or camelCase (JS)
+            const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+            const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+            const fromRole = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+            const from = msg.from ?? msg.From ?? null;
+            const fromId = msg.fromId ?? msg.FromId ?? msg.fromId ?? msg.FromId ?? msg.FromId ?? null;
+            const fromName = msg.fromName ?? msg.FromName ?? msg.fromName ?? msg.FromName ?? null;
+
+            // preserve other fields
+            const rest = { ...msg };
+            return {
+              ...rest,
+              id: String(id),
+              text,
+              fromRole,
+              from,
+              fromId,
+              fromName,
+            };
+          });
           setMessages((prev) => ({ ...prev, [idStr]: normalized }));
           messageCache.current.set(idStr, normalized);
+          console.log("🔎 [getConversationHistory] normalized messages stored in cache for conv", idStr, normalized.map(m => ({ id: m.id, text: m.text })));
           if (conv.unreadCount > 0) {
             try {
               await markMessagesAsRead(conv.id);
@@ -300,11 +332,39 @@ function Conversations() {
             }
           }
         } else {
-          setMessages((prev) => ({ ...prev, [idStr]: [] }));
+          // If the main history endpoint returned empty, try a fallback endpoint
+          console.warn(`⚠️ [getConversationHistory] empty history for conv ${conv.id}, trying fallback /api/Messages/by-conversation`);
+          try {
+            const fallback = await getMessagesByConversationId(conv.id);
+            console.log(`🔁 [fallback] messages for conv ${conv.id}:`, fallback);
+            if (Array.isArray(fallback) && fallback.length > 0) {
+              const fallbackNormalized = fallback.map((msg) => ({
+                ...msg,
+                id: msg.id ? String(msg.id) : `${idStr}-${Date.now()}`,
+                text: msg.text || msg.messageText || "",
+              }));
+              setMessages((prev) => ({ ...prev, [idStr]: fallbackNormalized }));
+              messageCache.current.set(idStr, fallbackNormalized);
+              console.log("🔁 [fallback] normalized stored for conv", idStr, fallbackNormalized.map(m => ({ id: m.id, text: m.text })));
+            } else {
+              console.warn(`🔁 [fallback] returned no messages for conv ${conv.id}, preserving existing messages`);
+            }
+          } catch (fbErr) {
+            console.error(`❌ [fallback] error loading messages for conv ${conv.id}`, fbErr);
+            // Preserve any existing messages (from SignalR or cache) instead of wiping them.
+            const cachedNow = messageCache.current.get(idStr);
+            if (cachedNow) {
+              setMessages((prev) => ({ ...prev, [idStr]: cachedNow }));
+            }
+          }
         }
       } catch (err) {
         console.error("❌ Error cargando historial de la conversación:", err);
-        setMessages((prev) => ({ ...prev, [idStr]: [] }));
+        // If history fetch fails (e.g. 403), keep any existing SignalR messages or cached messages
+        const cachedNow = messageCache.current.get(idStr);
+        if (cachedNow) {
+          setMessages((prev) => ({ ...prev, [idStr]: cachedNow }));
+        }
       } finally {
         setLoadingConversationId(null);
       }

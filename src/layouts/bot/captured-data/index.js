@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
+import Swal from "sweetalert2";
 import {
   getCapturedFields,
   createCapturedField,
@@ -47,7 +48,7 @@ function DefineCapturedData() {
   }, [location, navigate]);
 
   const handleContinue = () => {
-    navigate(`/bots/style/${id}`);
+    navigate(`/bots/style/${id}`, { state: { botId: id } });
   };
 
   useEffect(() => {
@@ -66,6 +67,13 @@ function DefineCapturedData() {
     const fieldName = newField.trim();
     if (!fieldName || fields.some((f) => f.fieldName === fieldName)) return;
 
+    // Quick check: token must be present for authenticated endpoints
+    const token = localStorage.getItem('token');
+    if (!token) {
+      Swal.fire({ icon: 'error', title: 'No autorizado', text: 'Debes iniciar sesión antes de añadir campos.' });
+      return;
+    }
+
     try {
       const newFieldObj = {
         botId: parseInt(id),
@@ -78,6 +86,9 @@ function DefineCapturedData() {
       setNewField("");
     } catch (error) {
       console.error("Error creando campo:", error);
+      const status = error?.response?.status;
+      const msg = error?.response?.data?.message || error?.message || 'Error desconocido';
+      Swal.fire({ icon: 'error', title: `Error creando campo (${status})`, text: msg });
     }
   };
 

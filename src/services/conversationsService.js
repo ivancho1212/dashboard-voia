@@ -83,28 +83,39 @@ export async function markMessagesAsRead(conversationId) {
 export async function getMessagesByConversationId(conversationId) {
   try {
     const response = await axios.get(`${BASE_URL}/api/Messages/by-conversation/${conversationId}`);
+    const raw = Array.isArray(response.data) ? response.data : [];
 
-    const messages = Array.isArray(response.data) ? response.data : [];
+    return raw.map((msg) => {
+      const id = msg.id ?? msg.Id;
+      const text = msg.messageText ?? msg.MessageText ?? msg.text ?? msg.Text ?? "";
+      const timestamp = msg.createdAt ?? msg.CreatedAt ?? null;
+      const fromRole = msg.sender ?? msg.Sender ?? (msg.UserId || msg.PublicUserId ? "user" : null);
+      const fromName = (msg.user && msg.user.name) || msg.UserName || msg.userName || null;
+      const replyTo = msg.replyToMessageId ?? msg.ReplyToMessageId ?? null;
 
-    return messages.map((msg) => ({
-      id: msg.id,
-      from: msg.sender,
-      text: msg.messageText,
-      timestamp: msg.createdAt,
-      replyTo: msg.replyToMessageId
-        ? {
-            id: msg.replyToMessageId,
-            text: "mensaje anterior",
-          }
-        : null,
-      multipleFiles: null,
-      fileContent: null,
-      fileType: null,
-      fileName: null,
-    }));
+      return {
+        id,
+        from: fromRole,
+        text,
+        timestamp,
+        fromRole,
+        fromName,
+        replyTo: replyTo
+          ? {
+              id: replyTo,
+              text: "mensaje anterior",
+            }
+          : null,
+        multipleFiles: null,
+        fileContent: null,
+        fileType: null,
+        fileName: null,
+      };
+    });
   } catch (error) {
     console.error("❌ [getMessagesByConversationId] Error al obtener mensajes:", error);
-    return [];
+    // Return null to indicate the fetch failed (distinguish from an empty but successful response)
+    return null;
   }
 }
 
