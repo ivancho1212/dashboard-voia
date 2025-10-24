@@ -66,6 +66,21 @@ export async function getConversationHistory(conversationId) {
     return null; // Devolver null para manejar el error en el componente
   }
 }
+
+// ✅ Nuevo: obtener mensajes paginados usando el endpoint del backend
+export async function getMessagesPaginated(conversationId, before = null, limit = 50) {
+  try {
+    const params = {};
+    if (before) params.before = before; // Date ISO string
+    if (limit) params.limit = limit;
+    const response = await axios.get(`${BASE_URL}/api/Conversations/${conversationId}/messages`, { params });
+    // Response shape: { conversationId, messages: [...], hasMore, nextBefore }
+    return response.data;
+  } catch (error) {
+    console.error("❌ [getMessagesPaginated] Error al obtener mensajes paginados:", error);
+    return null;
+  }
+}
 // ✅ Nuevo: Marcar mensajes como leídos en una conversación
 export async function markMessagesAsRead(conversationId) {
   try {

@@ -34,13 +34,17 @@ function isEmoji(str) {
 }
 
 const normalizeMessage = (msg) => {
-  const id = msg.id ?? msg.tempId ?? uuidv4();
+  // Normalize IDs to strings to avoid numeric/string mismatches
+  const rawId = msg.id ?? msg.tempId ?? uuidv4();
+  const id = rawId !== undefined && rawId !== null ? String(rawId) : String(uuidv4());
+  const tempRaw = msg.tempId ?? id;
+  const tempId = tempRaw !== undefined && tempRaw !== null ? String(tempRaw) : id;
   const uniqueKey = msg.tempId ?? id; // Prioritize tempId for the key
 
   return {
     ...msg,
-    id, // The real ID can update, that's fine.
-    tempId: msg.tempId ?? id, // Ensure tempId is always present if possible
+    id, // The real ID can update, that's fine. Always a string.
+    tempId, // Ensure tempId is always present if possible (string)
     status: msg.status ?? "sent",
     from: msg.from ?? (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "bot"),
     text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
@@ -542,9 +546,11 @@ useEffect(() => {
       });
     };
 
-    let connection;
+  let connection;
+  // Declare handler here so cleanup (return) can reference it without being undefined
+  let handleMessageQueued;
 
-    const initConnection = async () => {
+  const initConnection = async () => {
       console.log("🟡 Inicializando chat vía servicio:", { botId, userId });
       try {
         const convId = await createConversation(userId, botId);
@@ -587,7 +593,7 @@ useEffect(() => {
         connection.on("ReceiveMessage", handleReceiveMessage);
 
         // Handle ack that the message was queued (contains conversationId, messageId, tempId)
-        const handleMessageQueued = (payload) => {
+        handleMessageQueued = (payload) => {
           try {
             console.log("📬 MessageQueued recibido:", payload);
             const { conversationId: cqId, messageId, tempId } = payload || {};
@@ -596,7 +602,7 @@ useEffect(() => {
             setMessages(prev => prev.map(m => {
               if (m.tempId && tempId && m.tempId === tempId) {
                 // Update the temp message with the real id and mark as queued
-                return { ...m, id: messageId || m.id, status: 'queued' };
+                return { ...m, id: messageId ? String(messageId) : m.id, status: 'queued' };
               }
               return m;
             }));
@@ -886,29 +892,32 @@ useEffect(() => {
   const wrapperStyle = {
     position: "fixed",
     zIndex: 9999,
-    pointerEvents: isOpen ? "auto" : "none", // Solo interceptar eventos cuando está abierto
+    // Let clicks pass through the wrapper itself; only inner interactive elements opt-in with pointerEvents:auto
+    pointerEvents: "none",
     ...positionStyles[position],
   };
-
   const openImageModal = (images, clickedImageUrl) => {
-    // Limpiar primero
+    // Reset state then open modal after a tiny delay so layout stabilizes
     setImageGroup([]);
     setActiveImageIndex(0);
     setIsImageModalOpen(false);
 
-    // Esperar al siguiente frame para asegurar que el estado se "limpie"
     setTimeout(() => {
       const index = images.findIndex((img) => {
-        const url = img.fileUrl.startsWith("http")
-          ? img.fileUrl
-          : `http://localhost:5006${img.fileUrl}`;
-        return url === clickedImageUrl;
+        try {
+          const url = img.fileUrl && String(img.fileUrl).startsWith("http")
+            ? img.fileUrl
+            : `http://localhost:5006${img.fileUrl}`;
+          return url === clickedImageUrl;
+        } catch (e) {
+          return false;
+        }
       });
 
-      setImageGroup(images);
+      setImageGroup(images || []);
       setActiveImageIndex(index >= 0 ? index : 0);
       setIsImageModalOpen(true);
-    }, 10); // Pequeño delay para asegurar la limpieza
+    }, 10); // small delay to ensure the modal opens after DOM updates
   };
 
   useEffect(() => {
@@ -920,7 +929,6 @@ useEffect(() => {
       const max = 2500;   // tope 2.5s
       return Math.min(max, base + text.length * perChar);
     };
-
     const demoSequence = [
       { sender: "bot", content: "¡Hola! Soy tu asistente virtual. ¿Cómo puedo ayudarte hoy?", typing: 1200, after: 800 },
       { sender: "user", content: "Hola, quiero información sobre sus servicios.", after: 1500 },
@@ -935,30 +943,23 @@ useEffect(() => {
 
     demoSequence.forEach((item) => {
       if (item.sender === "bot") {
-        // 1. Calcular duración del "typing"
         const typingDuration = item.typing ?? getTypingDuration(item.content);
 
-        // 2. Programar el inicio del "typing"
         const typingOnId = setTimeout(() => {
-          console.log(`✍️ [TYPING ON] ${item.sender}`);
           setTypingSender(item.sender);
           setIsTyping(true);
         }, totalDelay);
         timeoutIds.push(typingOnId);
 
-        // 3. Incrementar el delay por la duración del typing
         totalDelay += typingDuration;
 
-        // 4. Programar la llegada del mensaje
         const messageId = setTimeout(() => {
-          console.log(`[DEMO] Adding message for: ${item.sender} and setting isTyping to FALSE`);
           const newMsg = normalizeMessage({
             id: `demo-${counter++}-${Date.now()}`,
-            sender: item.sender,
-            content: item.content,
+            from: item.sender === 'bot' ? 'bot' : 'user',
+            text: item.content,
             type: "text",
             timestamp: new Date().toISOString(),
-            userId: "bot-id",
             imageGroup: [],
             files: [],
           });
@@ -968,23 +969,16 @@ useEffect(() => {
         }, totalDelay);
         timeoutIds.push(messageId);
 
-        // 5. Añadir el delay posterior antes del siguiente mensaje
         totalDelay += item.after ?? 0;
-
-      } else { // Mensajes del usuario
-        // 1. Añadir el delay antes del mensaje del usuario
+      } else {
         totalDelay += item.after ?? 0;
-
-        // 2. Programar la llegada del mensaje del usuario
         const messageId = setTimeout(() => {
-          console.log(`🙋 [USER MESSAGE]: ${item.content}`);
           const newMsg = normalizeMessage({
             id: `demo-${counter++}-${Date.now()}`,
-            sender: "user",
-            content: item.content,
-            type: "text",
+            from: 'user',
+            text: item.content,
+            type: 'text',
             timestamp: new Date().toISOString(),
-            userId: "demo-user-id",
             imageGroup: [],
             files: [],
           });
@@ -994,10 +988,8 @@ useEffect(() => {
       }
     });
 
-    // Función de limpieza para todos los timeouts
     return () => {
       timeoutIds.forEach((id) => clearTimeout(id));
-      console.log("♻️ Cleanup demo: typing OFF");
       setIsTyping(false);
       setTypingSender(null);
     };
@@ -1007,6 +999,8 @@ useEffect(() => {
 
   return (
     <div style={wrapperStyle}>
+      {/* Spinner keyframes - injected inline to avoid touching global CSS files */}
+      <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       {!isOpen ? (
         // 🔘 Botón flotante cuando está cerrado
         <button
@@ -1070,7 +1064,7 @@ useEffect(() => {
         </button>
       ) : (
         // 💬 Widget abierto
-        <div style={widgetStyle}>
+        <div style={{ ...widgetStyle, pointerEvents: "auto" }}>
           {/* 🔥 Header */}
           <div
             style={{

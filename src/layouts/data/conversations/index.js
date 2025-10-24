@@ -24,6 +24,7 @@ import {
   getConversationsByUser,
   getMessagesByConversationId,
   getConversationHistory,
+  getMessagesPaginated,
   updateConversationStatus,
   markMessagesAsRead,
   updateConversationIsWithAI,
@@ -68,6 +69,7 @@ function Conversations() {
   const chatPanelRef = useRef(null);
   const connectionRef = useRef(null);
   const messageCache = useRef(new Map());
+  const messageCursor = useRef(new Map()); // stores { hasMore, nextBefore } per conversationId
   const typingStopTimeout = useRef(null);
 
   const [showScrollButtons, setShowScrollButtons] = useState(false);
@@ -283,7 +285,25 @@ function Conversations() {
     );
     setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
 
-    const cached = messageCache.current.get(idStr);
+      // If there is no cached or SignalR-loaded messages yet but the
+      // conversation list shows a preview (conv.lastMessage), show a
+      // temporary preview message immediately so the admin doesn't see
+      // an empty chat. The real history will replace this when fetched.
+      const hasExistingMessages = Boolean((messages && messages[idStr] && messages[idStr].length > 0) || messageCache.current.get(idStr));
+      if (!hasExistingMessages && conv.lastMessage) {
+        const previewMsg = {
+          id: `preview-${idStr}`,
+          text: conv.lastMessage,
+          from: "user",
+          fromRole: "user",
+          fromName: conv.alias || null,
+          timestamp: conv.updatedAt || new Date().toISOString(),
+          __preview: true,
+        };
+        setMessages((prev) => ({ ...prev, [idStr]: [previewMsg] }));
+      }
+
+      const cached = messageCache.current.get(idStr);
     if (cached) {
       setMessages((prev) => ({ ...prev, [idStr]: cached }));
       if (conv.unreadCount > 0) {
@@ -296,15 +316,23 @@ function Conversations() {
     } else {
       setLoadingConversationId(idStr);
       try {
-        const fetchedHistory = await getConversationHistory(conv.id);
-        // Debug: log the API payload returned for history
-        console.log("🔎 [getConversationHistory] payload for conv", conv.id, fetchedHistory);
-        if (fetchedHistory && Array.isArray(fetchedHistory.history) && fetchedHistory.history.length > 0) {
-          const normalized = fetchedHistory.history.map((msg) => {
+        // Cargamos la última página usando el endpoint paginado. Esto evita traer TODO el historial
+        // y nos da un cursor (nextBefore) para paginar hacia atrás.
+        const paged = await getMessagesPaginated(conv.id, null, 50);
+        console.log("🔎 [getMessagesPaginated] payload for conv", conv.id, paged);
+        if (paged && Array.isArray(paged.messages) && paged.messages.length > 0) {
+          const normalized = paged.messages.map((msg) => {
             // support API returning PascalCase (C#) or camelCase (JS)
             const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
             const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
-            const fromRole = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+            // Normalize various casings/values into a stable lowercase role
+            let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+            try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+            let fromRole = (fromRoleRaw || "").toLowerCase();
+            if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") {
+              // Treat unknown variants as public/user
+              fromRole = "user";
+            }
             const from = msg.from ?? msg.From ?? null;
             const fromId = msg.fromId ?? msg.FromId ?? msg.fromId ?? msg.FromId ?? msg.FromId ?? null;
             const fromName = msg.fromName ?? msg.FromName ?? msg.fromName ?? msg.FromName ?? null;
@@ -321,8 +349,43 @@ function Conversations() {
               fromName,
             };
           });
-          setMessages((prev) => ({ ...prev, [idStr]: normalized }));
-          messageCache.current.set(idStr, normalized);
+          // Merge fetched page with any existing messages (SignalR optimistic / preview)
+          setMessages((prev) => {
+            const existing = prev[idStr] || [];
+            const map = new Map();
+            // add fetched history first (older items)
+            normalized.forEach((m) => map.set(String(m.id), m));
+            // then existing to preserve optimistic messages at the end
+            existing.forEach((m) => map.set(String(m.id), m));
+            const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+            // update cache and cursor info
+            messageCache.current.set(idStr, merged);
+            if (paged.hasMore) {
+              messageCursor.current.set(idStr, { hasMore: true, nextBefore: paged.nextBefore });
+            } else {
+              messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
+            }
+            return { ...prev, [idStr]: merged };
+          });
+
+          // If the last page we loaded contains only admin messages, and there are older pages,
+          // automatically fetch up to N older pages so the admin immediately sees public/user or bot messages.
+          try {
+            const mergedNow = messageCache.current.get(idStr) || [];
+            const onlyAdmins = mergedNow.length > 0 && mergedNow.every(m => (m.fromRole || (m.FromRole || m.from || 'user')).toString().toLowerCase() === 'admin');
+            if (onlyAdmins) {
+              const maxAutoPages = 3; // don't loop forever; tune as needed
+              for (let i = 0; i < maxAutoPages; i++) {
+                const added = await loadMoreOlderMessages(conv.id);
+                if (!added) break; // no more messages or error
+                const now = messageCache.current.get(idStr) || [];
+                const hasNonAdmin = now.some(m => (m.fromRole || (m.FromRole || m.from || '')).toString().toLowerCase() !== 'admin');
+                if (hasNonAdmin) break;
+              }
+            }
+          } catch (autoErr) {
+            console.warn("⚠️ Auto-prefetch older pages failed:", autoErr);
+          }
           console.log("🔎 [getConversationHistory] normalized messages stored in cache for conv", idStr, normalized.map(m => ({ id: m.id, text: m.text })));
           if (conv.unreadCount > 0) {
             try {
@@ -343,8 +406,17 @@ function Conversations() {
                 id: msg.id ? String(msg.id) : `${idStr}-${Date.now()}`,
                 text: msg.text || msg.messageText || "",
               }));
-              setMessages((prev) => ({ ...prev, [idStr]: fallbackNormalized }));
-              messageCache.current.set(idStr, fallbackNormalized);
+              // Merge with existing to avoid wiping SignalR/preview messages
+              setMessages((prev) => {
+                const existing = prev[idStr] || [];
+                const map = new Map();
+                existing.forEach((m) => map.set(String(m.id), m));
+                fallbackNormalized.forEach((m) => map.set(String(m.id), m));
+                const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+                messageCache.current.set(idStr, merged);
+                // fallback -> no cursor info available
+                return { ...prev, [idStr]: merged };
+              });
               console.log("🔁 [fallback] normalized stored for conv", idStr, fallbackNormalized.map(m => ({ id: m.id, text: m.text })));
             } else {
               console.warn(`🔁 [fallback] returned no messages for conv ${conv.id}, preserving existing messages`);
@@ -368,6 +440,57 @@ function Conversations() {
       } finally {
         setLoadingConversationId(null);
       }
+    }
+  };
+
+  // Cargar más mensajes antiguos (paginación hacia atrás). Devuelve el número de mensajes añadidos.
+  const loadMoreOlderMessages = async (conversationId) => {
+    const idStr = String(conversationId);
+    const cursor = messageCursor.current.get(idStr) || { hasMore: false, nextBefore: null };
+    if (!cursor.hasMore || !cursor.nextBefore) return 0;
+    try {
+      const before = cursor.nextBefore;
+      const paged = await getMessagesPaginated(conversationId, before, 50);
+      if (!paged || !Array.isArray(paged.messages) || paged.messages.length === 0) {
+        messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
+        return 0;
+      }
+
+      const normalized = paged.messages.map((msg) => {
+        const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+        const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+        let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+        try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+        let fromRole = (fromRoleRaw || "").toLowerCase();
+        if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+        const fromId = msg.fromId ?? msg.FromId ?? null;
+        const fromName = msg.fromName ?? msg.FromName ?? null;
+        return { ...msg, id: String(id), text, fromRole, fromId, fromName };
+      });
+
+      // Prepend older messages to cache
+      setMessages((prev) => {
+        const existing = prev[idStr] || [];
+        const map = new Map();
+        // add normalized older first
+        normalized.forEach((m) => map.set(String(m.id), m));
+        // then existing messages
+        existing.forEach((m) => map.set(String(m.id), m));
+        const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+        messageCache.current.set(idStr, merged);
+        // update cursor
+        if (paged.hasMore) {
+          messageCursor.current.set(idStr, { hasMore: true, nextBefore: paged.nextBefore });
+        } else {
+          messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
+        }
+        return { ...prev, [idStr]: merged };
+      });
+
+      return normalized.length;
+    } catch (err) {
+      console.error("❌ Error cargando página antigua:", err);
+      return 0;
     }
   };
 
@@ -565,6 +688,7 @@ function Conversations() {
                     onAdminStopTyping={handleAdminStopTyping}
                     connection={connectionRef.current}
                     currentUser={{ id: "admin" }}
+                    onLoadMoreOlderMessages={loadMoreOlderMessages}
                   />
                 ) : (
                   <SoftBox display="flex" justifyContent="center" alignItems="center" height="100%">

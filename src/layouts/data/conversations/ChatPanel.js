@@ -81,6 +81,7 @@ const ChatPanel = forwardRef(
     const [expandedTagIndex, setExpandedTagIndex] = useState(null);
     const isTagLimitReached = conversationTags.length >= 6;
     const [loadingConversationId, setLoadingConversationId] = useState(null);
+    const [loadingOlder, setLoadingOlder] = useState(false);
 
     const inputRef = useRef(null);
     const scrollToBottom = () => {
@@ -88,9 +89,15 @@ const ChatPanel = forwardRef(
     };
     const [hasMounted, setHasMounted] = useState(false);
 
-    useImperativeHandle(ref, () => ({
+      useImperativeHandle(ref, () => ({
       isInputFocused: () => inputRef.current === document.activeElement,
     }));
+
+      // Marcar como montado para que los useLayoutEffect que dependen de hasMounted
+      useEffect(() => {
+        setHasMounted(true);
+        return () => setHasMounted(false);
+      }, []);
 
     useEffect(() => {
       if (iaPaused && inputRef.current) inputRef.current.focus();
@@ -320,16 +327,43 @@ const ChatPanel = forwardRef(
           }
         }
 
+        // Normalize fromRole to a stable lowercase value. Treat unknowns as 'user'.
+        let rawFrom = msg.fromRole ?? msg.from ?? "user";
+        try { rawFrom = String(rawFrom); } catch (e) { rawFrom = "user"; }
+        let normalizedFromRole = (rawFrom || "").toLowerCase();
+        if (normalizedFromRole !== "admin" && normalizedFromRole !== "bot" && normalizedFromRole !== "user") {
+          normalizedFromRole = "user";
+        }
+
         return {
           ...msg,
-          fromName: msg.fromRole === "admin" ? "Admin" : `Sesión ${conversationId}`,
+          fromName: normalizedFromRole === "admin" ? "Admin" : `Sesión ${conversationId}`,
           text: normalizedText,
-          fromRole: msg.fromRole || msg.from || "user",
+          fromRole: normalizedFromRole,
           files: files.length > 0 ? files : undefined,
           replyTo: resolvedReplyTo ?? msg.replyTo ?? null,
         };
       });
     }, [messages, conversationId]);
+
+    // Expose the processedMessages to window for easier debugging in dev
+    useEffect(() => {
+      try {
+        if (typeof window !== 'undefined') window.__lastProcessedMessages = processedMessages;
+      } catch (e) {
+        /* ignore */
+      }
+    }, [processedMessages]);
+
+    // Al cambiar de conversación, asegurarnos de posicionar al final (comportamiento esperado al abrir)
+    useEffect(() => {
+      if (!hasMounted) return;
+      // pequeño retardo para dejar que el DOM pinte imágenes/elementos
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
+        setIsUserAtBottom(true);
+      }, 50);
+    }, [conversationId, hasMounted]);
 
     useEffect(() => {
       const fetchTags = async () => {
@@ -648,6 +682,28 @@ const ChatPanel = forwardRef(
           onScroll={(e) => {
             const el = e.target;
             setIsUserAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 150);
+            // Si estamos cerca del top, solicitar más mensajes antiguos
+            if (el.scrollTop < 120 && typeof onLoadMoreOlderMessages === "function" && !loadingOlder) {
+              (async () => {
+                try {
+                  setLoadingOlder(true);
+                  const oldScrollHeight = el.scrollHeight;
+                  const added = await onLoadMoreOlderMessages(conversationId);
+                  // si añadimos mensajes, ajustamos scroll para mantener la vista en la misma posición
+                  if (added && added > 0) {
+                    // dejar un pequeño delay para que el DOM se actualice (imágenes, etc.)
+                    setTimeout(() => {
+                      const newScrollHeight = el.scrollHeight;
+                      el.scrollTop = newScrollHeight - oldScrollHeight + el.scrollTop;
+                    }, 50);
+                  }
+                } catch (e) {
+                  console.error('Error cargando mensajes antiguos', e);
+                } finally {
+                  setLoadingOlder(false);
+                }
+              })();
+            }
           }}
           style={{
             flex: 1,
@@ -660,6 +716,11 @@ const ChatPanel = forwardRef(
             position: "relative",
           }}
         >
+          {/* Indicador cuando se están cargando páginas antiguas */}
+          {loadingOlder && (
+            <div style={{ marginBottom: 10, color: "#888", textAlign: "center" }}>Cargando mensajes antiguos...</div>
+          )}
+
           {loadingConversationId === `${conversationId}` ? (
             <>
               <div style={{ marginBottom: 10, color: "#888" }}></div>
@@ -769,6 +830,7 @@ ChatPanel.propTypes = {
   onAdminTyping: PropTypes.func.isRequired,
   onAdminStopTyping: PropTypes.func, // ✅ agregado
     typingConversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // ✅ agregar
+  onLoadMoreOlderMessages: PropTypes.func, // (conversationId) => Promise<number>
 };
 
 export default ChatPanel;
