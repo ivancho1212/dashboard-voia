@@ -361,7 +361,10 @@ function WidgetFrame() {
         if (!el) return;
         const rect = el.getBoundingClientRect();
         const preferredWidth = Math.ceil(rect.width) || 300;
-        const preferredHeight = Math.ceil(rect.height) || 200;
+        let preferredHeight = Math.ceil(rect.height) || 200;
+        // Clamp preferred height to a sensible max so embeds/preview don't expand beyond widget design
+        const MAX_WIDGET_HEIGHT = 700; // must match ChatWidget maxHeight
+        if (preferredHeight > MAX_WIDGET_HEIGHT) preferredHeight = MAX_WIDGET_HEIGHT;
         console.log('[child] measured preferredSize', { preferredWidth, preferredHeight });
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'preferred-size', width: preferredWidth, height: preferredHeight }, '*');

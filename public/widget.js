@@ -77,21 +77,34 @@
             iframe.style.right = '';
             iframe.style.transform = '';
             iframe.style.position = 'fixed';
-            const margin = '20px';
+            const margin = 20; // px
+            // Try to detect a header/navbar element on the host page to avoid overlapping it
+            const headerSelectorCandidates = ['header', '.MuiAppBar-root', '.navbar', '#navbar', '.topbar', '.app-header'];
+            let navbarHeight = 0;
+            for (const sel of headerSelectorCandidates) {
+              const el = document.querySelector(sel);
+              if (el) {
+                const r = el.getBoundingClientRect();
+                if (r && r.height > navbarHeight) navbarHeight = r.height;
+              }
+            }
+            // If navbarHeight was found, add a small spacing
+            const topOffset = navbarHeight ? navbarHeight + margin : margin;
             switch (String(pos)) {
               case 'bottom-left':
-                iframe.style.bottom = margin; iframe.style.left = margin; break;
+                iframe.style.bottom = `${margin}px`; iframe.style.left = `${margin}px`; break;
               case 'top-left':
-                iframe.style.top = margin; iframe.style.left = margin; break;
+                iframe.style.top = `${topOffset}px`; iframe.style.left = `${margin}px`; break;
               case 'top-right':
-                iframe.style.top = margin; iframe.style.right = margin; break;
+                iframe.style.top = `${topOffset}px`; iframe.style.right = `${margin}px`; break;
               case 'center-left':
-                iframe.style.top = '50%'; iframe.style.left = margin; iframe.style.transform = 'translateY(-50%)'; break;
+                // center vertically relative to viewport; add small topOffset to nudge below header if present
+                iframe.style.top = navbarHeight ? `calc(50% + ${navbarHeight / 2}px)` : '50%'; iframe.style.left = `${margin}px`; iframe.style.transform = 'translateY(-50%)'; break;
               case 'center-right':
-                iframe.style.top = '50%'; iframe.style.right = margin; iframe.style.transform = 'translateY(-50%)'; break;
+                iframe.style.top = navbarHeight ? `calc(50% + ${navbarHeight / 2}px)` : '50%'; iframe.style.right = `${margin}px`; iframe.style.transform = 'translateY(-50%)'; break;
               case 'bottom-right':
               default:
-                iframe.style.bottom = margin; iframe.style.right = margin; break;
+                iframe.style.bottom = `${margin}px`; iframe.style.right = `${margin}px`; break;
             }
             console.log('[parent] applied position from child config:', pos);
           }
