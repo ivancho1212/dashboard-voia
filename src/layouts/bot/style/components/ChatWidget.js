@@ -12,6 +12,7 @@ import ImagePreviewModal from "./chat/ImagePreviewModal";
 import { getBotContext } from "services/botService";
 import { createConversation } from "services/chatService";
 import { getSenderColor } from "../../../../utils/colors";
+import QRCode from "qrcode.react";
 
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
@@ -68,6 +69,7 @@ function ChatWidget({
   rootRef = null,
   // optional explicit containerSize applied by parent (px)
   containerSize = null,
+  previewMode = false,
 }) {
   const connectionRef = useRef(null);
   const botId = propBotId ?? 2;
@@ -340,6 +342,7 @@ function ChatWidget({
 
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [isMobileLocked, setIsMobileLocked] = useState(false);
   const [imageGroup, setImageGroup] = useState([]);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
@@ -361,8 +364,26 @@ function ChatWidget({
       setTypingSender(null);
     }
   }, [isBotReady, isConnected, iaWarning, isTyping]);
-  const CACHE_KEY = `chat_${botId}_${userId}`;
-  const CACHE_TIMEOUT = 1 * 60 * 1000;
+  // Generar un id de instancia del widget por pestaña (sessionStorage) para aislar sesiones
+  const [widgetInstanceId] = useState(() => {
+    try {
+      const existing = sessionStorage.getItem('widget_instance_id');
+      if (existing) return existing;
+      const newId = uuidv4();
+      sessionStorage.setItem('widget_instance_id', newId);
+      return newId;
+    } catch (e) {
+      // si sessionStorage falla (modo SSR improbable), generar id temporal
+      return uuidv4();
+    }
+  });
+
+  // La clave del cache incluye el widgetInstanceId para evitar compartir conversaciones entre pestañas/usuarios
+  const CACHE_KEY = `chat_${botId}_${userId || 'anon'}_${widgetInstanceId}`;
+  // Mantener la conversación en caché solo por un intervalo corto (p. ej. 2 minutos)
+  // Esto permite restaurar al recargar accidentalmente pero evita compartir la misma conversación
+  // entre diferentes usuarios del mismo equipo.
+  const CACHE_TIMEOUT = 2 * 60 * 1000; // 2 minutos
 
   // ✅ Única lógica de carga de caché al inicio, evitando duplicados
   useEffect(() => {
@@ -392,29 +413,26 @@ function ChatWidget({
 
   useEffect(() => {
     const interval = setInterval(() => {
-      const raw = localStorage.getItem(CACHE_KEY);
-      if (raw) {
-        try {
-          const data = JSON.parse(raw);
-          const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
-          if (isExpired) {
-            console.log("⏰ Caché expirado en segundo plano, limpiando...");
-
-            // 🔥 Limpiar cache Y estados React
-            localStorage.removeItem(CACHE_KEY);
-            setConversationId(null);
-            setMessages([]);
-            setPromptSent(false);
-            promptSentRef.current = false;
-          }
-        } catch (e) {
-          console.error("⚠️ Error parseando caché, limpiando:", e);
-          localStorage.removeItem(CACHE_KEY);
+      try {
+        const raw = sessionStorage.getItem(CACHE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
+        if (isExpired) {
+          console.log("⏰ Caché expirado en segundo plano, limpiando...");
+          sessionStorage.removeItem(CACHE_KEY);
           setConversationId(null);
           setMessages([]);
+          setPromptSent(false);
+          promptSentRef.current = false;
         }
+      } catch (e) {
+        console.error("⚠️ Error parseando caché, limpiando:", e);
+        try { sessionStorage.removeItem(CACHE_KEY); } catch (_) {}
+        setConversationId(null);
+        setMessages([]);
       }
-    }, 60 * 1000); // revisar cada minuto
+    }, 30 * 1000); // revisar cada 30s
 
     return () => clearInterval(interval);
   }, []);
@@ -456,24 +474,34 @@ function ChatWidget({
       }));
     }
 
-    localStorage.setItem(
-      CACHE_KEY,
-      JSON.stringify({ conversationId: convId, messages: mergedMessages, timestamp: Date.now() })
-    );
+    try {
+      sessionStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({ conversationId: convId, messages: mergedMessages, timestamp: Date.now() })
+      );
+    } catch (e) {
+      console.warn('⚠️ No se pudo guardar en sessionStorage, intentando localStorage como fallback', e);
+      try {
+        localStorage.setItem(
+          CACHE_KEY,
+          JSON.stringify({ conversationId: convId, messages: mergedMessages, timestamp: Date.now() })
+        );
+      } catch (e2) {
+        console.error('❌ Error guardando caché de conversación:', e2);
+      }
+    }
   };
 
   const loadConversationCache = () => {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-
     try {
+      const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
       const data = JSON.parse(raw);
       const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
       if (isExpired) {
         console.log("⏰ Caché expirado, eliminando...");
-
-        // 🔥 Limpiar cache y estado de React
-        localStorage.removeItem(CACHE_KEY);
+        try { sessionStorage.removeItem(CACHE_KEY); } catch (_) {}
+        try { localStorage.removeItem(CACHE_KEY); } catch (_) {}
         setConversationId(null);
         setMessages([]);
         setPromptSent(false);
@@ -483,7 +511,8 @@ function ChatWidget({
       return data;
     } catch (e) {
       console.error("⚠️ Error parseando caché, limpiando:", e);
-      localStorage.removeItem(CACHE_KEY);
+      try { sessionStorage.removeItem(CACHE_KEY); } catch (_) {}
+      try { localStorage.removeItem(CACHE_KEY); } catch (_) {}
       setConversationId(null);
       setMessages([]);
       setPromptSent(false);
@@ -553,6 +582,7 @@ useEffect(() => {
   let connection;
   // Declare handler here so cleanup (return) can reference it without being undefined
   let handleMessageQueued;
+  let handleMobileSessionChanged;
 
   const initConnection = async () => {
       console.log("🟡 Inicializando chat vía servicio:", { botId, userId });
@@ -637,6 +667,19 @@ useEffect(() => {
           });
         });
 
+        // Mobile session lock/unlock (server should broadcast MobileSessionChanged(conversationId, blocked))
+        handleMobileSessionChanged = (convId, blocked) => {
+          try {
+            console.log("🔁 MobileSessionChanged recibido:", convId, blocked);
+            if (convId === conversationIdRef.current) {
+              setIsMobileLocked(Boolean(blocked));
+            }
+          } catch (e) {
+            console.error("Error manejando MobileSessionChanged:", e);
+          }
+        };
+        connection.on("MobileSessionChanged", handleMobileSessionChanged);
+
         await connection.start();
         setConnectionStatus("conectado");
         setIsConnected(true);
@@ -664,6 +707,7 @@ useEffect(() => {
         // ✅ Limpiar listeners correctos
         connectionRef.current.off("ReceiveTyping");
         connectionRef.current.off("ReceiveStopTyping");
+        connectionRef.current.off("MobileSessionChanged", handleMobileSessionChanged);
         connectionRef.current.stop();
         connectionRef.current = null;
       }
@@ -740,6 +784,11 @@ useEffect(() => {
 
     const trimmedMessage = message.trim();
     if (!trimmedMessage) return;
+
+    if (isMobileLocked) {
+      console.warn("🔒 Mensaje bloqueado: la sesión está activa en un dispositivo móvil.");
+      return;
+    }
 
     if (isDemo) {
       const userMessage = normalizeMessage({
@@ -906,6 +955,8 @@ useEffect(() => {
 
   // The wrapper inside the iframe should not be fixed or use viewport units.
   // Positioning of the iframe itself should be decided by the host page (parent).
+  
+
   const wrapperStyle = {
     position: "relative",
     zIndex: 9999,
@@ -914,6 +965,46 @@ useEffect(() => {
     width: containerSize && containerSize.width ? `${containerSize.width}px` : '100%',
     height: containerSize && containerSize.height ? `${containerSize.height}px` : '100%'
   };
+
+  // If we're rendering inside the dashboard preview, position the widget fixed
+  // so it doesn't get caught by the page layout (nav) and so top positions sit under the nav.
+  const previewFixedStyle = previewMode
+    ? (function () {
+        const topOffset = 80; // px to avoid overlapping the dashboard nav/header
+        switch (position) {
+          case 'bottom-right':
+            return { position: 'fixed', zIndex: 99999, right: '20px', bottom: '20px', width: widgetStyle.maxWidth };
+          case 'bottom-left':
+            return { position: 'fixed', zIndex: 99999, left: '20px', bottom: '20px', width: widgetStyle.maxWidth };
+          case 'top-right':
+            return { position: 'fixed', zIndex: 99999, right: '20px', top: `${topOffset}px`, width: widgetStyle.maxWidth };
+          case 'top-left':
+            return { position: 'fixed', zIndex: 99999, left: '20px', top: `${topOffset}px`, width: widgetStyle.maxWidth };
+          case 'center-left':
+            return { position: 'fixed', zIndex: 99999, left: '20px', top: '50%', transform: 'translateY(-50%)', width: widgetStyle.maxWidth };
+          case 'center-right':
+          default:
+            return { position: 'fixed', zIndex: 99999, right: '20px', top: '50%', transform: 'translateY(-50%)', width: widgetStyle.maxWidth };
+        }
+      })()
+    : {};
+
+  // Outer style to use when rendering in preview mode (dashboard):
+  // apply fixed positioning and a sensible width so the widget doesn't get compressed
+  const outerStyle = previewMode
+    ? {
+        // previewFixedStyle already computes fixed position + width
+        ...previewFixedStyle,
+        // ensure the container receives pointer events in preview so the widget is interactive
+        pointerEvents: 'auto',
+        // let the inner widget size itself; avoid forcing 100% height which can compress it
+        height: 'auto',
+        // keep a small margin so it doesn't stick to edges
+        margin: 0,
+      }
+    : wrapperStyle;
+
+  
   const openImageModal = (images, clickedImageUrl) => {
     // Reset state then open modal after a tiny delay so layout stabilizes
     setImageGroup([]);
@@ -1013,14 +1104,14 @@ useEffect(() => {
     };
   }, [isDemo, isOpen]);
 
-  const isInputDisabled = isDemo ? false : !isConnected;
+  const isInputDisabled = isDemo ? false : (!isConnected || isMobileLocked);
 
   return (
-    <div ref={rootRef} style={wrapperStyle}>
+  <div ref={rootRef} style={outerStyle}>
       {/* Spinner keyframes - injected inline to avoid touching global CSS files */}
       <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       {!isOpen ? (
-        // 🔘 Botón flotante cuando está cerrado
+        // 🔘 Botón flotante cuando está cerrado (oculto en previewMode)
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Abrir chat"
@@ -1082,21 +1173,22 @@ useEffect(() => {
             )}
           </div>
         </button>
-      ) : (
+    ) : (
   // 💬 Widget abierto
-  <div style={{ ...widgetStyle, pointerEvents: "auto", margin: '0 auto' }}>
+  <div style={{ ...widgetStyle, pointerEvents: "auto", margin: '0 auto', height: previewMode ? widgetStyle.maxHeight : widgetStyle.height }}>
           {/* 🔥 Header */}
           <div
             style={{
               backgroundColor: headerBackground,
               width: "100%",
-              height: "100px",
+              height: "86px",
               borderTopLeftRadius: "16px",
               borderTopRightRadius: "16px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+              boxShadow: "0 2px 4px rgba(0,0,0,0.08)",
+              paddingRight: "8px",
             }}
           >
             {/* 📌 Avatar + Título */}
@@ -1110,8 +1202,8 @@ useEffect(() => {
             >
               <div
                 style={{
-                  width: "42px",
-                  height: "42px",
+                  width: "50px",
+                  height: "50px",
                   borderRadius: "50%",
                   display: "flex",
                   alignItems: "center",
@@ -1123,7 +1215,7 @@ useEffect(() => {
                 {isEmoji(avatarUrl) ? (
                   <span 
                     style={{ 
-                      fontSize: "24px", 
+                      fontSize: "26px", 
                       lineHeight: 1,
                       userSelect: "none",
                       fontFamily: "'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', 'Android Emoji', 'EmojiOne Color', 'Twemoji Mozilla', sans-serif"
@@ -1136,8 +1228,8 @@ useEffect(() => {
                     src={avatarUrl?.trim() ? avatarUrl : defaultAvatar}
                     alt="Avatar"
                     style={{
-                      width: "42px",
-                      height: "42px",
+                      width: "46px",
+                      height: "46px",
                       borderRadius: "50%",
                       objectFit: "cover",
                     }}
@@ -1150,7 +1242,7 @@ useEffect(() => {
               </div>
               <span
                 style={{
-                  fontSize: "18px",
+                  fontSize: "16px",
                   color: headerTextColor,
                   fontFamily: fontFamily || "Arial",
                   fontWeight: "600",
@@ -1161,21 +1253,40 @@ useEffect(() => {
               </span>
             </div>
 
-            {/* ❌ Botón cerrar */}
-            <button
-              onClick={() => setIsOpen(false)}
-              aria-label="Cerrar chat"
-              style={{
-                background: "transparent",
-                border: "none",
-                color: headerTextColor,
-                fontSize: "18px",
-                cursor: "pointer",
-                paddingRight: "20px",
-              }}
-            >
-              ✕
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingRight: '12px' }}>
+              {/* QR fijo en header: se muestra si hay conversationId. Diseño más compacto y integrado */}
+              {conversationId && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'transparent' }}>
+                  <div style={{ textAlign: 'right', color: headerTextColor, fontSize: 12, lineHeight: 1.05 }}>
+                    <div style={{ fontWeight: 600, fontSize: 11, color: headerTextColor }}>Continuar en móvil</div>
+                    <div style={{ fontSize: 9, opacity: 0.85 }}>Escanea el código</div>
+                  </div>
+                  {/* separador vertical sutil */}
+                  <div style={{ width: 1, height: 48, background: 'rgba(0,0,0,0.06)', borderRadius: 1 }} />
+                  <div style={{ width: 64, height: 64, background: '#ffffff', padding: 6, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
+                    {
+                      // Use conversationIdRef if conversationId state becomes briefly null during recreation
+                    }
+                    <QRCode value={`${window.location.origin}/chat/mobile?conversation=${conversationId || conversationIdRef.current || ''}`} size={52} />
+                  </div>
+                </div>
+              )}
+
+              {/* ❌ Botón cerrar */}
+              <button
+                onClick={() => setIsOpen(false)}
+                aria-label="Cerrar chat"
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: headerTextColor,
+                  fontSize: "18px",
+                  cursor: "pointer",
+                }}
+              >
+                ✕
+              </button>
+            </div>
           </div>
           <SwitchTransition>
             <CSSTransition
@@ -1329,7 +1440,7 @@ useEffect(() => {
             connectionRef={connectionRef}
             conversationId={conversationId}
             userId={userId}
-            isInputDisabled={!isConnected} // 🔹 Deshabilitar si demo o sin conexión
+            isInputDisabled={isInputDisabled} // 🔹 Deshabilitar si demo, sin conexión o sesión móvil
             allowImageUpload={effectiveStyle.allowImageUpload}
             allowFileUpload={effectiveStyle.allowFileUpload}
           />
@@ -1358,6 +1469,8 @@ useEffect(() => {
             </b>
             . Todos los derechos reservados.
           </div>
+
+          {/* QR ya se muestra de forma fija en el header; ya no usamos modal */}
 
           <ImagePreviewModal
             isOpen={isImageModalOpen}
@@ -1394,6 +1507,7 @@ ChatWidget.propTypes = {
     "center-left",
     "center-right",
   ]),
+  previewMode: PropTypes.bool,
   // Optional refs/sizing used by the widget-frame handshake
   rootRef: PropTypes.any,
   containerSize: PropTypes.object,

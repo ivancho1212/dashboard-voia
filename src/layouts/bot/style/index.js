@@ -348,7 +348,7 @@ function BotStylePage() {
                         pantalla según su posición configurada.
                       </SoftTypography>
 
-                      <StylePreview style={styleToPreview} />
+                      <StylePreview style={styleToPreview} previewMode={true} />
 
                       <SoftBox mt={2}>
                         <SoftButton
@@ -391,10 +391,10 @@ function BotStylePage() {
               )}
             </SoftBox>
 
-            {styleToPreview && viewMode !== "list" && (
+            {styleToPreview && (viewMode === "edit" || viewMode === "create") && (
               <SoftBox mt={4} display="flex" gap={4} flexWrap="wrap" alignItems="flex-start">
                 <SoftBox flex="1 1 40%" minWidth="300px">
-                  <StylePreview style={styleToPreview} />
+                  <StylePreview style={styleToPreview} previewMode={true} />
                 </SoftBox>
                 <SoftBox flex="1 1 40%" minWidth="300px"></SoftBox>
               </SoftBox>

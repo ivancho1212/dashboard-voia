@@ -40,6 +40,7 @@ export default function StylePreview({ style }) {
         avatarUrl={normalized.avatarUrl}
         position={normalized.position}
         isDemo={true}
+        previewMode={true}
         allowImageUpload={normalized.allowImageUpload}
         allowFileUpload={normalized.allowFileUpload}
       />

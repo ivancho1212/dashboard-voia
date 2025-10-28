@@ -399,20 +399,27 @@ function WidgetFrame() {
   });
 
   if (loading) {
+    // During load we render a compact spinner positioned where the closed launcher will appear.
+    // This avoids a large, opaque placeholder that can cover host page content.
+    const pos = (styleConfig?.styles?.position || 'bottom-right');
+    const launcherPosition = {
+      'bottom-right': { right: 20, bottom: 20 },
+      'bottom-left': { left: 20, bottom: 20 },
+      'top-right': { right: 20, top: 20 },
+      'top-left': { left: 20, top: 20 },
+      'center-left': { left: 20, top: '50%', transform: 'translateY(-50%)' },
+      'center-right': { right: 20, top: '50%', transform: 'translateY(-50%)' },
+    }[pos] || { right: 20, bottom: 20 };
+
     return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-  alignItems: 'center', 
-  height: '100%',
-        fontFamily: 'Arial, sans-serif',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        color: 'white'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '24px', marginBottom: '10px' }}>🤖</div>
-          <div>Cargando widget...</div>
+      <div style={{ position: 'relative', width: '100%', height: '100%', background: 'transparent' }}>
+        {/* small spinner where closed launcher will render - only the ring, no background */}
+        <div style={{ position: 'absolute', pointerEvents: 'none', ...launcherPosition }}>
+          <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 28, height: 28, border: '3px solid rgba(0,0,0,0.12)', borderTopColor: 'rgba(0,0,0,0.6)', borderRadius: '50%', animation: 'spin 1s linear infinite', background: 'transparent' }} />
+          </div>
         </div>
+        <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       </div>
     );
   }
