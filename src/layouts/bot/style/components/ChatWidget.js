@@ -64,6 +64,10 @@ function ChatWidget({
   userId: propUserId,
   isDemo: initialDemo = false,
   widgetToken: propWidgetToken = null,
+  // optional ref from WidgetFrame to measure preferred size
+  rootRef = null,
+  // optional explicit containerSize applied by parent (px)
+  containerSize = null,
 }) {
   const connectionRef = useRef(null);
   const botId = propBotId ?? 2;
@@ -869,15 +873,16 @@ useEffect(() => {
     color: textColor,
     fontFamily,
     borderRadius: "16px",
-    width: "90vw",
+    width: "100%", // use percentage relative to iframe/container
     maxWidth: "400px",
-    height: "70vh",
+    height: "100%", // fill the available container height
     maxHeight: "700px",
     boxShadow: "0 2px 15px rgba(0,0,0,0.15)",
     display: "flex",
     flexDirection: "column",
     justifyContent: "space-between",
     overflow: "hidden",
+    boxSizing: "border-box",
   };
 
   const positionStyles = {
@@ -889,12 +894,25 @@ useEffect(() => {
     "center-right": { top: "50%", right: "20px", transform: "translateY(-50%)" },
   };
 
+  // Position styles for the small launcher button when the widget is closed.
+  const launcherPositionStyles = {
+    "bottom-right": { position: 'absolute', bottom: '20px', right: '20px' },
+    "bottom-left": { position: 'absolute', bottom: '20px', left: '20px' },
+    "top-right": { position: 'absolute', top: '20px', right: '20px' },
+    "top-left": { position: 'absolute', top: '20px', left: '20px' },
+    "center-left": { position: 'absolute', top: '50%', left: '20px', transform: 'translateY(-50%)' },
+    "center-right": { position: 'absolute', top: '50%', right: '20px', transform: 'translateY(-50%)' },
+  };
+
+  // The wrapper inside the iframe should not be fixed or use viewport units.
+  // Positioning of the iframe itself should be decided by the host page (parent).
   const wrapperStyle = {
-    position: "fixed",
+    position: "relative",
     zIndex: 9999,
-    // Let clicks pass through the wrapper itself; only inner interactive elements opt-in with pointerEvents:auto
+    // Let clicks pass through wrapper unless inner elements set pointerEvents:auto
     pointerEvents: "none",
-    ...positionStyles[position],
+    width: containerSize && containerSize.width ? `${containerSize.width}px` : '100%',
+    height: containerSize && containerSize.height ? `${containerSize.height}px` : '100%'
   };
   const openImageModal = (images, clickedImageUrl) => {
     // Reset state then open modal after a tiny delay so layout stabilizes
@@ -998,7 +1016,7 @@ useEffect(() => {
   const isInputDisabled = isDemo ? false : !isConnected;
 
   return (
-    <div style={wrapperStyle}>
+    <div ref={rootRef} style={wrapperStyle}>
       {/* Spinner keyframes - injected inline to avoid touching global CSS files */}
       <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       {!isOpen ? (
@@ -1020,6 +1038,8 @@ useEffect(() => {
             overflow: "hidden",
             padding: 0,
             pointerEvents: "auto", // Asegurar que el botón reciba clicks
+            // Position according to configured position inside the iframe container
+            ...(launcherPositionStyles[position] || launcherPositionStyles['bottom-right'])
           }}
         >
           <div
@@ -1063,8 +1083,8 @@ useEffect(() => {
           </div>
         </button>
       ) : (
-        // 💬 Widget abierto
-        <div style={{ ...widgetStyle, pointerEvents: "auto" }}>
+  // 💬 Widget abierto
+  <div style={{ ...widgetStyle, pointerEvents: "auto", margin: '0 auto' }}>
           {/* 🔥 Header */}
           <div
             style={{
@@ -1374,6 +1394,9 @@ ChatWidget.propTypes = {
     "center-left",
     "center-right",
   ]),
+  // Optional refs/sizing used by the widget-frame handshake
+  rootRef: PropTypes.any,
+  containerSize: PropTypes.object,
 };
 
 export default ChatWidget;

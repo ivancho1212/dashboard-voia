@@ -1,5 +1,5 @@
 // Mover estos useEffect dentro del componente WidgetFrame
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import ChatWidget from "layouts/bot/style/components/ChatWidget";
 import { getBotDataWithToken } from "services/botService";
 import widgetAuthService from "services/widgetAuthService";
@@ -36,6 +36,9 @@ function WidgetFrame() {
   const [autoRefresh, setAutoRefresh] = useState(false); // Desactivar auto-refresh por defecto
   // Estado de visibilidad del chat
   const [isOpen, setIsOpen] = useState(false);
+  // Ref used to measure the preferred size of the widget content
+  const rootRef = useRef(null);
+  const [containerSize, setContainerSize] = useState(null);
 
   // Debug hooks (deben estar dentro del componente y después de las declaraciones de estado)
   React.useEffect(() => {
@@ -256,22 +259,22 @@ function WidgetFrame() {
     const style = document.createElement('style');
     style.textContent = `
       /* Solo hacer transparente el contenedor iframe, NO el ChatWidget */
-      body, html {
+      html, body {
         margin: 0 !important;
         padding: 0 !important;
-        overflow: hidden !important;
+        /* Do not force overflow hidden; let widget decide behavior inside iframe */
+        overflow: visible !important;
         background: transparent !important;
+        height: 100% !important;
       }
-      
-      /* Root div transparente sin centrado forzado */
+      /* Root should fill the iframe viewport in percent units (no vw/vh here) */
       #root {
         background: transparent !important;
-        width: 100vw !important;
-        height: 100vh !important;
+        width: 100% !important;
+        height: 100% !important;
         position: relative !important;
+        box-sizing: border-box !important;
       }
-      
-      /* NO aplicar estilos de centrado - dejar que ChatWidget maneje su propia posición */
     `;
     document.head.appendChild(style);
     
@@ -294,6 +297,41 @@ function WidgetFrame() {
     };
   }, []);
 
+  // PostMessage listener -> wait for parent to inform applied size
+  useEffect(() => {
+    const parentOrigin = (function () {
+      try {
+        return new URL(document.referrer).origin;
+      } catch (e) {
+        console.warn('[child] document.referrer is empty or invalid; parent origin unknown');
+        return null;
+      }
+    })();
+
+    function onMessage(event) {
+      try {
+        if (!event.data || typeof event.data !== 'object') return;
+        // If we have a referrer-derived parentOrigin, enforce it
+        if (parentOrigin && event.origin !== parentOrigin) return;
+
+        const data = event.data;
+        if (data.type === 'parent-applied-size' && data.width && data.height) {
+          console.log('[child] received parent-applied-size', data);
+          // Apply container size and inform parent
+          setContainerSize({ width: Number(data.width), height: Number(data.height) });
+
+          // Acknowledge back to parent
+          window.parent.postMessage({ type: 'child-ack' }, event.origin || '*');
+        }
+      } catch (e) {
+        console.error('[child] onMessage error', e);
+      }
+    }
+
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
+
   useEffect(() => {
     console.log('[DEBUG] useEffect de configuración disparado', {
       botId,
@@ -312,6 +350,29 @@ function WidgetFrame() {
     setLoading(true);
     loadBotConfiguration();
   }, [botId, tokenParam]);
+
+  // After bot configuration is ready, measure preferred size and notify parent
+  useEffect(() => {
+    if (loading) return;
+    // Wait a tick so layout stabilizes
+    const t = setTimeout(() => {
+      try {
+        const el = rootRef.current || document.getElementById('root');
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const preferredWidth = Math.ceil(rect.width) || 300;
+        const preferredHeight = Math.ceil(rect.height) || 200;
+        console.log('[child] measured preferredSize', { preferredWidth, preferredHeight });
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'preferred-size', width: preferredWidth, height: preferredHeight }, '*');
+          console.log('[child] sent preferred-size to parent');
+        }
+      } catch (e) {
+        console.error('[child] error measuring preferred size', e);
+      }
+    }, 50);
+    return () => clearTimeout(t);
+  }, [loading, styleConfig]);
 
     // Eliminar auto-refresh para evitar remounts
     // const refreshInterval = setInterval(() => {
@@ -342,8 +403,8 @@ function WidgetFrame() {
       <div style={{ 
         display: 'flex', 
         justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
+  alignItems: 'center', 
+  height: '100%',
         fontFamily: 'Arial, sans-serif',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         color: 'white'
@@ -452,6 +513,9 @@ function WidgetFrame() {
       widgetToken={widgetTokenToPass}
       isOpen={isOpen}
       setIsOpen={setIsOpen}
+      // Pass ref and container size so child can be measured and adapt to parent-applied-size
+      rootRef={rootRef}
+      containerSize={containerSize}
     />
   );
 }
