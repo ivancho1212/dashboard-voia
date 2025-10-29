@@ -593,31 +593,39 @@ useEffect(() => {
         conversationIdRef.current = convId;
         setConversationId(convId);
 
-        // Fetch conversation history so widget displays messages that arrived while closed
+        // Fetch conversation history so widget displays messages that arrived while closed.
+        // NOTE: If the client already has a valid local cache for this conversation, skip fetching
+        // history from the server — the widget should prefer local cache when a conversation is active
+        // and only the administrative panel should request full server history.
         try {
-          const histRes = await fetch(`http://localhost:5006/api/conversations/history/${convId}`);
-          if (histRes.ok) {
-            const histJson = await histRes.json();
-            const history = histJson.history || [];
+          const cached = loadConversationCache();
+          if (cached && cached.conversationId === convId && Array.isArray(cached.messages) && cached.messages.length > 0) {
+            console.log('ℹ️ Local cache present for conversation, skipping server history fetch.');
+          } else {
+            const histRes = await fetch(`http://localhost:5006/api/conversations/history/${convId}`);
+            if (histRes.ok) {
+              const histJson = await histRes.json();
+              const history = histJson.history || [];
 
-            // Normalize and merge into state, avoiding duplicates by uniqueKey (id/tempId)
-            const normalized = history.map(h => normalizeMessage({
-              id: h.id,
-              from: h.fromRole === 'user' ? 'user' : (h.fromRole === 'admin' ? 'admin' : 'bot'),
-              text: h.text || h.fileName || '',
-              timestamp: h.timestamp,
-              status: 'sent'
-            }));
+              // Normalize and merge into state, avoiding duplicates by uniqueKey (id/tempId)
+              const normalized = history.map(h => normalizeMessage({
+                id: h.id,
+                from: h.fromRole === 'user' ? 'user' : (h.fromRole === 'admin' ? 'admin' : 'bot'),
+                text: h.text || h.fileName || '',
+                timestamp: h.timestamp,
+                status: 'sent'
+              }));
 
-            setMessages(prev => {
-              const map = new Map();
-              prev.forEach(m => map.set(m.uniqueKey, m));
-              normalized.forEach(m => map.set(m.uniqueKey, m));
-              return Array.from(map.values());
-            });
+              setMessages(prev => {
+                const map = new Map();
+                prev.forEach(m => map.set(m.uniqueKey, m));
+                normalized.forEach(m => map.set(m.uniqueKey, m));
+                return Array.from(map.values());
+              });
+            }
           }
         } catch (e) {
-          console.warn('No se pudo cargar el historial de conversación:', e);
+          console.warn('No se pudo cargar el historial de conversación (o se omitió por cache):', e);
         }
 
   connection = createHubConnection(convId, propWidgetToken || undefined);

@@ -9,14 +9,44 @@ const MessageBubble = React.forwardRef(
 
     const backgroundColor =
       fromRole === "admin"
-        ? "#a7d9a7" // verde más visible para admin
+        ? "#dcfdf2ff" // verde más visible para admin
         : fromRole === "bot"
-          ? "#cce5ff" // azul claro para bot
-          : "#f1f1f1"; // gris claro para user
+          ? "#dcf7fdff" // azul claro para bot
+          : "#faebf5ff"; // gris claro para user
 
     const formattedTime = timestamp
       ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : "";
+
+    const imageFiles = (files || msg.images || []).filter((file) =>
+      file.fileType?.startsWith("image/")
+    );
+
+  const hasImage = imageFiles.length > 0;
+  const contentPadding = hasImage ? (imageFiles.length === 1 ? "6px" : "8px") : "12px";
+
+    const containerStyle = {
+      alignSelf: isRight ? "flex-end" : "flex-start",
+      backgroundColor,
+      color: "#1a1a1a",
+    // Reduce padding when there's a single image so the bubble hugs the content
+    padding: contentPadding,
+      borderRadius: "16px",
+      maxWidth: "70%",
+    width: hasImage && imageFiles.length === 1 ? "auto" : "fit-content",
+    minWidth: hasImage && imageFiles.length === 1 ? "0" : "30%",
+      fontSize: "14px",
+      fontFamily: "Arial",
+      marginBottom: "8px",
+      marginLeft: isRight ? "40px" : "0px",
+      marginRight: isRight ? "0px" : "40px",
+      boxShadow: isHighlighted ? "0 0 10px 4px rgba(33,150,243,0.06)" : "0 1px 4px rgba(0, 0, 0, 0.06)",
+      transition: "box-shadow 0.3s ease-in-out",
+      position: "relative",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: isRight ? "flex-end" : "flex-start",
+    };
 
     const [previewIndex, setPreviewIndex] = useState(null);
     const [imageOptionsOpen, setImageOptionsOpen] = useState(false);
@@ -27,9 +57,6 @@ const MessageBubble = React.forwardRef(
     const iconRef = useRef(null);
     const bubbleRef = useRef(null);
 
-    const imageFiles = (files || msg.images || []).filter((file) =>
-      file.fileType?.startsWith("image/")
-    );
     const showOptionsIcon = isHovered && !isAIActive && (text || imageFiles.length > 0);
 
     const handlePrev = () =>
@@ -89,26 +116,7 @@ const MessageBubble = React.forwardRef(
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         className="message-bubble"
-        style={{
-          alignSelf: isRight ? "flex-end" : "flex-start",
-          backgroundColor,
-          color: "#1a1a1a",
-          padding: "10px 10px",
-          borderRadius: "16px",
-          maxWidth: "70%",
-          width: imageFiles.length === 1 ? "auto" : "fit-content",
-          minWidth: "30%",
-          fontSize: "14px",
-          fontFamily: "Arial",
-          marginBottom: "8px",
-          marginLeft: isRight ? "40px" : "0px",
-          marginRight: isRight ? "0px" : "40px",
-          boxShadow: isHighlighted
-            ? "0 0 10px 4px rgba(33,150,243,0.6)"
-            : "0 1px 4px rgba(0, 0, 0, 0.1)",
-          transition: "box-shadow 0.3s ease-in-out",
-          position: "relative",
-        }}
+        style={containerStyle}
       >
         <div
           style={{
@@ -283,71 +291,91 @@ const MessageBubble = React.forwardRef(
 
         {/* Imágenes */}
         {imageFiles.length > 0 && (
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: imageFiles.length === 1 ? "1fr" : "repeat(2, 1fr)",
-              gridAutoRows: "auto",
-              gap: "6px",
-              marginTop: "6px",
-              width: "100%",
-              maxWidth: imageFiles.length === 1 ? "240px" : "100%",
-            }}
-          >
-            {imageFiles.slice(0, 4).map((file, idx) => {
-              const source = buildFileUrl(file.fileUrl);
-              const isOverlay = imageFiles.length > 4 && idx === 3;
+          imageFiles.length === 1 ? (
+            // Single image: respect natural size but constrain proportionally
+            // Use inline-block so the bubble adapts to the image width instead of forcing full width
+            <div style={{ marginTop: "4px", display: "block", width: "100%", maxWidth: "clamp(140px, 40vw, 420px)" }}>
+              <img
+                src={buildFileUrl(imageFiles[0].fileUrl)}
+                alt={imageFiles[0].fileName}
+                onClick={() => setPreviewIndex(0)}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  height: "auto",
+                  maxHeight: "80vh",
+                  borderRadius: "10px",
+                  cursor: "pointer",
+                  objectFit: "contain",
+                }}
+              />
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(2, 1fr)",
+                gridAutoRows: "auto",
+                gap: "6px",
+                marginTop: "6px",
+                width: "100%",
+              }}
+            >
+              {imageFiles.slice(0, 4).map((file, idx) => {
+                const source = buildFileUrl(file.fileUrl);
+                const isOverlay = imageFiles.length > 4 && idx === 3;
 
-              return (
-                <div
-                  key={idx}
-                  style={{
-                    position: "relative",
-                    width: "100%",
-                    height: "100%",
-                    borderRadius: "8px",
-                    overflow: "hidden",
-                    aspectRatio: "1 / 1",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => setPreviewIndex(idx)}
-                >
-                  <img
-                    src={source}
-                    alt={file.fileName}
+                return (
+                  <div
+                    key={idx}
                     style={{
+                      position: "relative",
                       width: "100%",
                       height: "100%",
-                      objectFit: "cover",
                       borderRadius: "8px",
-                      filter: isOverlay ? "brightness(0.6)" : "none",
+                      overflow: "hidden",
+                      aspectRatio: "1 / 1",
+                      cursor: "pointer",
                     }}
-                  />
-                  {isOverlay && (
-                    <div
+                    onClick={() => setPreviewIndex(idx)}
+                  >
+                    <img
+                      src={source}
+                      alt={file.fileName}
                       style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
                         width: "100%",
                         height: "100%",
-                        backgroundColor: "rgba(0, 0, 0, 0.5)",
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "1.5rem",
-                        fontWeight: "bold",
+                        objectFit: "cover",
                         borderRadius: "8px",
+                        filter: isOverlay ? "brightness(0.6)" : "none",
                       }}
-                    >
-                      +{imageFiles.length - 4}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                    />
+                    {isOverlay && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: "100%",
+                          backgroundColor: "rgba(0, 0, 0, 0.5)",
+                          color: "#fff",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "1.5rem",
+                          fontWeight: "bold",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        +{imageFiles.length - 4}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
 
         {/* Archivos no imagen */}
@@ -363,7 +391,17 @@ const MessageBubble = React.forwardRef(
                   download={file.fileName}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style={{ color: "#007bff", textDecoration: "underline", fontSize: "14px" }}
+                  style={{
+                    padding: "8px 12px",
+                    backgroundColor: "#f5f5f5",
+                    borderRadius: "12px",
+                    textDecoration: "none",
+                    color: "#0b63d6",
+                    fontSize: "14px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
                 >
                   📎 {file.fileName}
                 </a>

@@ -242,7 +242,7 @@ function ConversationList({
                     </Tooltip>
                     {!conv.isWithAI && (
                       <Tooltip title="IA pausada">
-                        <IconButton size="small" sx={{ color: "#8b8a8aff", mr: -1.9 }}>
+                        <IconButton size="small" sx={{ color: "#c632e4ff", mr: -1.9 }}>
                           <PauseCircleOutlineIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>

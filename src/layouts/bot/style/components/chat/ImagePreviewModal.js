@@ -34,23 +34,25 @@ const ImagePreviewModal = ({
         flexDirection: "row",
       }}
     >
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setActiveImageIndex((prev) => (prev - 1 + imageGroup.length) % imageGroup.length);
-        }}
-        style={{
-          position: "absolute",
-          left: "20px",
-          backgroundColor: "transparent",
-          border: "none",
-          color: "#fff",
-          fontSize: "32px",
-          cursor: "pointer",
-        }}
-      >
-        ‹
-      </button>
+      {imageGroup.length > 1 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveImageIndex((prev) => (prev - 1 + imageGroup.length) % imageGroup.length);
+          }}
+          style={{
+            position: "absolute",
+            left: "20px",
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#fff",
+            fontSize: "32px",
+            cursor: "pointer",
+          }}
+        >
+          ‹
+        </button>
+      )}
 
       <img
         src={imageUrl}
@@ -63,23 +65,25 @@ const ImagePreviewModal = ({
         }}
       />
 
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setActiveImageIndex((prev) => (prev + 1) % imageGroup.length);
-        }}
-        style={{
-          position: "absolute",
-          right: "20px",
-          backgroundColor: "transparent",
-          border: "none",
-          color: "#fff",
-          fontSize: "32px",
-          cursor: "pointer",
-        }}
-      >
-        ›
-      </button>
+      {imageGroup.length > 1 && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveImageIndex((prev) => (prev + 1) % imageGroup.length);
+          }}
+          style={{
+            position: "absolute",
+            right: "20px",
+            backgroundColor: "transparent",
+            border: "none",
+            color: "#fff",
+            fontSize: "32px",
+            cursor: "pointer",
+          }}
+        >
+          ›
+        </button>
+      )}
     </div>,
     document.body
   );

@@ -346,14 +346,6 @@ const ChatPanel = forwardRef(
       });
     }, [messages, conversationId]);
 
-    // Expose the processedMessages to window for easier debugging in dev
-    useEffect(() => {
-      try {
-        if (typeof window !== 'undefined') window.__lastProcessedMessages = processedMessages;
-      } catch (e) {
-        /* ignore */
-      }
-    }, [processedMessages]);
 
     // Al cambiar de conversación, asegurarnos de posicionar al final (comportamiento esperado al abrir)
     useEffect(() => {
@@ -442,15 +434,7 @@ const ChatPanel = forwardRef(
     }, [conversationId]);
 
     
-    // DEBUG: print processed messages just before render to help diagnose missing messages
-    try {
-      // keep this non-blocking and safe in environments where console may not exist
-      if (typeof console !== "undefined" && console.log) {
-        console.log("DEBUG processedMessages:", processedMessages);
-      }
-    } catch (e) {
-      /* ignore logging errors */
-    }
+
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
