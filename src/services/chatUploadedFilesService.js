@@ -31,8 +31,9 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
       headers: { Authorization: token ? `Bearer ${token}` : undefined, "Content-Type": "multipart/form-data" },
     });
 
-    const data = resp.data || {};
-    const fileUrl = data.filePath || data.fileUrl || null;
+  const data = resp.data || {};
+  // Prefer API file URL (secure, re-validated) when available; fallback to legacy public path
+  const fileUrl = data.fileUrl || data.filePath || null;
 
     if (invokeHub && connection?.invoke) {
       const payload = {
