@@ -27,7 +27,6 @@ import DoneAllIcon from "@mui/icons-material/DoneAll";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import BlockIcon from "@mui/icons-material/Block";
 import TextField from "@mui/material/TextField";
-import MenuBookIcon from "@mui/icons-material/MenuBook";
 import { Box, Tooltip, Typography } from "@mui/material";
 import Button from "@mui/material/Button";
 import Loader from "../../../components/Loader";
@@ -40,6 +39,10 @@ import {
   deleteConversationTag,
 } from "services/conversationTagsService";
 import { updateConversationIsWithAI } from "services/conversationsService";
+
+// Runtime debug toggle. Set `window.__VOIA_DEBUG = true` in the browser console
+// to enable verbose ChatPanel debug logging without changing source.
+const DEBUG = typeof window !== 'undefined' && window.__VOIA_DEBUG === true;
 
 const ChatPanel = forwardRef(
   (
@@ -75,6 +78,63 @@ const ChatPanel = forwardRef(
     const [isUserAtBottom, setIsUserAtBottom] = useState(true);
     const lastMessageIdRef = useRef(null);
     const [hasNewMessageBelow, setHasNewMessageBelow] = useState(false);
+  const [debugDayDividers, setDebugDayDividers] = useState(0);
+  const [bannerLabel, setBannerLabel] = useState("");
+  const [topVisibleDayLabel, setTopVisibleDayLabel] = useState("");
+  const [suppressDividers, setSuppressDividers] = useState(false);
+  // Modo de visualización de fechas: 'inline-small' (predeterminado) o 'floating-toast'
+  // Cambia con: window.__VOIA_DATE_MODE = 'floating-toast' en la consola del navegador
+  const DATE_MODE = typeof window !== 'undefined' ? (window.__VOIA_DATE_MODE || 'inline-small') : 'inline-small';
+  const [floatingDateLabel, setFloatingDateLabel] = useState("");
+  const floatingDateTimerRef = useRef(null);
+  const bannerDebounceRef = useRef(null);
+  const bannerPendingRef = useRef(null); // candidate label between debounced ticks
+  const bannerStableCountRef = useRef(0); // how many consecutive identical ticks we've seen
+  const lastVisibleLabelRef = useRef(null); // last label we observed during finalize
+  const observerRef = useRef(null);
+  const suppressTimeoutRef = useRef(null);
+  const userScrolledRef = useRef(false);
+  const dayDividerRefs = useRef({});
+  const dayDividerLabelMapRef = useRef(new Map());
+  const bannerShownAtRef = useRef(null); // timestamp when banner was shown
+  const bannerClearTimerRef = useRef(null);
+  const MIN_BANNER_VISIBLE_MS = 300; // minimum time banner stays visible once shown
+  const BANNER_SHOW_THRESHOLD = 1; // how many stable ticks to show
+  const BANNER_CLEAR_THRESHOLD = 2; // how many stable empty ticks to clear
+
+      // Helper: format day label in Spanish (pulled out so multiple effects can use it)
+      const formatDayLabel = (date) => {
+        if (!date) return "";
+        const d = new Date(date);
+        const now = new Date();
+        const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+        const diffDays = Math.floor((startOfDay(now) - startOfDay(d)) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return "Hoy";
+        if (diffDays === 1) return "Ayer";
+
+        const getStartOfWeek = (dt) => {
+          const copy = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+          const day = (copy.getDay() + 6) % 7; // Monday as start
+          copy.setDate(copy.getDate() - day);
+          return copy;
+        };
+
+        const startOfThisWeek = getStartOfWeek(now);
+        if (d >= startOfThisWeek) {
+          return d.toLocaleDateString('es-ES', { weekday: 'long' }).replace(/^[a-z]/, (m) => m.toUpperCase());
+        }
+
+        const prevWeekStart = new Date(startOfThisWeek);
+        prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+        if (d >= prevWeekStart && d < startOfThisWeek) {
+          return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+        }
+
+        if (d.getFullYear() === now.getFullYear()) {
+          return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+        }
+        return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+      };
     const [pendingTag, setPendingTag] = useState(null); // { title, description }
     const [showPendingEditor, setShowPendingEditor] = useState(false);
     const [conversationTags, setConversationTags] = useState([]);
@@ -88,6 +148,7 @@ const ChatPanel = forwardRef(
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     };
     const [hasMounted, setHasMounted] = useState(false);
+    const lastLoggedForConvRef = useRef(null); // avoid duplicate heavy logs across StrictMode double-mounts
 
       useImperativeHandle(ref, () => ({
       isInputFocused: () => inputRef.current === document.activeElement,
@@ -138,6 +199,7 @@ const ChatPanel = forwardRef(
       } else {
         setHasNewMessageBelow(true);
       }
+        // banner is computed by IntersectionObserver (see effect below)
     }, [messages, hasMounted]);
 
     useEffect(() => {
@@ -155,6 +217,15 @@ const ChatPanel = forwardRef(
       return () => clearTimeout(timeout);
     }, [highlightedMessageId, onJumpToReply, messageRefs]);
 
+    // Cleanup floating date timer on unmount or when mode changes
+    useEffect(() => {
+      return () => {
+        if (floatingDateTimerRef.current) {
+          clearTimeout(floatingDateTimerRef.current);
+        }
+      };
+    }, []);
+
     const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
     const handleCloseMenu = () => setAnchorEl(null);
 
@@ -168,6 +239,23 @@ const ChatPanel = forwardRef(
         if (container) container.style.overflow = "auto";
       };
     }, [anchorEl]);
+
+    // Debug: log processedMessages and count day dividers to help verify grouping rendering
+    useEffect(() => {
+      try {
+        if (!Array.isArray(messages)) return;
+        const dividers = messages.filter(m => m && m.__dayDivider).length;
+  setDebugDayDividers(dividers);
+  if (DEBUG) console.debug("📚 [ChatPanel] messages count:", messages.length, "dayDividers:", dividers);
+      } catch (e) {
+        /* ignore */
+      }
+    }, [messages]);
+
+    // computeBannerLabel kept as a noop: banner computation is handled via
+    // an IntersectionObserver (see effect below). The original boundingClientRect
+    // logic is replaced to improve robustness for long conversations.
+    const computeBannerLabel = () => {};
 
     const handleChangeStatus = (newStatus) => {
       onStatusChange(newStatus);
@@ -280,7 +368,10 @@ const ChatPanel = forwardRef(
 
     const getBlockedIcon = () => <BlockIcon />;
     const processedMessages = useMemo(() => {
-      return messages.map((msg) => {
+      // Normalize messages (same as before) then insert day dividers.
+      const normalized = messages.map((msg) => {
+        // If the backend/client already inserted a day-divider object, pass it through unchanged.
+        if (msg && msg.__dayDivider) return msg;
         const normalizedText = msg.text || msg.question || msg.content || "";
 
         // Prioritize msg.files if it exists (for real-time messages)
@@ -335,16 +426,111 @@ const ChatPanel = forwardRef(
           normalizedFromRole = "user";
         }
 
+        // ensure legacy 'url' fields are normalized to 'fileUrl' so MessageBubble can consume them
+        const normalizedFiles = files.map((f) => ({
+          ...f,
+          fileUrl: f.fileUrl || f.url || f.filePath || f.path || f.FileUrl || f.urlPath,
+          fileName: f.fileName || f.FileName || f.name,
+          fileType: f.fileType || f.FileType || f.type || "application/octet-stream",
+        }));
+
         return {
           ...msg,
           fromName: normalizedFromRole === "admin" ? "Admin" : `Sesión ${conversationId}`,
           text: normalizedText,
           fromRole: normalizedFromRole,
-          files: files.length > 0 ? files : undefined,
+          files: normalizedFiles.length > 0 ? normalizedFiles : undefined,
           replyTo: resolvedReplyTo ?? msg.replyTo ?? null,
         };
       });
+
+      // Helper: format day label in Spanish
+      const formatDayLabel = (date) => {
+        if (!date) return "";
+        const d = new Date(date);
+        const now = new Date();
+        const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+        const diffDays = Math.floor((startOfDay(now) - startOfDay(d)) / (1000 * 60 * 60 * 24));
+        if (diffDays === 0) return "Hoy";
+        if (diffDays === 1) return "Ayer";
+
+        // Determine week start (Monday) for locale-agnostic week grouping
+        const getStartOfWeek = (dt) => {
+          const copy = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+          // JS getDay(): 0=Sunday, 1=Monday,... We'll treat Monday as start of week
+          const day = (copy.getDay() + 6) % 7; // 0 -> Monday
+          copy.setDate(copy.getDate() - day);
+          return copy;
+        };
+
+        const startOfThisWeek = getStartOfWeek(now);
+        const startOfMsgWeek = getStartOfWeek(d);
+
+        // If message is in the same week as today (but not today/yesterday), show weekday name
+        if (d >= startOfThisWeek) {
+          return d.toLocaleDateString('es-ES', { weekday: 'long' }).replace(/^[a-z]/, (m) => m.toUpperCase());
+        }
+
+        // If message is in the previous week, show short date (dd MMM)
+        const prevWeekStart = new Date(startOfThisWeek);
+        prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+        if (d >= prevWeekStart && d < startOfThisWeek) {
+          // e.g. "20 oct"
+          return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+        }
+
+        // Older: include year if different from current year
+        if (d.getFullYear() === now.getFullYear()) {
+          return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+        }
+        return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+      };
+
+      // Build new array with day dividers inserted before the first message of each day.
+      // If a message is already a __dayDivider (from server/client), preserve it.
+      const out = [];
+      let lastDayKey = null;
+      normalized.forEach((m) => {
+        if (m && m.__dayDivider) {
+          // Use the divider's timestamp as the day's anchor if available
+          const ts = m.timestamp || null;
+          lastDayKey = ts ? new Date(ts).toDateString() : lastDayKey;
+          out.push(m);
+          return;
+        }
+        const ts = m.timestamp || m.Timestamp || null;
+        const dayKey = ts ? new Date(ts).toDateString() : "";
+        if (dayKey !== lastDayKey) {
+          lastDayKey = dayKey;
+          out.push({ __dayDivider: true, key: `day-${dayKey}-${Math.random().toString(36).slice(2,7)}`, label: formatDayLabel(ts) });
+        }
+        out.push(m);
+      });
+
+      return out;
     }, [messages, conversationId]);
+
+    // Debug: summary of processedMessages (labels and ranges)
+    // Guard so we don't spam the console during React.StrictMode double-mounts in dev.
+    useEffect(() => {
+      try {
+        if (!Array.isArray(processedMessages)) return;
+        // Only log once per conversationId (or when conversationId changes)
+        if (lastLoggedForConvRef.current === conversationId) return;
+        lastLoggedForConvRef.current = conversationId;
+
+        const dividerLabels = processedMessages.filter(m => m && m.__dayDivider).map(d => d.label);
+        const firstMsg = processedMessages.find(m => m && !m.__dayDivider);
+        const lastMsg = [...processedMessages].reverse().find(m => m && !m.__dayDivider);
+        if (DEBUG) console.debug('🧭 [ChatPanel] processedMessages summary', {
+          total: processedMessages.length,
+          dividers: dividerLabels.length,
+          dividerLabels: dividerLabels.slice(0, 10),
+          firstTs: firstMsg?.timestamp || firstMsg?.Timestamp,
+          lastTs: lastMsg?.timestamp || lastMsg?.Timestamp,
+        });
+      } catch (e) { /* ignore */ }
+    }, [processedMessages, conversationId]);
 
 
     // Al cambiar de conversación, asegurarnos de posicionar al final (comportamiento esperado al abrir)
@@ -354,8 +540,213 @@ const ChatPanel = forwardRef(
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
         setIsUserAtBottom(true);
+        // consider the initial auto-scroll as stabilization so observer may start
+        // reacting to entries shortly after this (some delay to let DOM settle)
+        setTimeout(() => { userScrolledRef.current = true; }, 120);
       }, 50);
     }, [conversationId, hasMounted]);
+
+    // When switching conversations, briefly suppress inline dividers until
+    // the banner computation stabilizes to avoid a flicker/duplicate.
+    useEffect(() => {
+      // enable suppression immediately when conversation changes
+      setSuppressDividers(true);
+      // mark that the user hasn't yet interacted with the scroll area for this convo
+      userScrolledRef.current = false;
+      setBannerLabel('');
+      setTopVisibleDayLabel('');
+      if (suppressTimeoutRef.current) clearTimeout(suppressTimeoutRef.current);
+      // fallback: remove suppression after 500ms in case computeBannerLabel
+      // doesn't run or is delayed.
+      suppressTimeoutRef.current = setTimeout(() => {
+        setSuppressDividers(false);
+        suppressTimeoutRef.current = null;
+      }, 500);
+
+      return () => {
+        if (suppressTimeoutRef.current) {
+          clearTimeout(suppressTimeoutRef.current);
+          suppressTimeoutRef.current = null;
+        }
+      };
+    }, [conversationId]);
+
+    // Cleanup any pending banner debounce on unmount
+    useEffect(() => {
+      return () => {
+        if (bannerDebounceRef.current) {
+          clearTimeout(bannerDebounceRef.current);
+          bannerDebounceRef.current = null;
+        }
+      };
+    }, []);
+
+    // Use IntersectionObserver to detect which message is nearest the top of the
+    // chat container. This is more reliable than manual boundingClientRect checks
+    // for long lists and when the DOM changes asynchronously (images, lazy content).
+    useEffect(() => {
+      const container = document.getElementById('chat-container');
+      if (!container) return;
+
+      // Clean up any previous observer
+      if (observerRef.current) {
+        try { observerRef.current.disconnect(); } catch (e) { /* ignore */ }
+        observerRef.current = null;
+      }
+
+      // Create the observer; root is the chat container so entry.boundingClientRect
+      // is comparable to rootBounds.
+      const obs = new IntersectionObserver((entries) => {
+        try {
+          // don't react to intersection events until the view has stabilized
+          // (userScrolledRef becomes true after initial auto-scroll or user interaction)
+          if (!userScrolledRef.current) return;
+          const rootRect = (entries[0] && entries[0].rootBounds) || container.getBoundingClientRect();
+
+          // Prefer day-divider entries when visible: they map directly to labels
+          let candidate = null;
+          let bestTop = Infinity;
+
+          // Try day-dividers first
+          for (const entry of entries) {
+            if ((entry.intersectionRatio || 0) < 0.12) continue;
+            if (dayDividerLabelMapRef.current && dayDividerLabelMapRef.current.has(entry.target)) {
+              const rect = entry.boundingClientRect;
+              const topRel = rect.top - rootRect.top;
+              if (topRel >= -8 && topRel < bestTop) {
+                bestTop = topRel;
+                candidate = entry.target;
+                break; // prefer the first suitable day-divider nearest top
+              }
+            }
+          }
+
+          // If no day-divider candidate, fallback to message entries
+          if (!candidate) {
+            for (const entry of entries) {
+              if ((entry.intersectionRatio || 0) < 0.12) continue;
+              if (dayDividerLabelMapRef.current && dayDividerLabelMapRef.current.has(entry.target)) continue; // already considered
+              const rect = entry.boundingClientRect;
+              const topRel = rect.top - rootRect.top;
+              if (topRel >= -8 && topRel < bestTop) {
+                bestTop = topRel;
+                candidate = entry.target;
+              }
+            }
+          }
+
+          // if none matched the >= -8 rule, pick the smallest topRel among entries
+          if (!candidate) {
+            entries.forEach((entry) => {
+              const rect = entry.boundingClientRect;
+              const topRel = rect.top - rootRect.top;
+              if (topRel < bestTop) {
+                bestTop = topRel;
+                candidate = entry.target;
+              }
+            });
+          }
+
+          // Resolve the label from the candidate element. If it's a day-divider
+          // element we stored its label in dayDividerLabelMapRef; otherwise try
+          // to map back to a message id via messageRefs.
+          let label = '';
+          if (candidate) {
+            if (dayDividerLabelMapRef.current && dayDividerLabelMapRef.current.has(candidate)) {
+              label = dayDividerLabelMapRef.current.get(candidate) || '';
+            } else {
+              const foundId = Object.keys(messageRefs.current || {}).find(k => messageRefs.current[k] === candidate || (messageRefs.current[k] && messageRefs.current[k].current === candidate));
+              if (foundId) {
+                const foundMsg = processedMessages.find(m => String(m.id) === String(foundId));
+                const ts = foundMsg ? (foundMsg.timestamp || foundMsg.Timestamp || foundMsg.createdAt) : null;
+                if (ts) label = formatDayLabel(ts);
+              }
+            }
+          }
+
+          // Use the same debounced/stable logic used previously to avoid flicker
+          bannerPendingRef.current = label;
+          if (bannerDebounceRef.current) clearTimeout(bannerDebounceRef.current);
+          bannerDebounceRef.current = setTimeout(() => {
+            const pending = bannerPendingRef.current;
+            if (pending === lastVisibleLabelRef.current) {
+              bannerStableCountRef.current += 1;
+            } else {
+              bannerStableCountRef.current = 1;
+            }
+            lastVisibleLabelRef.current = pending;
+
+            if (pending) {
+              if (bannerStableCountRef.current >= BANNER_SHOW_THRESHOLD) {
+                if (bannerClearTimerRef.current) {
+                  clearTimeout(bannerClearTimerRef.current);
+                  bannerClearTimerRef.current = null;
+                }
+                setBannerLabel(pending);
+                setTopVisibleDayLabel(pending);
+                setSuppressDividers(false);
+                bannerShownAtRef.current = Date.now();
+              }
+            } else {
+              if (bannerStableCountRef.current >= BANNER_CLEAR_THRESHOLD) {
+                const now = Date.now();
+                const shownAt = bannerShownAtRef.current;
+                const stillRecentlyShown = shownAt && (now - shownAt) < MIN_BANNER_VISIBLE_MS;
+                if (!stillRecentlyShown) {
+                  setBannerLabel('');
+                  setTopVisibleDayLabel('');
+                  setSuppressDividers(false);
+                } else {
+                  const remaining = MIN_BANNER_VISIBLE_MS - (now - shownAt) + 20;
+                  if (bannerClearTimerRef.current) clearTimeout(bannerClearTimerRef.current);
+                  bannerClearTimerRef.current = setTimeout(() => {
+                    setBannerLabel('');
+                    setTopVisibleDayLabel('');
+                    setSuppressDividers(false);
+                    bannerClearTimerRef.current = null;
+                  }, Math.max(remaining, 20));
+                }
+              }
+            }
+
+            bannerDebounceRef.current = null;
+          }, 120);
+        } catch (e) {
+          console.warn('IntersectionObserver callback failed', e);
+        }
+      }, {
+        root: container,
+        threshold: [0, 0.01, 0.25, 0.5, 0.75, 1]
+      });
+
+      // Observe day-divider elements first (prefer these as banner sources)
+      processedMessages.forEach((m, idx) => {
+        if (!m) return;
+        if (m.__dayDivider) {
+          const divId = m.id || m.key || `day-${idx}`;
+          const el = dayDividerRefs.current && dayDividerRefs.current[divId];
+          if (el && el instanceof Element) {
+            try { obs.observe(el); } catch (e) { /* ignore */ }
+          }
+          return;
+        }
+
+        // Observe message elements (non-divider messages). Some refs may be components
+        // or elements; try both patterns.
+        const el = messageRefs.current && (messageRefs.current[m.id] || (messageRefs.current[m.id] && messageRefs.current[m.id].current));
+        if (el && el instanceof Element) {
+          try { obs.observe(el); } catch (e) { /* ignore */ }
+        }
+      });
+
+      observerRef.current = obs;
+
+      return () => {
+        try { obs.disconnect(); } catch (e) { /* ignore */ }
+        if (bannerDebounceRef.current) { clearTimeout(bannerDebounceRef.current); bannerDebounceRef.current = null; }
+        if (bannerClearTimerRef.current) { clearTimeout(bannerClearTimerRef.current); bannerClearTimerRef.current = null; }
+      };
+    }, [processedMessages, conversationId]);
 
     useEffect(() => {
       const fetchTags = async () => {
@@ -437,7 +828,7 @@ const ChatPanel = forwardRef(
 
 
     return (
-      <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, position: "relative" }}>
         {/* HEADER */}
         <Box
           sx={{
@@ -661,13 +1052,18 @@ const ChatPanel = forwardRef(
         )}
 
         {/* MENSAJES */}
+        {/* banner is rendered inside the chat container as a floating pill (see below) */}
+
         <div
           id="chat-container"
           onScroll={(e) => {
             const el = e.target;
             setIsUserAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 150);
+            // mark that the user has interacted / scrolled
+            userScrolledRef.current = true;
             // Si estamos cerca del top, solicitar más mensajes antiguos
-            if (el.scrollTop < 120 && typeof onLoadMoreOlderMessages === "function" && !loadingOlder) {
+            // NOTE: umbral aumentado temporalmente a 300 para asegurar el disparo en layouts con padding
+            if (el.scrollTop < 300 && typeof onLoadMoreOlderMessages === "function" && !loadingOlder) {
               (async () => {
                 try {
                   setLoadingOlder(true);
@@ -688,6 +1084,7 @@ const ChatPanel = forwardRef(
                 }
               })();
             }
+            // Banner label is updated by IntersectionObserver; no-op here.
           }}
           style={{
             flex: 1,
@@ -700,9 +1097,12 @@ const ChatPanel = forwardRef(
             position: "relative",
           }}
         >
+          {/* Floating banner removed: dates are now shown inline before first message of each day (WhatsApp-style) */}
           {/* Indicador cuando se están cargando páginas antiguas */}
           {loadingOlder && (
-            <div style={{ marginBottom: 10, color: "#888", textAlign: "center" }}>Cargando mensajes antiguos...</div>
+            <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', my: 1 }}>
+              <Loader message="Cargando mensajes antiguos..." size="small" />
+            </Box>
           )}
 
           {loadingConversationId === `${conversationId}` ? (
@@ -711,20 +1111,90 @@ const ChatPanel = forwardRef(
               <Loader message="Cargando..." />
             </>
           ) : (
-            processedMessages.map((msg, idx) => (
-              <MessageBubble
-                key={idx}
-                msg={msg}
-                onReply={() => onReply(msg)}
-                onJumpToReply={onJumpToReply}
-                ref={(el) => {
-                  if (el && msg.id) messageRefs.current[msg.id] = el;
-                }}
-                isHighlighted={highlightedMessageId === msg.id}
-                isAIActive={!iaPaused}
-              />
-            ))
+            processedMessages.map((msg, idx) => {
+                // Skip day dividers entirely; instead, render date labels inline before first message of each day
+                if (msg.__dayDivider) {
+                  return null; // Skip rendering __dayDivider objects; use inline labels instead
+                }
+
+              try { if (DEBUG) console.debug(`� [ChatPanel][render] message idx=${idx} id=${msg.id} ts=${msg.timestamp || msg.Timestamp || msg.createdAt} fromRole=${msg.fromRole}`); } catch (e) { /* ignore */ }
+              
+              // Determine if this message is the first of its day. If so, show date label (WhatsApp-style)
+              const msgDate = msg.timestamp || msg.Timestamp || msg.createdAt;
+              const msgDayKey = msgDate ? new Date(msgDate).toDateString() : '';
+              const prevMsg = idx > 0 ? processedMessages[idx - 1] : null;
+              const prevDate = prevMsg && !prevMsg.__dayDivider ? (prevMsg.timestamp || prevMsg.Timestamp || prevMsg.createdAt) : null;
+              const prevDayKey = prevDate ? new Date(prevDate).toDateString() : '';
+              const isFirstOfDay = msgDayKey && (msgDayKey !== prevDayKey);
+              
+              // Format day label for this message (Hoy, Ayer, etc.)
+              const formatDayLabelForMsg = (date) => {
+                if (!date) return "";
+                const d = new Date(date);
+                const now = new Date();
+                const startOfDay = (dt) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+                const diffDays = Math.floor((startOfDay(now) - startOfDay(d)) / (1000 * 60 * 60 * 24));
+                if (diffDays === 0) return "Hoy";
+                if (diffDays === 1) return "Ayer";
+
+                const getStartOfWeek = (dt) => {
+                  const copy = new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+                  const day = (copy.getDay() + 6) % 7;
+                  copy.setDate(copy.getDate() - day);
+                  return copy;
+                };
+
+                const startOfThisWeek = getStartOfWeek(now);
+                if (d >= startOfThisWeek) {
+                  return d.toLocaleDateString('es-ES', { weekday: 'long' }).replace(/^[a-z]/, (m) => m.toUpperCase());
+                }
+
+                const prevWeekStart = new Date(startOfThisWeek);
+                prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+                if (d >= prevWeekStart && d < startOfThisWeek) {
+                  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+                }
+
+                if (d.getFullYear() === now.getFullYear()) {
+                  return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+                }
+                return d.toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' });
+              };
+              
+              return (
+                <React.Fragment key={msg.id || idx}>
+                  {isFirstOfDay && DATE_MODE === 'inline-small' && (
+                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mt: 2, mb: 1.5 }}>
+                      <Box sx={{ display: 'inline-flex', alignItems: 'center', px: 2, py: '6px', bgcolor: 'transparent', color: '#999', fontSize: '12px', fontWeight: '400' }}>
+                        <Box component="span">{formatDayLabelForMsg(msgDate)}</Box>
+                      </Box>
+                    </Box>
+                  )}
+                  {msg.__unreadStart && (
+                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', my: 1 }}>
+                      <Box sx={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center' }}>
+                        <Box sx={{ position: 'absolute', left: 0, right: 0, height: '1px', backgroundColor: '#ffd082', top: '50%', transform: 'translateY(-50%)' }} />
+                        <Box sx={{ position: 'relative', px: 2, bgcolor: '#fff8e1', zIndex: 1, color: '#7a4a00', fontSize: '12px', fontWeight: '600', borderRadius: 1 }}>
+                          Mensajes no leídos
+                        </Box>
+                      </Box>
+                    </Box>
+                  )}
+                  <MessageBubble
+                    msg={msg}
+                    onReply={() => onReply(msg)}
+                    onJumpToReply={onJumpToReply}
+                    ref={(el) => {
+                      if (el && msg.id) messageRefs.current[msg.id] = el;
+                    }}
+                    isHighlighted={highlightedMessageId === msg.id}
+                    isAIActive={!iaPaused}
+                  />
+                </React.Fragment>
+              );
+            })
           )}
+
           {isTyping && typingSender && typingConversationId == conversationId && (
             <CSSTransition
               in
@@ -817,4 +1287,5 @@ ChatPanel.propTypes = {
   onLoadMoreOlderMessages: PropTypes.func, // (conversationId) => Promise<number>
 };
 
-export default ChatPanel;
+// Wrap with React.memo to avoid re-renders when props are referentially stable.
+export default React.memo(ChatPanel);

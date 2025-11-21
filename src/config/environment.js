@@ -26,3 +26,35 @@ export const getWidgetFrameUrl = () => currentConfig.widgetFrameUrl;
 export const getDashboardUrl = () => currentConfig.dashboardUrl;
 export const isProduction = () => !isDevelopment;
 export const isDev = () => isDevelopment;
+
+// ✅ NUEVO: Validar cumplimiento de CORS (verificar que el origen coincida)
+export const validateCorsCompliance = () => {
+  const currentOrigin = window.location.origin;
+  const expectedOrigin = currentConfig.dashboardUrl;
+  
+  // Extraer solo el protocolo + host para comparar
+  const expectedOriginFull = expectedOrigin.includes('://')
+    ? expectedOrigin.substring(0, expectedOrigin.lastIndexOf('/') || expectedOrigin.length)
+    : expectedOrigin;
+  
+  const originMatch = currentOrigin === expectedOriginFull;
+  
+  if (!originMatch) {
+    console.warn(
+      `⚠️ [CORS] Posible problema de CORS detectado:\n` +
+      `Origen actual: ${currentOrigin}\n` +
+      `Origen esperado: ${expectedOriginFull}`
+    );
+  } else {
+    console.info(`✅ [CORS] Origen verificado correctamente: ${currentOrigin}`);
+  }
+  
+  return {
+    valid: originMatch,
+    currentOrigin,
+    expectedOrigin: expectedOriginFull,
+    message: originMatch 
+      ? `✅ CORS válido: ${currentOrigin}` 
+      : `❌ CORS inválido: ${currentOrigin} no coincide con ${expectedOriginFull}`
+  };
+};

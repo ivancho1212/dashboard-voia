@@ -76,6 +76,7 @@ export default function App() {
   const [rtlCache, setRtlCache] = useState(null);
   const { pathname } = useLocation();
   const isWidgetFrame = pathname === "/widget-frame";
+  const isMobileChat = pathname.startsWith("/chat/mobile"); // Nueva ruta móvil
   const { user } = useAuth();
 
   // Rutas públicas (deben coincidir con landingRoutes y authRoutes)
@@ -235,7 +236,7 @@ export default function App() {
           <ThemeProvider theme={themeRTL}>
             <CssBaseline />
             <ScrollToTop />
-            {!isWidgetFrame && layout === "dashboard" && !isLandingRoute && miniSidenav !== null && (
+            {!isWidgetFrame && !isMobileChat && layout === "dashboard" && !isLandingRoute && miniSidenav !== null && (
               <>
                 <Sidenav
                   color={sidenavColor}
@@ -266,7 +267,7 @@ export default function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <ScrollToTop />
-        {!isWidgetFrame && layout === "dashboard" && miniSidenav !== null && !isLandingRoute && (
+        {!isWidgetFrame && !isMobileChat && layout === "dashboard" && miniSidenav !== null && !isLandingRoute && (
           <>
             <Sidenav
               color={sidenavColor}

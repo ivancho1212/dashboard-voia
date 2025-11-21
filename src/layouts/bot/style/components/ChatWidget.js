@@ -1,5 +1,10 @@
+import { unifyMessages, isEmoji, groupConsecutiveFiles, normalizeMessage } from "../../../../utils/chatUtils";
+import useWidgetInstance from "hooks/useWidgetInstance";
+import useChatCache from "hooks/useChatCache";
+import useConversationCache from "../../../../hooks/useConversationCache";
 import { CSSTransition, SwitchTransition } from "react-transition-group";
-import React, { useState, useEffect, useRef } from "react";
+import "layouts/widget/WidgetStyles.css";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { FaPaperclip, FaPaperPlane, FaImage } from "react-icons/fa";
 import PropTypes from "prop-types";
@@ -9,54 +14,28 @@ import MessageBubble from "./chat/MessageBubble";
 import MessageList from "./chat/MessageList";
 import TypingDots from "./chat/TypingDots";
 import ImagePreviewModal from "./chat/ImagePreviewModal";
+import DeviceConflictOverlay from "./chat/DeviceConflictOverlay";
+import MobileConversationExpired from "./chat/MobileConversationExpired";
 import { getBotContext } from "services/botService";
 import { createConversation } from "services/chatService";
+import { getConversationHistory } from "services/conversationsService";
+import { getOrGenerateFingerprint } from "services/fingerprintService";
 import { getSenderColor } from "../../../../utils/colors";
-import QRCode from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
+import useDeviceSessionLock from "hooks/useDeviceSessionLock";
 
 
 const viaLogo = process.env.PUBLIC_URL + "/VIA.png";
 const defaultAvatar = "/VIA.png";
 
-// Función robusta para detectar si un string es un emoji (igual que en AvatarComponent.js)
-function isEmoji(str) {
-  if (!str || typeof str !== 'string') return false;
-  const trimmed = str.trim();
-  if (!trimmed) return false;
-  // Verificar que no sea una URL o path
-  if (trimmed.includes('/') || trimmed.includes('.') || trimmed.includes('http') || trimmed.includes('data:')) {
-    return false;
-  }
-  // Verificar que sea razonablemente corto (emojis suelen ser ≤ 8 chars)
-  if (trimmed.length > 8) return false;
-  // Regex completa para emojis (incluye ZWJ y variantes)
-  const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F900}-\u{1F9FF}]|[\u{1F018}-\u{1F270}]|[\u{238C}-\u{2454}]|[\u{20D0}-\u{20FF}]|[\u{FE0F}]|[\u{200D}]|[\u{1F004}]|[\u{1F0CF}]|[\u{1F170}-\u{1F251}]/u;
-  return emojiRegex.test(trimmed);
-}
-
-const normalizeMessage = (msg) => {
-  // Normalize IDs to strings to avoid numeric/string mismatches
-  const rawId = msg.id ?? msg.tempId ?? uuidv4();
-  const id = rawId !== undefined && rawId !== null ? String(rawId) : String(uuidv4());
-  const tempRaw = msg.tempId ?? id;
-  const tempId = tempRaw !== undefined && tempRaw !== null ? String(tempRaw) : id;
-  const uniqueKey = msg.tempId ?? id; // Prioritize tempId for the key
-
-  return {
-    ...msg,
-    id, // The real ID can update, that's fine. Always a string.
-    tempId, // Ensure tempId is always present if possible (string)
-    status: msg.status ?? "sent",
-    from: msg.from ?? (msg.sender === "user" ? "user" : msg.sender === "admin" ? "admin" : "bot"),
-    text: msg.text ?? msg.content ?? msg.message ?? msg.body ?? "",
-    file: msg.file ?? null,
-    multipleFiles: msg.multipleFiles ?? msg.files ?? [],
-    images: msg.images ?? msg.imageGroup ?? [],
-    timestamp: msg.timestamp ?? new Date().toISOString(),
-    color: msg.color ?? getSenderColor(msg.from),
-    uniqueKey, // Use the stable key
-  };
+const pastelColors = {
+  conectado: "#b3e5fc",     // azul pastel actual
+  reconectando: "#fff9c4",  // amarillo pastel
+  error: "#ffcdd2",         // rosa pastel
+  desconectado: "#ffcc80",  // naranja pastel
+  conectadoVerde: "#b9fbc0" // verde pastel que quieres usar
 };
+
 
 function ChatWidget({
   style = {},
@@ -65,19 +44,21 @@ function ChatWidget({
   userId: propUserId,
   isDemo: initialDemo = false,
   widgetToken: propWidgetToken = null,
-  // optional ref from WidgetFrame to measure preferred size
+  widgetClientSecret: propWidgetClientSecret = null,
   rootRef = null,
-  // optional explicit containerSize applied by parent (px)
   containerSize = null,
   previewMode = false,
+  isMobileView = false,
+  conversationId: propConversationId = null,
 }) {
-  const connectionRef = useRef(null);
-  const botId = propBotId ?? 2;
-  const userId = propUserId ?? null;
-  const conversationIdRef = useRef(null);
+  // Modulariza la instancia y la clave de caché
+  const { botId, userId, widgetInstanceId, CACHE_KEY } = useWidgetInstance(propBotId, propUserId);
 
-  // Move isOpen to the top so it's available for all hooks
-  const [isOpen, setIsOpen] = useState(false);
+  // Estados y hooks principales
+  const connectionRef = useRef(null);
+  const widgetClientSecret = propWidgetClientSecret ?? null;  // ✅ NUEVO
+  const conversationIdRef = useRef(propConversationId); // Inicializar con prop
+  const [isOpen, setIsOpen] = useState(isMobileView); // Si es móvil, abrir por defecto
   const [botStyle, setBotStyle] = useState(style || null);
   const [isDemo, setIsDemo] = useState(initialDemo);
   const [botContext, setBotContext] = useState(null);
@@ -86,6 +67,43 @@ function ChatWidget({
   const [promptSent, setPromptSent] = useState(false);
   const promptSentRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false); // ESTA LÍNEA DEBE ESTAR AQUÍ
+  const [welcomeMessage, setWelcomeMessage] = useState(null);
+  const [userLocation, setUserLocation] = useState(null); // { country, city, language }
+  const [capturedFields, setCapturedFields] = useState([]); // 🆕 Estado para track de campos capturados
+  const [isMobileConversationExpired, setIsMobileConversationExpired] = useState(false); // Estado para conversación expirada en móvil
+  const [isMobileSessionActive, setIsMobileSessionActive] = useState(false); // 🆕 Pausa inactividad cuando móvil está abierto
+  const welcomeShownRef = useRef(false); // 🆕 Ref para rastrear si ya mostró bienvenida en esta conversación
+  const welcomeTimeoutRef = useRef(null); // 🆕 Ref para rastrear el timeout del mensaje de bienvenida
+  const lastWelcomeTextRef = useRef(null); // 🆕 Ref para guardar el texto del welcome enviado, evitar duplicados del broadcast
+  // Hook para caché y sesión modularizado
+  const {
+    saveConversationCache,
+    loadConversationCache,
+    clearCache,
+    loadedConversationsRef,
+  } = useConversationCache(CACHE_KEY);
+  const widgetExplicitlyClosedRef = useRef(false); // 🆕 Ref para rastrear si el usuario cerró el widget explícitamente
+  const qrHistoryLoadedRef = useRef(false); // 🆕 Ref para evitar cargar historial QR dos veces
+
+  // Declarar conversationId antes de usarlo en el hook
+  const [conversationId, setConversationId] = useState(propConversationId);
+
+  // El hook debe usarse solo en la web, no en móvil
+  const deviceSessionLock = useDeviceSessionLock(
+    conversationId,
+    connectionRef.current,
+    false // Siempre false para la web, el móvil no debe bloquearse a sí mismo
+  );
+
+  const [isBlockedByOtherDevice, setIsBlockedByOtherDevice] = useState(deviceSessionLock.isBlockedByOtherDevice);
+  const [blockMessage, setBlockMessage] = useState(deviceSessionLock.blockMessage);
+  const blockingDevice = deviceSessionLock.blockingDevice;
+
+  // Log para verificar el estado de bloqueo
+  useEffect(() => {
+    setIsBlockedByOtherDevice(deviceSessionLock.isBlockedByOtherDevice);
+    setBlockMessage(deviceSessionLock.blockMessage);
+  }, [deviceSessionLock.isBlockedByOtherDevice, deviceSessionLock.blockMessage]);
 
   // Para animación del mensaje de debug
   const [connectionStatus, setConnectionStatus] = useState("desconocido");
@@ -93,6 +111,82 @@ function ChatWidget({
   const [showConnectionDebug, setShowConnectionDebug] = useState(false);
   const previousConnectionStatusRef = useRef(connectionStatus);
   const nodeRef = useRef(null);
+  const wasBlockedRef = useRef(false); // 🔹 Ref para rastrear estado previo del bloqueo
+
+  // 🆕 EFFECT: Guardar token en localStorage cuando esté disponible
+  // Esto asegura que axiosConfig pueda encontrarlo cuando llame a getConversationHistory()
+  useEffect(() => {
+    // Si necesitas guardar el token, usa saveCache o una función dedicada
+  }, [propWidgetToken]);
+
+  // 🔴 NUEVO: EFFECT para escuchar evento de expiración desde MobileChat
+  // Cuando MobileChat expira por inactividad, envía window.parent.postMessage
+  useEffect(() => {
+    const handleMobileInactivityExpired = (event) => {
+      // Validar que sea el evento correcto
+      if (event.data?.type === 'mobile-inactivity-expired') {
+        
+        // Limpiar caché cuando móvil expira
+        clearCache();
+
+        // Cerrar el widget
+        setIsOpen(false);
+        
+        // Resetear estado
+        setConversationId(null);
+        conversationIdRef.current = null;
+        setMessages([]);
+        setPromptSent(false);
+        promptSentRef.current = false;
+      }
+    };
+
+    window.addEventListener('message', handleMobileInactivityExpired);
+
+    return () => {
+      window.removeEventListener('message', handleMobileInactivityExpired);
+    };
+  }, [CACHE_KEY]);
+
+  // EFFECT: Detectar cuando la conversación es cerrada en web (móvil entra en standby)
+  // O cuando está bloqueada por otro dispositivo
+  useEffect(() => {
+    if (!isMobileView || !conversationIdRef.current) return;
+
+    // 🔒 CAMBIO: Cuando web se abre, CERRAR móvil automáticamente
+    if (isBlockedByOtherDevice) {
+      console.log('🔒 [Mobile] Web está activo en esta conversación - cerrando móvil automáticamente');
+      // Cerrar el widget automáticamente en móvil
+      setIsOpen(false);
+      setIsMobileConversationExpired(true);
+    } else if (wasBlockedRef.current && !isBlockedByOtherDevice) {
+      // Caso anterior: Si la sesión fue desbloqueada después de estar bloqueada
+      setIsMobileConversationExpired(true);
+    }
+    
+    wasBlockedRef.current = isBlockedByOtherDevice;
+  }, [isBlockedByOtherDevice, isMobileView]);
+
+  // 🆕 EFFECT: Actualizar estado de sesión móvil activa
+  // Cuando web está bloqueado por móvil, pausar inactividad en web
+  useEffect(() => {
+    if (!isMobileView) {
+      // Si NO es móvil (es web), verificar si está bloqueado por móvil
+      if (isBlockedByOtherDevice) {
+        setIsMobileSessionActive(true);
+      } else {
+        setIsMobileSessionActive(false);
+      }
+    } else {
+      // Si ES móvil, la sesión móvil está activa cuando el widget está abierto
+      if (isOpen) {
+        setIsMobileSessionActive(true);
+      } else {
+        setIsMobileSessionActive(false);
+      }
+    }
+  }, [isBlockedByOtherDevice, isOpen, isMobileView]);
+
   // Estado de debug
   useEffect(() => {
     if (connectionStatus !== previousConnectionStatusRef.current) {
@@ -105,14 +199,6 @@ function ChatWidget({
       return () => clearTimeout(timeout);
     }
   }, [connectionStatus]);
-
-  const pastelColors = {
-    conectado: "#b3e5fc",     // azul pastel actual
-    reconectando: "#fff9c4",  // amarillo pastel
-    error: "#ffcdd2",         // rosa pastel
-    desconectado: "#ffcc80",  // naranja pastel
-    conectadoVerde: "#b9fbc0" // verde pastel que quieres usar
-  };
 
   useEffect(() => {
     if (initialDemo) return;
@@ -130,6 +216,42 @@ function ChatWidget({
           }
         }
 
+        // 🔹 Obtener ubicación del usuario (desde endpoint de conversaciones)
+        try {
+          // 🧪 PARA TESTING: Simular diferentes ubicaciones descomenta una de estas líneas:
+          // const testIP = "213.97.99.0"; // España (Madrid)
+          const testIP = "190.147.2.0"; // Colombia (Bogota)
+          // const testIP = "203.113.168.0"; // Japón
+
+          const locationRes = await fetch(`http://localhost:5006/api/conversations/user-location`, {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+              'X-Forwarded-For': testIP
+            }
+          });
+
+          if (locationRes.ok) {
+            const locationData = await locationRes.json();
+            setUserLocation({
+              country: locationData.country || 'Unknown',
+              city: locationData.city || 'Unknown',
+              language: 'es'
+            });
+          } else {
+            setUserLocation({
+              country: 'Unknown',
+              city: 'Unknown',
+              language: 'es'
+            });
+          }
+        } catch (err) {
+          setUserLocation({
+            country: 'Unknown',
+            city: 'Unknown',
+            language: 'es'
+          });
+        }
 
         // 🔹 Contexto
         const context = await getBotContext(botId);
@@ -154,35 +276,32 @@ function ChatWidget({
             capture: context.capture,
           };
 
+          // 🆕 Inicializar campos capturados desde el contexto
+          if (context.capture?.fields && Array.isArray(context.capture.fields)) {
+            const initialFields = context.capture.fields.map(field => ({
+              fieldName: field.fieldName,
+              value: null, // Inicialmente no hay valor capturado
+              fieldType: field.fieldType || "text",
+              isRequired: field.isRequired || false
+            }));
+            setCapturedFields(initialFields);
+          }
+
           // 🔹 Guardamos el payload en el estado
           setBotContext(aiPayload);
           setIsBotReady(true); // ✅ El bot está listo para recibir mensajes
-          console.log("🧠 Payload preparado para IA:", aiPayload);
 
           // 🔹 Guardamos el system prompt + vector info para uso interno de la IA
           const systemPrompt = systemMsg?.content || "";
           const trainingData = aiPayload.training || {};
-          const vectorInfo = `
-          Fuentes disponibles:
-          - Documentos: ${trainingData.documents?.length || 0}
-          - URLs: ${trainingData.urls?.length || 0}
-          - Textos: ${trainingData.customTexts?.join(", ") || "Ninguno"}
-                  `;
+          const vectorInfo = `Fuentes disponibles:\n- Documentos: ${trainingData.documents?.length || 0}\n- URLs: ${trainingData.urls?.length || 0}\n- Textos: ${trainingData.customTexts?.join(", ") || "Ninguno"}`;
 
-          const initialPrompt = `
-          ${systemPrompt}
-
-          Además, tienes acceso a datos vectorizados relacionados con este bot.
-          Utiliza esos datos siempre que sean relevantes para responder.
-
-          ${vectorInfo}
-        `;
+          const initialPrompt = `${systemPrompt}\n\nAdemás, tienes acceso a datos vectorizados relacionados con este bot.\nUtiliza esos datos siempre que sean relevantes para responder.\n\n${vectorInfo}`;
 
           // 🔹 Guardar prompt interno en botContext
           setBotContext(prev => ({ ...prev, initialPrompt }));
         }
       } catch (err) {
-        console.error("❌ Error cargando datos del bot:", err);
         setIsBotReady(false); // Asegurarse de que no esté listo si falla
       }
     };
@@ -190,26 +309,73 @@ function ChatWidget({
     fetchBotStyleAndContext();
   }, [botId]);
 
+  // 🔹 Obtener mensaje de bienvenida personalizado
+  useEffect(() => {
+    if (!userLocation || !botId || initialDemo) {
+      return;
+    }
+
+    const fetchWelcomeMessage = async () => {
+      try {
+        const params = new URLSearchParams({
+          botId: botId,
+          country: userLocation.country || 'Unknown',
+          city: userLocation.city || 'Unknown',
+          language: userLocation.language || 'es'
+        });
+
+        const url = `http://localhost:5006/api/botwelcomemessages/get-by-location?${params}`;
+
+        const response = await fetch(url, { credentials: 'include' });
+
+        if (response.ok) {
+          const data = await response.json();
+          
+          setWelcomeMessage({
+            text: data.message,
+            country: data.country,
+            city: data.city,
+            matchType: data.matchType,
+            source: data.source
+          });
+        } else {
+          const errorData = await response.json();
+        }
+      } catch (err) {
+      }
+    };
+
+    fetchWelcomeMessage();
+  }, [userLocation, botId, initialDemo]);
+
   // 🔹 Escuchar cambios de estado de la conexión
   useEffect(() => {
     const connection = connectionRef.current;
     if (!connection) return;
 
     const handleReconnecting = () => {
+      console.warn('⚠️  [SignalR] Reconectando...');
       setConnectionStatus("reconectando...");
       setShowConnectionDebug(true);
     };
 
     const handleReconnected = () => {
+      console.log('✅ [SignalR] Reconectado exitosamente');
       setConnectionStatus("conectado");
       setShowConnectionDebug(true);
       // 🔹 ocultar después de 2s
       setTimeout(() => setShowConnectionDebug(false), 2000);
     };
 
-    const handleClosed = () => {
+    const handleClosed = (error) => {
+      console.error('❌ [SignalR] Conexión cerrada', {
+        error: error?.message || error,
+        connectionState: connection?.state,
+        timestamp: new Date().toISOString()
+      });
       setConnectionStatus("desconectado");
       setShowConnectionDebug(true);
+      setIsConnected(false);
     };
 
     connection.onreconnecting(handleReconnecting);
@@ -223,37 +389,89 @@ function ChatWidget({
     };
   }, [connectionRef.current]);
 
-  // Mostrar TypingDots y mensaje de bienvenida solo al abrir el widget
+  // Mostrar TypingDots y mensaje de bienvenida solo al abrir el widget EN WEB
+  // En móvil: NO mostrar si ya hay historial (conversación iniciada)
   useEffect(() => {
-    if (isOpen && !isDemo) {
+    if (isOpen && !isDemo && !welcomeShownRef.current) {
       const welcomeId = "welcome-message";
       const hasWelcome = messages.some(m => m.id === welcomeId);
-
-      if (!hasWelcome) {
-        setTypingSender("bot");
-        setIsTyping(true);
-
-        const welcomeMsg = {
-          id: welcomeId,
-          from: "ai",
-          text: "👋 ¡Hola! Bienvenido. ¿En qué puedo ayudarte hoy?",
-          status: "sent",
-          timestamp: new Date().toISOString(),
-        };
-
-        const typingDelay = 1500 + Math.random() * 1000;
-        setTimeout(() => {
-          setMessages(prev => [...prev, normalizeMessage(welcomeMsg)]);
-          requestAnimationFrame(() => {
-            setIsTyping(false);
-            setTypingSender(null);
-          });
-          setPromptSent(true);
-          promptSentRef.current = true;
-        }, typingDelay);
+      
+      // 🔹 NO mostrar bienvenida si:
+      // 1. Ya está en los mensajes
+      // 2. Hay cualquier mensaje (historial cargado desde backend)
+      // 3. Es móvil Y hay más de 0 mensajes (conversación iniciada)
+      if (hasWelcome || messages.length > 0) {
+        welcomeShownRef.current = true;
+        return;
       }
+
+      // 🔹 Esperar a que el mensaje personalizado esté disponible
+      if (!welcomeMessage) {
+        return; // Esperar al próximo ciclo cuando welcomeMessage esté disponible
+      }
+
+      // 🔹 Limpiar timeout anterior si existe
+      if (welcomeTimeoutRef.current) {
+        clearTimeout(welcomeTimeoutRef.current);
+        welcomeTimeoutRef.current = null;
+      }
+
+      // 🔹 Usar el mensaje personalizado si existe, sino el default
+      const welcomeText = welcomeMessage?.text || "👋 ¡Hola! Bienvenido. ¿En qué puedo ayudarte hoy?";
+
+      const welcomeMsg = {
+        id: welcomeId,
+        from: "bot",
+        text: welcomeText,
+        status: "sent",
+        timestamp: new Date().toISOString(),
+      };
+
+      // 🔹 MARCAR COMO MOSTRADO ANTES DE SCHEDULEAR - evita duplicados
+      welcomeShownRef.current = true;
+      setTypingSender("bot");
+      setIsTyping(true);
+
+      const typingDelay = 1500 + Math.random() * 1000;
+      
+      welcomeTimeoutRef.current = setTimeout(async () => {
+        // 🆕 Agregar el mensaje de bienvenida al estado local (SOLO UNA VEZ)
+        setMessages(prev => {
+          const alreadyExists = prev.some(m => m.id === welcomeId);
+          if (alreadyExists) {
+            return prev;
+          }
+          return [...prev, normalizeMessage(welcomeMsg)];
+        });
+        // (Eliminado log de estado de mensajes tras bienvenida)
+        setPromptSent(true);
+        promptSentRef.current = true;
+        // 🆕 Guardar el mensaje de bienvenida en la conversación via SignalR
+        // Como respuesta inicial de la IA (NO como entrada del usuario)
+        try {
+          const connection = connectionRef.current;
+          const convId = conversationIdRef.current;
+          if (connection && connection.state === "Connected" && convId) {
+            lastWelcomeTextRef.current = welcomeText;
+            await connection.invoke("SaveWelcomeMessage", convId, welcomeText, botId);
+          }
+        } catch (err) {
+        }
+        requestAnimationFrame(() => {
+          setIsTyping(false);
+          setTypingSender(null);
+        });
+      }, typingDelay);
     }
-  }, [isOpen, isDemo, messages]);
+
+    return () => {
+      // Limpiar timeout al desmontar o cuando cambian las dependencias
+      if (welcomeTimeoutRef.current) {
+        clearTimeout(welcomeTimeoutRef.current);
+        welcomeTimeoutRef.current = null;
+      }
+    };
+  }, [isOpen, isDemo, isMobileView, welcomeMessage, botId]);
 
   // Configuración de temas
   const fallbackTextColor = "#1a1a1a";
@@ -334,9 +552,6 @@ function ChatWidget({
   // Estados React
   const [message, setMessage] = useState("");
   const debugSetMessages = (newMessages) => {
-    if (newMessages.length === 0) {
-      console.trace("⚠️ setMessages([]) llamado desde:", new Error().stack);
-    }
     setMessages(newMessages);
   };
 
@@ -344,187 +559,308 @@ function ChatWidget({
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [isMobileLocked, setIsMobileLocked] = useState(false);
   const [imageGroup, setImageGroup] = useState([]);
+  const [imageGroupBlobUrls, setImageGroupBlobUrls] = useState({});
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
-  const [conversationId, setConversationId] = useState(null);
+  // Eliminado: declaración duplicada de conversationId/setConversationId
   const messagesEndRef = useRef(null);
   const [iaWarning, setIaWarning] = useState(null);
   const textareaRef = useRef(null);
   const [typingSender, setTypingSender] = useState(null);
 
-  useEffect(() => {
-    console.log(`[TYPING STATE CHANGED] isTyping: ${isTyping}, typingSender: ${typingSender}`);
-  }, [isTyping, typingSender]);
-
   // Safeguard to turn off typing indicator if bot is not ready, disconnected, or has a warning
   useEffect(() => {
     if ((!isBotReady || !isConnected || iaWarning) && isTyping) {
-      console.log("🚫 Bot not ready/connected or warning present, turning off typing indicator.");
       setIsTyping(false);
       setTypingSender(null);
     }
   }, [isBotReady, isConnected, iaWarning, isTyping]);
-  // Generar un id de instancia del widget por pestaña (sessionStorage) para aislar sesiones
-  const [widgetInstanceId] = useState(() => {
-    try {
-      const existing = sessionStorage.getItem('widget_instance_id');
-      if (existing) return existing;
-      const newId = uuidv4();
-      sessionStorage.setItem('widget_instance_id', newId);
-      return newId;
-    } catch (e) {
-      // si sessionStorage falla (modo SSR improbable), generar id temporal
-      return uuidv4();
-    }
-  });
-
-  // La clave del cache incluye el widgetInstanceId para evitar compartir conversaciones entre pestañas/usuarios
-  const CACHE_KEY = `chat_${botId}_${userId || 'anon'}_${widgetInstanceId}`;
-  // Mantener la conversación en caché solo por un intervalo corto (p. ej. 2 minutos)
-  // Esto permite restaurar al recargar accidentalmente pero evita compartir la misma conversación
-  // entre diferentes usuarios del mismo equipo.
-  const CACHE_TIMEOUT = 2 * 60 * 1000; // 2 minutos
+  
+  // Caché válido por 3.5 minutos (sincronizado con INACTIVITY_TIMEOUT + advertencia)
+  const CACHE_TIMEOUT = 3.5 * 60 * 1000; // 210 segundos
 
   // ✅ Única lógica de carga de caché al inicio, evitando duplicados
+  // 🔹 En móvil, NO cargar caché - sesión limpia
   useEffect(() => {
+    // En móvil, no cargar historial - conversación "nueva" en ese dispositivo
+    if (isMobileView) {
+      return; // No cargar caché en móvil
+    }
+
+    // 🔹 SOLO cargar caché si NO hay propConversationId (conversación nueva/reapertura)
+    // Si hay propConversationId (desde QR o URL), el historial vendrá del servidor
+    if (propConversationId) {
+      console.log('🔧 [cacheLoad] Ignorando caché - usando propConversationId del servidor');
+      return;
+    }
+
     const cached = loadConversationCache();
     if (cached) {
       setConversationId(cached.conversationId);
-
-      // 🔹 eliminar duplicados por uniqueKey
-      const uniqueMessages = Array.from(
-        new Map(
-          cached.messages.map(msg => {
-            const normalized = normalizeMessage(msg);
-            return [normalized.uniqueKey, normalized];
-          })
-        ).values()
-      );
-
-      setMessages(uniqueMessages);
-
-      if (uniqueMessages.some(m => m.from === "user")) {
+      // Unificar mensajes duplicados por tempId/id
+      const unifiedMessages = unifyMessages(cached.messages.map(normalizeMessage));
+      setMessages(unifiedMessages);
+      if (unifiedMessages.some(m => m.from === "user")) {
         setPromptSent(true);
         promptSentRef.current = true;
       }
+      // Evitar crear nueva conversación y welcome message si hay caché válido
+      return;
+    } else {
+      console.log('[CACHE] No se encontró caché válido, se creará nueva conversación.');
+      // Aquí sí se puede crear la conversación y el mensaje de bienvenida
     }
-  }, []);
+  }, [isMobileView, propConversationId]);
 
-
+  // 🎯 NOTA: Carga de historial QR ahora ocurre EN initConnection para evitar race conditions
+  // Mantenemos este useEffect solo como respaldo para casos edge
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!propConversationId || !isMobileView) return;
+    
+    // Si ya se cargó en initConnection, no hacer nada
+    if (qrHistoryLoadedRef.current) {
+      return;
+    }
+    
+    
+    const loadHistoryFromQR = async () => {
       try {
-        const raw = sessionStorage.getItem(CACHE_KEY);
-        if (!raw) return;
-        const data = JSON.parse(raw);
-        const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
-        if (isExpired) {
-          console.log("⏰ Caché expirado en segundo plano, limpiando...");
-          sessionStorage.removeItem(CACHE_KEY);
-          setConversationId(null);
-          setMessages([]);
-          setPromptSent(false);
-          promptSentRef.current = false;
+        
+        const response = await getConversationHistory(propConversationId);
+        
+        // El backend devuelve: { conversationDetails, history: [...], debug: {...} }
+        const historyArray = response?.history || [];
+        
+        
+        
+        if (historyArray && Array.isArray(historyArray) && historyArray.length > 0) {
+          
+          // 🔍 DEDUPLICACIÓN: Eliminar mensajes de archivo duplicados
+          // Patrón detectado: Backend devuelve ID 420 (/uploads/...) y ID 421 (/api/files/chat/420)
+          // Solución: Eliminar mensajes donde URL contiene referencia a un ID que ya existe como mensaje
+          const fileMessagesById = new Map();
+          const deduplicatedHistory = [];
+          
+          for (const item of historyArray) {
+            if (item.type === 'file' || item.type === 'image') {
+              const url = item.url || item.fileUrl || '';
+              
+              // Detectar si es referencia indirecta (e.g., /api/files/chat/420)
+              const isIndirectRef = url.match(/\/api\/files\/chat\/(\d+)/);
+              if (isIndirectRef) {
+                const refId = parseInt(isIndirectRef[1]);
+                if (fileMessagesById.has(refId)) {
+                  // Este es un duplicado - es referencia a un archivo que ya tenemos
+                  continue; // Skip this item
+                }
+              }
+              
+              fileMessagesById.set(item.id, item);
+            }
+            deduplicatedHistory.push(item);
+          }
+          
+          if (deduplicatedHistory.length < historyArray.length) {
+          }
+          
+          // 🆕 Agrupar archivos/imágenes consecutivas del mismo usuario
+          const groupedHistory = groupConsecutiveFiles(deduplicatedHistory);
+          
+          // Normalizar mensajes del historial
+          const historyMessages = groupedHistory.map(msg => {
+            // El backend devuelve: { id, type, text, timestamp, fromRole, fromId, fromName, fromAvatarUrl, ... }
+            const normalized = normalizeMessage({
+              id: msg.id,
+              type: msg.type,
+              // 🔹 NO pasar texto si es un archivo agrupado - solo para mensajes de texto y archivos individuales
+              ...(!(msg.isGroupedFile) && { text: msg.text }),
+              content: msg.text,
+              from: msg.fromRole, // fromRole -> from
+              sender: msg.fromRole,
+              timestamp: msg.timestamp,
+              fromName: msg.fromName,
+              fromAvatarUrl: msg.fromAvatarUrl,
+              // 🆕 Pasar datos de archivo agrupado
+              ...(msg.isGroupedFile && {
+                isGroupedFile: true,
+                files: msg.files
+              }),
+              // Datos de archivo individual (si no es grupo)
+              ...(!msg.isGroupedFile && (msg.type === 'file' || msg.type === 'image') && {
+                fileUrl: msg.fileUrl,
+                fileName: msg.fileName,
+                fileType: msg.fileType
+              })
+            });
+            const final = {
+              ...normalized,
+              status: 'sent', // Los mensajes históricos siempre tienen estado 'sent'
+              color: normalized.color || getSenderColor(normalized.from)
+            };
+            
+            return final;
+          });
+          
+          // 🔹 Deduplicar archivos dentro de cada mensaje por ID
+          const messagesWithUniqueFiles = historyMessages.map(msg => {
+            if (msg.isGroupedFile && msg.multipleFiles?.length > 0) {
+              const seenFileIds = new Set();
+              const uniqueFiles = [];
+              
+              for (const file of msg.multipleFiles) {
+                // Deduplicar por ID del archivo
+                if (!seenFileIds.has(file.id)) {
+                  seenFileIds.add(file.id);
+                  uniqueFiles.push(file);
+                } else {
+                  console.warn(`⚠️ [loadHistoryFromQR] Eliminando duplicado - archivo ID ${file.id}: ${file.fileUrl}`);
+                }
+              }
+              
+              return { ...msg, multipleFiles: uniqueFiles };
+            }
+            return msg;
+          });
+          
+          // Eliminar duplicados de MENSAJES por uniqueKey
+          const deduped = new Map();
+          
+          for (const msg of messagesWithUniqueFiles) {
+            const key = msg.uniqueKey;
+            
+            // Solo agregar si no existe la clave
+            if (!deduped.has(key)) {
+              deduped.set(key, msg);
+            }
+          }
+          
+          const uniqueMessages = Array.from(deduped.values());
+          
+          setMessages(uniqueMessages);
+          
+          // 🆕 Marcar que se cargó exitosamente
+          qrHistoryLoadedRef.current = true;
+          
+          // 🔹 Marcar que ya se mostró bienvenida (porque está en el historial)
+          welcomeShownRef.current = true;
+          
+          if (uniqueMessages.some(m => m.from === "user")) {
+            setPromptSent(true);
+            promptSentRef.current = true;
+          }
+        } else {
+          // 🆕 Marcar que se intentó cargar (para no intentar de nuevo)
+          qrHistoryLoadedRef.current = true;
+          // 🔹 Marcar que ya se intentó cargar (para que no intente mostrar bienvenida de nuevo)
+          welcomeShownRef.current = false; // Permitir mostrar bienvenida en historial vacío
         }
-      } catch (e) {
-        console.error("⚠️ Error parseando caché, limpiando:", e);
-        try { sessionStorage.removeItem(CACHE_KEY); } catch (_) {}
-        setConversationId(null);
-        setMessages([]);
-      }
-    }, 30 * 1000); // revisar cada 30s
+      } catch (error) {
+        // 🔴 MANEJO DE ERRORES HTTP: 410 (Expirada), 404 (No existe), 403 (Acceso denegado)
+        const status = error?.response?.status;
+        const errorMessage = error?.response?.data?.error || error?.message;
 
-    return () => clearInterval(interval);
-  }, []);
+        // 🆕 Marcar que se intentó cargar (aunque falló, para no intentar infinitas veces)
+        qrHistoryLoadedRef.current = true;
+
+        // Determinar mensaje según código de error
+        let userMessage = "Error al cargar la conversación";
+        
+        if (status === 410) {
+          // 410 Gone: Conversación expirada
+          userMessage = "La conversación ha expirado. Por favor, escanea un nuevo código QR.";
+        } else if (status === 404) {
+          // 404 Not Found: Conversación no existe
+          userMessage = "La conversación no existe o fue eliminada.";
+        } else if (status === 403) {
+          // 403 Forbidden: Acceso denegado
+          userMessage = "Acceso denegado a esta conversación.";
+        } else if (status === 401) {
+          // 401 Unauthorized: Sin autenticación
+          userMessage = "Sesión expirada. Por favor, intenta de nuevo.";
+        }
+
+        // Mostrar alerta al usuario
+        alert(`⚠️ ${userMessage}`);
+
+        // Limpiar caché y cerrar widget
+        clearCache();
+
+        // Cerrar widget y resetear estado
+        setIsOpen(false);
+        setConversationId(null);
+        conversationIdRef.current = null;
+        setMessages([]);
+        setPromptSent(false);
+        promptSentRef.current = false;
+      }
+    };
+    
+    if (propConversationId && isMobileView) {
+      loadHistoryFromQR();
+    }
+  }, [propConversationId, isMobileView]);
+
+  // ❌ ELIMINADO: setInterval que limpiaba caché en tiempo real
+  // El caché ahora SOLO se limpia cuando cierra por INACTIVIDAD
+  // Esto evita que se cree conversación nueva mientras el widget está abierto
 
 
   // ✅ Lógica de guardado de caché que se activa con cada cambio de mensajes.
   useEffect(() => {
     if (conversationId && messages.length > 0) {
       saveConversationCache(conversationId, messages);
-      console.log("💾 Caché de conversación actualizado. Mensajes guardados:", messages.length);
     }
   }, [messages, conversationId]);
+
+  // 🔴 Ref para rastrear si fue una transición de abierto a cerrado
+  const wasOpenRef = useRef(false);
+
+  // 🔴 SAFETY: Si el widget se cierra, asegurar que el estado está limpio
+  // 🆕 IMPORTANTE: SOLO hacer esto EN WEB, no en móvil (isMobileView)
+  // 🆕 IMPORTANTE: Solo limpiar cuando hay TRANSICIÓN de abierto a cerrado, no en cada cambio de estado
+  useEffect(() => {
+    // Solo en web, no en móvil
+    if (isMobileView) {
+      wasOpenRef.current = isOpen;
+      return;
+    }
+
+    // Detectar transición: widget estaba abierto y ahora está cerrado
+    const wasOpenBefore = wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+
+
+    if (wasOpenBefore && !isOpen && (conversationId || messages.length > 0)) {
+      setConversationId(null);
+      conversationIdRef.current = null;
+      setMessages([]);
+      setPromptSent(false);
+      promptSentRef.current = false;
+      
+      // 🔴 CRÍTICO: Resetear welcomeShownRef para permitir que la bienvenida se muestre en la próxima apertura
+      welcomeShownRef.current = false;
+      
+      // NO limpiar caché aquí: solo se elimina por expiración real
+    }
+  }, [isMobileView, isOpen, conversationId, messages.length, CACHE_KEY]);
 
   const messageRefs = useRef([]);
   messageRefs.current = messages.map((_, i) => messageRefs.current[i] ?? React.createRef());
   const typingRef = useRef(null);
 
-  const saveConversationCache = (convId, msgs) => {
-    if (!convId || !msgs?.length) return;
 
-    const confirmedMessages = msgs.filter(m => m.id && m.status === "sent");
-    if (!confirmedMessages.length) return;
-
-    const existing = loadConversationCache();
-    let mergedMessages;
-
-    if (existing && existing.conversationId === convId) {
-      const map = new Map();
-      [...existing.messages, ...confirmedMessages].forEach(m => {
-        const key = m.id ?? m.tempId;
-        const withColor = { ...m, color: m.color ?? getSenderColor(m.from) };
-        map.set(key, withColor);
-      });
-      mergedMessages = Array.from(map.values());
-    } else {
-      mergedMessages = confirmedMessages.map(m => ({
-        ...m,
-        color: m.color ?? getSenderColor(m.from),
-      }));
-    }
-
-    try {
-      sessionStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({ conversationId: convId, messages: mergedMessages, timestamp: Date.now() })
-      );
-    } catch (e) {
-      console.warn('⚠️ No se pudo guardar en sessionStorage, intentando localStorage como fallback', e);
-      try {
-        localStorage.setItem(
-          CACHE_KEY,
-          JSON.stringify({ conversationId: convId, messages: mergedMessages, timestamp: Date.now() })
-        );
-      } catch (e2) {
-        console.error('❌ Error guardando caché de conversación:', e2);
-      }
-    }
-  };
-
-  const loadConversationCache = () => {
-    try {
-      const raw = sessionStorage.getItem(CACHE_KEY) || localStorage.getItem(CACHE_KEY);
-      if (!raw) return null;
-      const data = JSON.parse(raw);
-      const isExpired = Date.now() - data.timestamp > CACHE_TIMEOUT;
-      if (isExpired) {
-        console.log("⏰ Caché expirado, eliminando...");
-        try { sessionStorage.removeItem(CACHE_KEY); } catch (_) {}
-        try { localStorage.removeItem(CACHE_KEY); } catch (_) {}
-        setConversationId(null);
-        setMessages([]);
-        setPromptSent(false);
-        promptSentRef.current = false;
-        return null;
-      }
-      return data;
-    } catch (e) {
-      console.error("⚠️ Error parseando caché, limpiando:", e);
-      try { sessionStorage.removeItem(CACHE_KEY); } catch (_) {}
-      try { localStorage.removeItem(CACHE_KEY); } catch (_) {}
-      setConversationId(null);
-      setMessages([]);
-      setPromptSent(false);
-      promptSentRef.current = false;
-      return null;
-    }
-  };
+// El overlay debe bloquear toda la UI cuando la sesión móvil está activa
+let showDeviceConflictOverlay = false;
+if (typeof isBlockedByOtherDevice !== 'undefined' && typeof isMobileView !== 'undefined') {
+  showDeviceConflictOverlay = isBlockedByOtherDevice && !isMobileView;
+}
+useEffect(() => {
+  // (Eliminado log de renderizado DeviceConflictOverlay)
+}, [showDeviceConflictOverlay]);
 
 useEffect(() => {
     if (!isOpen || isDemo) {
       if (connectionRef.current) {
-        console.log("🧹 Limpiando conexión SignalR existente (cerrado o demo).");
         connectionRef.current.stop();
         connectionRef.current = null;
       }
@@ -532,11 +868,14 @@ useEffect(() => {
     }
 
     const handleReceiveMessage = (msg) => {
-      console.log("📩 Mensaje recibido (procesado):", msg);
       const newMessage = normalizeMessage(msg);
       if (!newMessage.color) newMessage.color = getSenderColor(newMessage.from);
-
-      // ✅ Apagar el indicador de typing si el mensaje es del que está escribiendo
+      // (Eliminado log de mensaje recibido)
+      // ✅ Skip welcome message if it matches the locally sent one
+      if (newMessage.from === "bot" && lastWelcomeTextRef.current && newMessage.text === lastWelcomeTextRef.current) {
+        lastWelcomeTextRef.current = null;
+        return;
+      }
       setTypingSender(currentTypingSender => {
         if (currentTypingSender && currentTypingSender === newMessage.from) {
           setIsTyping(false);
@@ -544,37 +883,45 @@ useEffect(() => {
         }
         return currentTypingSender;
       });
-
       setMessages(prev => {
-        // Si el mensaje entrante tiene un tempId, intenta encontrar y actualizar el mensaje existente.
+        // 1. Si llega con tempId, actualiza el mensaje local
         if (newMessage.tempId) {
           const existingMessageIndex = prev.findIndex(
             m => m.tempId === newMessage.tempId && m.status === 'sending'
           );
-
           if (existingMessageIndex !== -1) {
-            // Se encontró el mensaje temporal, se actualiza en su lugar.
             const updatedMessages = [...prev];
             updatedMessages[existingMessageIndex] = { 
               ...updatedMessages[existingMessageIndex], 
               ...newMessage,
-              status: 'sent' // Forzar el estado a 'sent' en la confirmación
+              status: newMessage.status || 'sent'
             };
-            console.log('✅ Mensaje actualizado:', updatedMessages[existingMessageIndex]);
+            // (Eliminado log de mensaje actualizado tempId)
             return updatedMessages;
           }
         }
-
-        // Para mensajes nuevos (o si no se encontró uno temporal para actualizar),
-        // verifica si ya existe por su ID final para evitar duplicados.
-        const messageExists = prev.some(m => m.id === newMessage.id && m.id !== newMessage.tempId);
-        if (messageExists) {
-          console.log('🚫 Mensaje duplicado detectado y omitido:', newMessage);
-          return prev; // No agregar duplicado
+        // 2. Si llega mensaje del usuario con estado 'queued', busca por texto y estado 'sent' o 'sending'
+        if (newMessage.from === 'user' && newMessage.status === 'queued') {
+          const idx = prev.findIndex(m => m.from === 'user' && m.text === newMessage.text && (m.status === 'sent' || m.status === 'sending'));
+          if (idx !== -1) {
+            const updatedMessages = [...prev];
+            updatedMessages[idx] = {
+              ...updatedMessages[idx],
+              ...newMessage,
+              status: 'queued',
+              id: newMessage.id // actualiza el id si es nuevo
+            };
+            // (Eliminado log de mensaje usuario actualizado queued)
+            return updatedMessages;
+          }
         }
-
-        // Si no, es un mensaje nuevo para nosotros, agrégalo.
-        console.log('➕ Agregando nuevo mensaje:', newMessage);
+        // 3. Si ya existe por id, no agregar
+        const messageExists = prev.some(m => m.id === newMessage.id);
+        if (messageExists) {
+          // (Eliminado log de mensaje duplicado)
+          return prev;
+        }
+        console.log('💬 [SignalR] Mensaje nuevo agregado:', newMessage);
         return [...prev, newMessage];
       });
     };
@@ -585,50 +932,145 @@ useEffect(() => {
   let handleMobileSessionChanged;
 
   const initConnection = async () => {
-      console.log("🟡 Inicializando chat vía servicio:", { botId, userId });
       try {
-        const convId = await createConversation(userId, botId);
-        if (!convId) throw new Error("No se recibió conversationId");
-
-        conversationIdRef.current = convId;
-        setConversationId(convId);
-
-        // Fetch conversation history so widget displays messages that arrived while closed.
-        // NOTE: If the client already has a valid local cache for this conversation, skip fetching
-        // history from the server — the widget should prefer local cache when a conversation is active
-        // and only the administrative panel should request full server history.
-        try {
+        // ✅ Prioridades para determinar qué conversationId usar:
+        // 1️⃣ Si viene desde QR (propConversationId) → USAR ESE EXACTAMENTE
+        // 2️⃣ Si ya existe conversación en ref (reapertura) → USAR ESE
+        // 3️⃣ Si hay en caché Y NO FUE CERRADO EXPLÍCITAMENTE → USAR ESE
+        // 4️⃣ Crear nueva conversación
+        
+        let convId = propConversationId;
+                
+        if (!convId) {
+          convId = conversationIdRef.current;
+        }
+        
+        if (!convId) {
+          // ✅ Si no hay conversación desde QR ni en ref, intentar cargar del caché
+          // PERO SOLO SI NO FUE CERRADO EXPLÍCITAMENTE
           const cached = loadConversationCache();
-          if (cached && cached.conversationId === convId && Array.isArray(cached.messages) && cached.messages.length > 0) {
-            console.log('ℹ️ Local cache present for conversation, skipping server history fetch.');
+          
+          if (cached && cached.conversationId && !widgetExplicitlyClosedRef.current) {
+            convId = cached.conversationId;
+          } else if (widgetExplicitlyClosedRef.current && cached?.conversationId) {
+            widgetExplicitlyClosedRef.current = false; // Resetear la bandera después de usar
+            convId = null; // Forzar a crear nueva
           } else {
-            const histRes = await fetch(`http://localhost:5006/api/conversations/history/${convId}`);
-            if (histRes.ok) {
-              const histJson = await histRes.json();
-              const history = histJson.history || [];
-
-              // Normalize and merge into state, avoiding duplicates by uniqueKey (id/tempId)
-              const normalized = history.map(h => normalizeMessage({
-                id: h.id,
-                from: h.fromRole === 'user' ? 'user' : (h.fromRole === 'admin' ? 'admin' : 'bot'),
-                text: h.text || h.fileName || '',
-                timestamp: h.timestamp,
-                status: 'sent'
-              }));
-
-              setMessages(prev => {
-                const map = new Map();
-                prev.forEach(m => map.set(m.uniqueKey, m));
-                normalized.forEach(m => map.set(m.uniqueKey, m));
-                return Array.from(map.values());
-              });
-            }
           }
-        } catch (e) {
-          console.warn('No se pudo cargar el historial de conversación (o se omitió por cache):', e);
+          
+          if (!convId) {
+            // ✅ Si no hay caché válido, crear nueva conversación CON NUEVA SESIÓN
+            convId = await createConversation(userId, botId, widgetClientSecret, true);  // ✅ Pasar clientSecret
+          }
         }
 
-  connection = createHubConnection(convId, propWidgetToken || undefined);
+        if (!convId) throw new Error("No se recibió conversationId");
+
+        // ✅ CRÍTICO: Convertir a número (puede venir como string de query params)
+        const convIdNum = typeof convId === 'string' ? parseInt(convId, 10) : convId;
+        if (isNaN(convIdNum) || convIdNum <= 0) {
+          throw new Error(`conversationId inválido: ${convId}`);
+        }
+
+        conversationIdRef.current = convIdNum;
+        setConversationId(convIdNum);
+
+
+        // 🆕 EN MÓVIL: Cargar historial AQUÍ para evitar race conditions
+        if (isMobileView && propConversationId && !qrHistoryLoadedRef.current) {
+          try {
+            const response = await getConversationHistory(propConversationId);
+            const historyArray = response?.history || [];
+            
+            if (historyArray && Array.isArray(historyArray) && historyArray.length > 0) {
+              
+              const groupedHistory = groupConsecutiveFiles(historyArray);
+              const historyMessages = groupedHistory.map(msg => {
+                const normalized = normalizeMessage({
+                  id: msg.id,
+                  type: msg.type,
+                  ...(!(msg.isGroupedFile) && { text: msg.text }),
+                  content: msg.text,
+                  from: msg.fromRole,
+                  sender: msg.fromRole,
+                  timestamp: msg.timestamp,
+                  fromName: msg.fromName,
+                  fromAvatarUrl: msg.fromAvatarUrl,
+                  ...(msg.isGroupedFile && {
+                    isGroupedFile: true,
+                    files: msg.files
+                  }),
+                  ...(!msg.isGroupedFile && (msg.type === 'file' || msg.type === 'image') && {
+                    fileUrl: msg.fileUrl,
+                    fileName: msg.fileName,
+                    fileType: msg.fileType
+                  })
+                });
+                return {
+                  ...normalized,
+                  status: 'sent',
+                  color: normalized.color || getSenderColor(normalized.from)
+                };
+              });
+              
+              const uniqueMessages = Array.from(
+                new Map(
+                  historyMessages.map(msg => [msg.uniqueKey, msg])
+                ).values()
+              );
+              
+              setMessages(uniqueMessages);
+              qrHistoryLoadedRef.current = true;
+              welcomeShownRef.current = true;
+              
+              if (uniqueMessages.some(m => m.from === "user")) {
+                setPromptSent(true);
+                promptSentRef.current = true;
+              }
+            } else {
+              qrHistoryLoadedRef.current = true;
+              welcomeShownRef.current = false;
+            }
+          } catch (error) {
+            qrHistoryLoadedRef.current = true;
+            
+            // Manejar errores HTTP
+            const status = error?.response?.status;
+            let userMessage = "Error al cargar la conversación";
+            
+            if (status === 410) {
+              userMessage = "La conversación ha expirado. Por favor, escanea un nuevo código QR.";
+            } else if (status === 404) {
+              userMessage = "La conversación no existe o fue eliminada.";
+            } else if (status === 403) {
+              userMessage = "Acceso denegado a esta conversación.";
+            } else if (status === 401) {
+              userMessage = "Sesión expirada. Por favor, intenta de nuevo.";
+            }
+            
+            alert(`⚠️ ${userMessage}`);
+            
+            try {
+              sessionStorage.removeItem(CACHE_KEY);
+              localStorage.removeItem(CACHE_KEY);
+            } catch (e) {
+              console.error('❌ Error limpiando caché:', e);
+            }
+            
+            setIsOpen(false);
+            setConversationId(null);
+            conversationIdRef.current = null;
+            setMessages([]);
+            setPromptSent(false);
+            promptSentRef.current = false;
+          }
+        }
+
+        // ✅ El widget NUNCA carga historial de conversaciones EN DESKTOP
+        // Solo el chat panel (dashboard) debe cargar historial
+        // EN MÓVIL: El historial se carga arriba (antes de SignalR)
+
+  connection = createHubConnection(convIdNum, propWidgetToken || undefined);
         connectionRef.current = connection;
 
         // ✅ REGISTRO DE EVENTOS CORRECTO
@@ -637,7 +1079,6 @@ useEffect(() => {
         // Handle ack that the message was queued (contains conversationId, messageId, tempId)
         handleMessageQueued = (payload) => {
           try {
-            console.log("📬 MessageQueued recibido:", payload);
             const { conversationId: cqId, messageId, tempId } = payload || {};
             if (cqId !== conversationIdRef.current) return;
 
@@ -649,7 +1090,6 @@ useEffect(() => {
               return m;
             }));
           } catch (e) {
-            console.error("Error manejando MessageQueued:", e);
           }
         };
 
@@ -657,7 +1097,6 @@ useEffect(() => {
 
         connection.on("ReceiveTyping", (convId, sender) => {
           if (convId === conversationIdRef.current) {
-            console.log(`💬 ${sender} está escribiendo en la conversación ${convId}`);
             setTypingSender(sender);
             setIsTyping(true);
           }
@@ -667,7 +1106,6 @@ useEffect(() => {
           // Usamos una función de callback para asegurar que tenemos el valor más reciente de typingSender
           setTypingSender(currentTypingSender => {
             if (convId === conversationIdRef.current && currentTypingSender === sender) {
-              console.log(`🛑 ${sender} ha dejado de escribir en la conversación ${convId}`);
               setIsTyping(false);
               return null; // Resetea el sender
             }
@@ -678,28 +1116,78 @@ useEffect(() => {
         // Mobile session lock/unlock (server should broadcast MobileSessionChanged(conversationId, blocked))
         handleMobileSessionChanged = (convId, blocked) => {
           try {
-            console.log("🔁 MobileSessionChanged recibido:", convId, blocked);
             if (convId === conversationIdRef.current) {
               setIsMobileLocked(Boolean(blocked));
             }
           } catch (e) {
-            console.error("Error manejando MobileSessionChanged:", e);
           }
         };
         connection.on("MobileSessionChanged", handleMobileSessionChanged);
 
-        await connection.start();
-        setConnectionStatus("conectado");
-        setIsConnected(true);
-        
-        await connection.invoke("JoinRoom", convId);
-        console.log("✅ Conexión lista y unido al grupo:", convId);
 
-        await connection.invoke("UserIsActive", convId);
-        console.log(`❤️ Heartbeat inicial enviado para conversación ${convId}`);
+        // 🟢 ESCUCHAR: Cuando móvil inicia sesión
+        connection.on("MobileSessionStarted", (data) => {
+          console.log('📱 [SignalR] MobileSessionStarted recibido:', data);
+          if (data && data.conversationId === conversationIdRef.current) {
+            // Bloquear el widget y mostrar el mensaje en el overlay
+            if (typeof setIsBlockedByOtherDevice === 'function') {
+              setIsBlockedByOtherDevice(true);
+            }
+            if (typeof setBlockMessage === 'function') {
+              setBlockMessage("🔗 La conversación fue continuada desde la versión móvil.");
+            }
+          }
+        });
+
+        // 🔴 ESCUCHAR: Cuando móvil cierra/expira
+        connection.on("MobileSessionEnded", (data) => {
+          console.log('📱 [SignalR] MobileSessionEnded recibido:', data);
+          // Limpiar almacenamiento
+          try {
+            sessionStorage.removeItem(CACHE_KEY);
+            localStorage.removeItem(CACHE_KEY);
+          } catch (e) {
+            console.warn('⚠️ [MobileSessionEnded] Error limpiando storage:', e);
+          }
+          // 🆕 CRÍTICO: Resetear refs de estado para permitir bienvenida en siguiente apertura
+          welcomeShownRef.current = false;
+          promptSentRef.current = false;
+          qrHistoryLoadedRef.current = false; // 🆕 Resetear bandera QR para próxima sesión
+          conversationIdRef.current = null; // 🆕 CRÍTICO: Resetear conversationIdRef para NO reutilizar la ID
+          console.log('✅ [MobileSessionEnded] refs reseteados (welcome, promptSent, qrHistoryLoaded, conversationIdRef)');
+          // Limpiar overlay y bloqueo
+          if (typeof setIsBlockedByOtherDevice === 'function') {
+            setIsBlockedByOtherDevice(false);
+          }
+          if (typeof setBlockMessage === 'function') {
+            setBlockMessage(null);
+          }
+          // Cerrar widget automáticamente
+          console.log('🔴 [MobileSessionEnded] Cerrando widget porque móvil expiró/cerró');
+          setIsOpen(false);
+          setConversationId(null);
+          setMessages([]);
+          setPromptSent(false);
+        });
+
+        // Inicializar conexión SOLO si conversationId está definido
+        if (convIdNum) {
+          await connection.start();
+          setConnectionStatus("conectado");
+          setIsConnected(true);
+          
+          await connection.invoke("JoinRoom", convIdNum);
+          
+          await connection.invoke("UserIsActive", convIdNum);
+        }
 
       } catch (err) {
-        console.error("❌ Error en la conexión de chat:", err);
+        console.error('❌ [initConnection] ERROR CRÍTICO en inicialización:', {
+          message: err?.message,
+          name: err?.name,
+          stack: err?.stack,
+          fullError: err
+        });
         setConnectionStatus("error");
         setIsConnected(false);
       }
@@ -708,7 +1196,6 @@ useEffect(() => {
     initConnection();
 
         return () => {
-      console.log("🧹 Limpiando conexión SignalR.");
       if (connectionRef.current) {
         connectionRef.current.off("ReceiveMessage", handleReceiveMessage);
             connectionRef.current.off("MessageQueued", handleMessageQueued);
@@ -724,6 +1211,90 @@ useEffect(() => {
     // La lógica de `handleReceiveMessage` ahora es más robusta con callbacks de estado.
   }, [isOpen, isDemo, userId, botId, propWidgetToken]);
 
+  // 🆕 EFECTO: Cargar historial cuando se conecta a conversación EXISTENTE en desktop
+  // Esto asegura sincronización cuando cambias entre dispositivos
+  useEffect(() => {
+    // Solo en desktop (no móvil), y solo si hay conversationId establecido
+    if (isMobileView || !conversationId || isDemo) return;
+
+    // 🔹 Si ya cargamos esta conversación, no cargar de nuevo
+    if (loadedConversationsRef.current.has(conversationId)) {
+      return;
+    }
+
+    // 🔹 Si hay cache viejo, limpiar para obtener historial fresco del servidor
+    const loadFreshHistory = async () => {
+      try {
+        const response = await getConversationHistory(conversationId);
+        const historyArray = response?.history || [];
+        // Si la conversación está expirada/cerrada en el backend, limpiar caché y estado
+        if (!response || response?.error || response?.status === 410 || response?.status === 404) {
+          try {
+            sessionStorage.removeItem(CACHE_KEY);
+            localStorage.removeItem(CACHE_KEY);
+          } catch (e) {}
+          setConversationId(null);
+          conversationIdRef.current = null;
+          setMessages([]);
+          setPromptSent(false);
+          promptSentRef.current = false;
+          loadedConversationsRef.current.clear();
+          return;
+        }
+        // Si hay historial, procesar normalmente
+        const groupedHistory = groupConsecutiveFiles(historyArray);
+        const historyMessages = groupedHistory.map(msg => {
+          const normalized = normalizeMessage({
+            id: msg.id,
+            type: msg.type,
+            ...(!(msg.isGroupedFile) && { text: msg.text }),
+            content: msg.text,
+            from: msg.fromRole,
+            sender: msg.fromRole,
+            timestamp: msg.timestamp,
+            fromName: msg.fromName,
+            fromAvatarUrl: msg.fromAvatarUrl,
+            ...(msg.isGroupedFile && {
+              isGroupedFile: true,
+              files: msg.files
+            }),
+            ...(!msg.isGroupedFile && (msg.type === 'file' || msg.type === 'image') && {
+              fileUrl: msg.fileUrl,
+              fileName: msg.fileName,
+              fileType: msg.fileType
+            })
+          });
+          return {
+            ...normalized,
+            status: 'sent',
+            color: normalized.color || getSenderColor(normalized.from)
+          };
+        });
+        // Deduplicar y setear
+        const uniqueMessages = Array.from(
+          new Map(
+            historyMessages.map(msg => [msg.uniqueKey, msg])
+          ).values()
+        );
+        setMessages(uniqueMessages);
+        if (uniqueMessages.some(m => m.from === "user")) {
+          setPromptSent(true);
+          promptSentRef.current = true;
+        }
+        // Marcar que esta conversación ya fue cargada
+        loadedConversationsRef.current.add(conversationId);
+      } catch (error) {
+        console.error('❌ [loadFreshHistory] Error:', error.message);
+      }
+    };
+
+    // 🔹 Pequeño delay para asegurar que SignalR está conectado
+    const timer = setTimeout(() => {
+      loadFreshHistory();
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [conversationId, isMobileView, isDemo]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -742,15 +1313,12 @@ useEffect(() => {
         const conn = connectionRef.current;
         if (!conn) return;
         if (conn.state === "Disconnected") {
-          console.log("🔄 Reconectando SignalR para heartbeat...");
           await conn.start();
         }
         if (conn.state === "Connected") {
           await conn.invoke("UserIsActive", conversationId);
-          console.log(`❤️ Heartbeat enviado para conversación ${conversationId}`);
         }
       } catch (err) {
-        console.error("❌ Error enviando heartbeat:", err);
         setIsBotReady(false); // Asegurarse de que no esté listo si falla
       }
     };
@@ -760,18 +1328,16 @@ useEffect(() => {
     return () => {
       isUnmounted = true;
       if (intervalId) clearInterval(intervalId);
-      console.log(`💔 Heartbeat detenido para conversación ${conversationId}`);
     };
   }, [isOpen, conversationId]);
 
   useEffect(() => {
     const handlePageClose = () => {
       if (conversationId) {
-        saveConversationCache(conversationId, messages);
+        // Notificar backend de desconexión
         const url = `http://localhost:5006/api/conversations/${conversationId}/disconnect`;
         if (navigator.sendBeacon) {
           navigator.sendBeacon(url);
-          console.log(`🚪 Enviando señal de desconexión beacon para ${conversationId}`);
         }
       }
     };
@@ -779,78 +1345,129 @@ useEffect(() => {
     return () => {
       window.removeEventListener("beforeunload", handlePageClose);
     };
-  }, [conversationId]);
+  }, [conversationId, CACHE_KEY]);
 
   const [demoMessageCount, setDemoMessageCount] = useState(0);
   const maxDemoMessages = 5;
 
-  const sendMessage = async () => {
-    if (!isBotReady) {
-      console.warn("🚫 Bot no listo aún. Mensaje no enviado");
+  // 🔴 LÓGICA DE INACTIVIDAD (3 minutos = 180,000 ms)
+  const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutos
+  const inactivityTimerRef = useRef(null);
+  const closeTimerRef = useRef(null);
+  const inactivityWarningShownRef = useRef(false);
+  const [showInactivityMessage, setShowInactivityMessage] = useState(false);
+
+  // Función para resetear el timer de inactividad
+  const resetInactivityTimer = useCallback(() => {
+    // Pausar inactividad si la sesión móvil está activa o el widget está bloqueado
+    if (isMobileSessionActive || isBlockedByOtherDevice) {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
       return;
     }
+
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    inactivityWarningShownRef.current = false;
+    setShowInactivityMessage(false);
+
+    if (!isOpen) return; // No contar inactividad si widget está cerrado
+
+    inactivityTimerRef.current = setTimeout(() => {
+      setShowInactivityMessage(true);
+      inactivityWarningShownRef.current = true;
+
+      // Después de 30 segundos más, cerrar el widget automáticamente
+      closeTimerRef.current = setTimeout(() => {
+        // ✅ LIMPIAR CACHÉ - Solo cuando cierre por inactividad
+        try {
+          sessionStorage.removeItem(CACHE_KEY);
+        } catch (e) {
+          // Falló al limpiar caché
+        }
+        
+        setIsOpen(false);
+        setShowInactivityMessage(false);
+        inactivityWarningShownRef.current = false;
+      }, 30 * 1000); // 30 segundos adicionales
+    }, INACTIVITY_TIMEOUT);
+  }, [isOpen, CACHE_KEY, isMobileSessionActive, isBlockedByOtherDevice]);
+
+  // Detectar interacción del usuario para resetear timer
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleUserActivity = () => {
+      resetInactivityTimer();
+    };
+
+    // Escuchar múltiples eventos de interacción
+    const events = ['mousedown', 'keydown', 'touchstart', 'click', 'input'];
+    events.forEach(event => {
+      document.addEventListener(event, handleUserActivity);
+    });
+
+    // Iniciar el timer cuando el widget se abre
+    resetInactivityTimer();
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, handleUserActivity);
+      });
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+      }
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+      }
+    };
+  }, [isOpen, resetInactivityTimer]);
+
+  // 🆕 EFFECT: Cuando móvil se cierra, reanudar timer de inactividad
+  useEffect(() => {
+    if (isMobileSessionActive) {
+      // Pausar - limpiar cualquier timer activo
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    } else if (isOpen) {
+      // Reanudar - reiniciar el timer
+      resetInactivityTimer();
+    }
+  }, [isMobileSessionActive, isOpen, resetInactivityTimer]);
+
+  // 🔴 LÓGICA DE INACTIVIDAD CON WIDGET CERRADO
+  // Si el widget está cerrado por más de 3 minutos, limpiar caché y cerrar conversación
+  const inactivityClosedTimerRef = useRef(null);
+
+  useEffect(() => {
+    // Si widget está abierto o cerrado, no limpiar caché por inactividad aquí
+    if (inactivityClosedTimerRef.current) {
+      clearTimeout(inactivityClosedTimerRef.current);
+      inactivityClosedTimerRef.current = null;
+    }
+    // El caché solo se limpia por cierre explícito o expiración real (evento de inactividad en el widget abierto)
+    return;
+  }, [isOpen, CACHE_KEY]);
+
+  // Resetear timer cuando se envía un mensaje
+  const handleResetInactivityOnMessage = useCallback(() => {
+    resetInactivityTimer();
+  }, [resetInactivityTimer]);
+
+
+  const sendMessage = async () => {
+    if (!isBotReady) return;
 
     const trimmedMessage = message.trim();
     if (!trimmedMessage) return;
+    if (isMobileLocked) return;
 
-    if (isMobileLocked) {
-      console.warn("🔒 Mensaje bloqueado: la sesión está activa en un dispositivo móvil.");
-      return;
-    }
-
-    if (isDemo) {
-      const userMessage = normalizeMessage({
-        from: "user",
-        text: trimmedMessage,
-      });
-      setMessages((prev) => [...prev, userMessage]);
-      setMessage("");
-
-      setTypingSender("bot");
-      setIsTyping(true);
-
-      setTimeout(() => {
-        const botMessage = normalizeMessage({
-          from: "bot",
-          text: "Esta es una respuesta automática en modo demo.",
-        });
-        setMessages((prev) => [...prev, botMessage]);
-        setIsTyping(false);
-        setTypingSender(null);
-      }, 1000);
-
-      return;
-    }
-
-    const connection = connectionRef.current;
-    const convId = conversationIdRef.current; // ✅ usamos el ref
-
-    // Esperar hasta que la conexión y convId estén listos (máx 10 intentos)
-    let retries = 0;
-    while ((!isConnected || !convId || !connection || connection.state !== "Connected") && retries < 10) {
-      console.log("⏳ Esperando conexión y conversationId...");
-      await new Promise(res => setTimeout(res, 200));
-      retries++;
-    }
-
-    if (!isConnected || !convId || !connection || connection.state !== "Connected") {
-      console.warn("🚫 No se pudo enviar el mensaje, SignalR no está listo");
-      const tempId = uuidv4();
-      setMessages(prev => [
-        ...prev,
-        normalizeMessage({
-          tempId,
-          from: "user",
-          text: trimmedMessage,
-          status: "error",
-          timestamp: new Date().toISOString()
-        })
-      ]);
-      setMessage("");
-      return;
-    }
-
-    // ID temporal para render inmediato
+    // Optimistic UI: mostrar el mensaje del usuario inmediatamente
     const tempId = uuidv4();
     const userMessageForDisplay = normalizeMessage({
       tempId,
@@ -859,41 +1476,43 @@ useEffect(() => {
       status: "sending",
       timestamp: new Date().toISOString()
     });
-
     setMessages(prev => [...prev, userMessageForDisplay]);
-
     setMessage("");
+    handleResetInactivityOnMessage();
 
+    // Enviar al backend si la conexión está lista
+    const connection = connectionRef.current;
+    const convId = conversationIdRef.current;
+    let retries = 0;
+    while ((!isConnected || !convId || !connection || connection.state !== "Connected") && retries < 10) {
+      await new Promise(res => setTimeout(res, 200));
+      retries++;
+    }
+    if (!isConnected || !convId || !connection || connection.state !== "Connected") {
+      setMessages(prev => prev.map(m => m.tempId === tempId ? { ...m, status: "error" } : m));
+      return;
+    }
     try {
       const payload = {
         botId,
         userId,
         question: trimmedMessage,
-        text: trimmedMessage,
         tempId,
         modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
         temperature: botContext?.settings?.temperature || 0.7,
-        maxTokens: botContext?.settings?.maxTokens || 150
+        maxTokens: botContext?.settings?.maxTokens ||  150,
+        userLocation: userLocation || { country: 'Unknown', city: 'Unknown', language: 'es' },
+        contextMessage: `El usuario está ubicado en ${userLocation?.city || 'una ciudad desconocida'}, ${userLocation?.country || 'país desconocido'}. Responde considerando su contexto geográfico.`,
+        capturedFields: capturedFields || []
       };
-
-      console.log("📤 Enviando payload a la IA:", payload);
-
       await connection.invoke("SendMessage", convId, payload);
-
-      // Marcar que el prompt inicial se envió
       if (!promptSent) {
         setPromptSent(true);
         promptSentRef.current = true;
       }
-
     } catch (err) {
-      console.error("❌ Error enviando mensaje:", err);
-      setMessages(prev =>
-        prev.map(m =>
-          m.uniqueKey === tempId ? { ...m, status: "error" } : m
-        )
-      );
-      setIsTyping(false); // Turn off typing on error
+      setMessages(prev => prev.map(m => m.tempId === tempId ? { ...m, status: "error" } : m));
+      setIsTyping(false);
       setTypingSender(null);
     }
   };
@@ -929,12 +1548,12 @@ useEffect(() => {
     backgroundColor,
     color: textColor,
     fontFamily,
-    borderRadius: "16px",
-    width: "100%", // use percentage relative to iframe/container
-    maxWidth: "400px",
+    borderRadius: isMobileView ? "0px" : "16px", // Sin bordes redondeados en móvil para fullscreen
+    width: isMobileView ? "100%" : "380px", // 380px en desktop, fullwidth en móvil
+    maxWidth: isMobileView ? "100%" : "380px", // Fullwidth en móvil
     height: "100%", // fill the available container height
-    maxHeight: "700px",
-    boxShadow: "0 2px 15px rgba(0,0,0,0.15)",
+    maxHeight: isMobileView ? "100%" : "700px", // Fullheight en móvil
+    boxShadow: isMobileView ? "none" : "0 2px 15px rgba(0,0,0,0.15)",
     display: "flex",
     flexDirection: "column",
     justifyContent: "space-between",
@@ -981,18 +1600,18 @@ useEffect(() => {
         const topOffset = 80; // px to avoid overlapping the dashboard nav/header
         switch (position) {
           case 'bottom-right':
-            return { position: 'fixed', zIndex: 99999, right: '20px', bottom: '20px', width: widgetStyle.maxWidth };
+            return { position: 'fixed', zIndex: 99999, right: '20px', bottom: '20px', width: '380px' };
           case 'bottom-left':
-            return { position: 'fixed', zIndex: 99999, left: '20px', bottom: '20px', width: widgetStyle.maxWidth };
+            return { position: 'fixed', zIndex: 99999, left: '20px', bottom: '20px', width: '380px' };
           case 'top-right':
-            return { position: 'fixed', zIndex: 99999, right: '20px', top: `${topOffset}px`, width: widgetStyle.maxWidth };
+            return { position: 'fixed', zIndex: 99999, right: '20px', top: `${topOffset}px`, width: '380px' };
           case 'top-left':
-            return { position: 'fixed', zIndex: 99999, left: '20px', top: `${topOffset}px`, width: widgetStyle.maxWidth };
+            return { position: 'fixed', zIndex: 99999, left: '20px', top: `${topOffset}px`, width: '380px' };
           case 'center-left':
-            return { position: 'fixed', zIndex: 99999, left: '20px', top: '50%', transform: 'translateY(-50%)', width: widgetStyle.maxWidth };
+            return { position: 'fixed', zIndex: 99999, left: '20px', top: '50%', transform: 'translateY(-50%)', width: '380px' };
           case 'center-right':
           default:
-            return { position: 'fixed', zIndex: 99999, right: '20px', top: '50%', transform: 'translateY(-50%)', width: widgetStyle.maxWidth };
+            return { position: 'fixed', zIndex: 99999, right: '20px', top: '50%', transform: 'translateY(-50%)', width: '380px' };
         }
       })()
     : {};
@@ -1013,25 +1632,33 @@ useEffect(() => {
     : wrapperStyle;
 
   
-  const openImageModal = (images, clickedImageUrl) => {
+  const openImageModal = (images, clickedImageUrl, blobUrlsMap = {}, startIndex = 0) => {
     // Reset state then open modal after a tiny delay so layout stabilizes
     setImageGroup([]);
+    setImageGroupBlobUrls({});
     setActiveImageIndex(0);
     setIsImageModalOpen(false);
 
     setTimeout(() => {
-      const index = images.findIndex((img) => {
-        try {
-          const url = img.fileUrl && String(img.fileUrl).startsWith("http")
-            ? img.fileUrl
-            : `http://localhost:5006${img.fileUrl}`;
-          return url === clickedImageUrl;
-        } catch (e) {
-          return false;
-        }
-      });
+      // 🔹 Si pasaron startIndex directamente, usarlo. Si no, intentar encontrar por URL
+      let index = startIndex;
+      if (startIndex === 0 && clickedImageUrl) {
+        // Intentar encontrar por URL si startIndex es 0 (podría ser coincidencia)
+        const foundIndex = images.findIndex((img) => {
+          try {
+            const url = img.fileUrl && String(img.fileUrl).startsWith("http")
+              ? img.fileUrl
+              : `http://localhost:5006${img.fileUrl}`;
+            return url === clickedImageUrl;
+          } catch (e) {
+            return false;
+          }
+        });
+        if (foundIndex >= 0) index = foundIndex;
+      }
 
       setImageGroup(images || []);
+      setImageGroupBlobUrls(blobUrlsMap || {});
       setActiveImageIndex(index >= 0 ? index : 0);
       setIsImageModalOpen(true);
     }, 10); // small delay to ensure the modal opens after DOM updates
@@ -1084,7 +1711,7 @@ useEffect(() => {
           setIsTyping(false);
           setTypingSender(null);
         }, totalDelay);
-        timeoutIds.push(messageId);
+  // timeoutIds.push(messageId); // Eliminar duplicado fuera de contexto
 
         totalDelay += item.after ?? 0;
       } else {
@@ -1094,7 +1721,7 @@ useEffect(() => {
             id: `demo-${counter++}-${Date.now()}`,
             from: 'user',
             text: item.content,
-            type: 'text',
+            type: "text",
             timestamp: new Date().toISOString(),
             imageGroup: [],
             files: [],
@@ -1112,14 +1739,30 @@ useEffect(() => {
     };
   }, [isDemo, isOpen]);
 
-  const isInputDisabled = isDemo ? false : (!isConnected || isMobileLocked);
+  const isInputDisabled = isDemo ? true : (!isConnected || isMobileLocked || isBlockedByOtherDevice || isMobileConversationExpired);
+
+  // 🔍 DEBUG: Log del estado del input
+  useEffect(() => {
+    
+  }, [isInputDisabled, isDemo, isConnected, isMobileLocked, isBlockedByOtherDevice, isMobileConversationExpired, isMobileView]);
+
+  // --- FIN DE HOOKS ---
 
   return (
-  <div ref={rootRef} style={outerStyle}>
+    <div ref={rootRef} style={outerStyle}>
       {/* Spinner keyframes - injected inline to avoid touching global CSS files */}
-      <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
-      {!isOpen ? (
-        // 🔘 Botón flotante cuando está cerrado (oculto en previewMode)
+      <style>{`
+        @keyframes spin { 
+          from { transform: rotate(0deg);} 
+          to { transform: rotate(360deg);} 
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+      `}</style>
+      {!isOpen && !isMobileView ? (
+        // 🔘 Botón flotante cuando está cerrado (oculto en vista móvil)
         <button
           onClick={() => setIsOpen(true)}
           aria-label="Abrir chat"
@@ -1174,7 +1817,6 @@ useEffect(() => {
                   objectFit: "cover",
                 }}
                 onError={(e) => {
-                  console.log("❌ Error cargando avatar launcher:", avatarUrl);
                   e.target.style.display = "none";
                 }}
               />
@@ -1183,7 +1825,16 @@ useEffect(() => {
         </button>
     ) : (
   // 💬 Widget abierto
-  <div style={{ ...widgetStyle, pointerEvents: "auto", margin: '0 auto', height: previewMode ? widgetStyle.maxHeight : widgetStyle.height }}>
+  <div style={{ 
+    ...widgetStyle, 
+    pointerEvents: "auto", 
+    margin: '0 auto', 
+    height: previewMode ? widgetStyle.maxHeight : widgetStyle.height,
+    position: 'relative' 
+  }}>
+          {/* Overlay para conversación expirada en móvil */}
+          <MobileConversationExpired isExpired={isMobileConversationExpired} />
+
           {/* 🔥 Header */}
           <div
             style={{
@@ -1242,7 +1893,6 @@ useEffect(() => {
                       objectFit: "cover",
                     }}
                     onError={(e) => {
-                      console.log("❌ Error cargando avatar header:", avatarUrl);
                       e.target.style.display = "none";
                     }}
                   />
@@ -1262,8 +1912,9 @@ useEffect(() => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingRight: '12px' }}>
-              {/* QR fijo en header: se muestra si hay conversationId. Diseño más compacto y integrado */}
-              {conversationId && (
+              {/* QR fijo en header: se muestra solo en desktop si hay conversationId. No en móvil */}
+              {/* Mostrar QR solo en web y si hay conversación activa */}
+              {!isMobileView && (conversationId || conversationIdRef.current) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'transparent' }}>
                   <div style={{ textAlign: 'right', color: headerTextColor, fontSize: 12, lineHeight: 1.05 }}>
                     <div style={{ fontWeight: 600, fontSize: 11, color: headerTextColor }}>Continuar en móvil</div>
@@ -1272,28 +1923,51 @@ useEffect(() => {
                   {/* separador vertical sutil */}
                   <div style={{ width: 1, height: 48, background: 'rgba(0,0,0,0.06)', borderRadius: 1 }} />
                   <div style={{ width: 64, height: 64, background: '#ffffff', padding: 6, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-                    {
-                      // Use conversationIdRef if conversationId state becomes briefly null during recreation
-                    }
-                    <QRCode value={`${window.location.origin}/chat/mobile?conversation=${conversationId || conversationIdRef.current || ''}`} size={52} />
+                    <QRCodeCanvas 
+                      value={`${window.location.origin}/chat/mobile?bot=${botId}&conversation=${conversationId || conversationIdRef.current || ''}`} 
+                      size={52} 
+                    />
                   </div>
                 </div>
               )}
 
-              {/* ❌ Botón cerrar */}
-              <button
-                onClick={() => setIsOpen(false)}
-                aria-label="Cerrar chat"
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: headerTextColor,
-                  fontSize: "18px",
-                  cursor: "pointer",
-                }}
-              >
-                ✕
-              </button>
+              {/* ❌ Botón cerrar - NO mostrar en vista móvil */}
+              {!isMobileView && (
+                <button
+                  onClick={() => {
+                                        
+                    // 🔴 MARCAR que el widget fue cerrado explícitamente
+                    widgetExplicitlyClosedRef.current = true;
+                    
+                    // 🔴 RESETEAR COMPLETAMENTE EL ESTADO cuando el usuario cierra
+                    setIsOpen(false);
+                    setConversationId(null);
+                    conversationIdRef.current = null;
+                    setMessages([]);
+                    setPromptSent(false);
+                    promptSentRef.current = false;
+                    
+                    // Limpiar caché de sessionStorage
+                    try {
+                      sessionStorage.removeItem(CACHE_KEY);
+                    } catch (e) {
+                      console.warn('⚠️  [ChatWidget] Error al limpiar sessionStorage:', e);
+                    }
+                    
+                    
+                  }}
+                  aria-label="Cerrar chat"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: headerTextColor,
+                    fontSize: "18px",
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
           <SwitchTransition>
@@ -1388,8 +2062,7 @@ useEffect(() => {
             </div>
           )}
 
-
-          {/* 📜 Mensajes */}
+          {/*  Mensajes */}
           <div
             style={{
               flex: 1,
@@ -1398,6 +2071,7 @@ useEffect(() => {
               flexDirection: "column",
               gap: "8px",
               padding: "16px",
+              position: "relative",
             }}
           >
             <div
@@ -1429,12 +2103,62 @@ useEffect(() => {
               typingRef={typingRef}
               primaryColor={primaryColor}
               secondaryColor={secondaryColor}
+              isMobileView={isMobileView}
             />
 
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 📝 Input + Adjuntar + Enviar */}
+          {/* � MENSAJE DE INACTIVIDAD (Centrado en overlay) */}
+          {showInactivityMessage && (
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                zIndex: 1000,
+                backgroundColor: "#ffebee",
+                border: "2px solid #ef5350",
+                borderRadius: "12px",
+                padding: "24px",
+                maxWidth: "80%",
+                textAlign: "center",
+                boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
+                animation: "pulse 1s infinite",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "32px",
+                  marginBottom: "12px",
+                }}
+              >
+                ⚠️
+              </div>
+              <div
+                style={{
+                  color: "#d32f2f",
+                  fontSize: "16px",
+                  fontWeight: "600",
+                  marginBottom: "8px",
+                }}
+              >
+                Parece que no has respondido
+              </div>
+              <div
+                style={{
+                  color: "#c62828",
+                  fontSize: "13px",
+                  fontWeight: "500",
+                }}
+              >
+                El chat se cerrará en 30 segundos...
+              </div>
+            </div>
+          )}
+
+          {/* �📝 Input + Adjuntar + Enviar */}
           <InputArea
             key={`${effectiveStyle.allowImageUpload}-${effectiveStyle.allowFileUpload}`}
             inputText={inputText}
@@ -1448,7 +2172,7 @@ useEffect(() => {
             connectionRef={connectionRef}
             conversationId={conversationId}
             userId={userId}
-            isInputDisabled={isInputDisabled} // 🔹 Deshabilitar si demo, sin conexión o sesión móvil
+            isInputDisabled={isInputDisabled || (isBlockedByOtherDevice && !isMobileView)} // 🔹 Deshabilitar si demo, sin conexión o sesión móvil o bloqueado por móvil
             allowImageUpload={effectiveStyle.allowImageUpload}
             allowFileUpload={effectiveStyle.allowFileUpload}
           />
@@ -1480,10 +2204,27 @@ useEffect(() => {
 
           {/* QR ya se muestra de forma fija en el header; ya no usamos modal */}
 
+          {/* Overlay de bloqueo por sesión móvil activa */}
+          {isBlockedByOtherDevice && !isMobileView && (
+            <DeviceConflictOverlay
+              isBlocked={true}
+              blockMessage={blockMessage || "Conversación abierta en móvil. Por favor, continúa desde ahí."}
+            />
+          )}
+          {showDeviceConflictOverlay && (
+  <>
+    <DeviceConflictOverlay
+      isBlocked={true}
+      blockMessage={blockMessage || "Conversación abierta en móvil. Por favor, continúa desde ahí."}
+    />
+  </>
+)}
+
           <ImagePreviewModal
             isOpen={isImageModalOpen}
             onClose={() => setIsImageModalOpen(false)}
             imageGroup={imageGroup}
+            imageGroupBlobUrls={imageGroupBlobUrls}
             activeImageIndex={activeImageIndex}
             setActiveImageIndex={setActiveImageIndex}
           />
@@ -1499,6 +2240,7 @@ ChatWidget.propTypes = {
   style: PropTypes.object,
   userId: PropTypes.number,
   widgetToken: PropTypes.string,
+  widgetClientSecret: PropTypes.string,
   title: PropTypes.string,
   theme: PropTypes.oneOf(["light", "dark", "custom"]),
   primaryColor: PropTypes.string,
@@ -1507,6 +2249,8 @@ ChatWidget.propTypes = {
   fontFamily: PropTypes.string,
   avatarUrl: PropTypes.string,
   isDemo: PropTypes.bool,
+  isMobileView: PropTypes.bool,
+  conversationId: PropTypes.string,
   position: PropTypes.oneOf([
     "bottom-right",
     "bottom-left",

@@ -35,7 +35,6 @@ export async function extractAndSubmitData({
     try {
       llmResult = JSON.parse(aiResponse);
     } catch {
-      console.warn("⚠️ Respuesta IA no es JSON, se ignora:", aiResponse);
     }
 
     for (const field of stillPending) {

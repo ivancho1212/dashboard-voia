@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import PropTypes from "prop-types";
+import DOMPurify from "dompurify";
 import { buildFileUrl, downloadImagesAsZip } from "utils/fileHelpers";
 
 const MessageBubble = React.forwardRef(
@@ -15,15 +16,96 @@ const MessageBubble = React.forwardRef(
           : "#faebf5ff"; // gris claro para user
 
     const formattedTime = timestamp
-      ? new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      ? new Date(timestamp).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: true })
       : "";
 
     const imageFiles = (files || msg.images || []).filter((file) =>
       file.fileType?.startsWith("image/")
     );
 
+    // Blob URL state for CORS bypass
+    const [imageBlobUrls, setImageBlobUrls] = useState({});
+    const [blobsLoading, setBlobsLoading] = useState(false);
+
+    // Get backend URL dynamically
+    const getBackendUrl = () => {
+      if (window.__VOIA_BACKEND_URL__) {
+        return window.__VOIA_BACKEND_URL__;
+      }
+      const { protocol, hostname } = window.location;
+      return `${protocol}//${hostname}:5006`;
+    };
+
+    // Fetch image as blob and convert to blob URL
+    const fetchImageAsBlob = async (fileUrl) => {
+      try {
+        const fullUrl = `${getBackendUrl()}${fileUrl}/inline`;
+        // 🔹 CORS FIX: No incluir credenciales para URLs públicas de archivos
+        const fetchOptions = {};
+        if (!fullUrl.includes('/api/files/chat/') && !fullUrl.includes('/uploads/')) {
+          fetchOptions.credentials = 'include';
+        }
+        const response = await fetch(fullUrl, fetchOptions);
+        if (!response.ok) {
+          console.warn(`Failed to fetch image: ${fullUrl}`);
+          return null;
+        }
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        return { fileUrl, blobUrl };
+      } catch (err) {
+        console.warn(`Error fetching image blob: ${fileUrl}`, err);
+        return null;
+      }
+    };
+
+    // Load blob URLs when imageFiles change
+    useEffect(() => {
+      if (imageFiles.length === 0) return;
+
+      const loadBlobs = async () => {
+        setBlobsLoading(true);
+        const newBlobUrls = { ...imageBlobUrls };
+        
+        for (const file of imageFiles) {
+          // Skip if already cached
+          if (imageBlobUrls[file.fileUrl]) continue;
+          
+          const result = await fetchImageAsBlob(file.fileUrl);
+          if (result) {
+            newBlobUrls[result.fileUrl] = result.blobUrl;
+          }
+        }
+        
+        setImageBlobUrls(newBlobUrls);
+        setBlobsLoading(false);
+      };
+
+      loadBlobs();
+    }, [imageFiles.map(f => f.fileUrl).join(',')]);
+
+    // Build URL with blob URL priority
+    const buildUrl = (fileUrl) => {
+      if (imageBlobUrls[fileUrl]) {
+        return imageBlobUrls[fileUrl];
+      }
+      return buildFileUrl(fileUrl);
+    };
+
   const hasImage = imageFiles.length > 0;
-  const contentPadding = hasImage ? (imageFiles.length === 1 ? "6px" : "8px") : "12px";
+  
+  // DEBUG
+  if ((files || msg.images || []).length > 0) {
+    console.log(`[Dashboard MessageBubble] Files received:`, {
+      filesArray: files,
+      imagesArray: msg.images,
+      firstFile: (files || [])[0],
+      imageFiles: imageFiles,
+      hasImage
+    });
+  }
+  // Reduce padding: admin messages get less padding (2px top/bottom, 6px left/right), others get 4px top/bottom
+  const contentPadding = hasImage ? (imageFiles.length === 1 ? "2px" : "4px") : (isRight ? "2px 6px" : "2px 6px");
 
     const containerStyle = {
       alignSelf: isRight ? "flex-end" : "flex-start",
@@ -31,21 +113,21 @@ const MessageBubble = React.forwardRef(
       color: "#1a1a1a",
     // Reduce padding when there's a single image so the bubble hugs the content
     padding: contentPadding,
-      borderRadius: "16px",
-      maxWidth: "70%",
-    width: hasImage && imageFiles.length === 1 ? "auto" : "fit-content",
-    minWidth: hasImage && imageFiles.length === 1 ? "0" : "30%",
+      borderRadius: "10px",
+      maxWidth: "80%",
+    width: "fit-content",
+    minWidth: "0",
       fontSize: "14px",
       fontFamily: "Arial",
-      marginBottom: "8px",
-      marginLeft: isRight ? "40px" : "0px",
-      marginRight: isRight ? "0px" : "40px",
+      marginBottom: "4px",
+      marginLeft: isRight ? "8px" : "0px",
+      marginRight: isRight ? "0px" : "8px",
       boxShadow: isHighlighted ? "0 0 10px 4px rgba(33,150,243,0.06)" : "0 1px 4px rgba(0, 0, 0, 0.06)",
       transition: "box-shadow 0.3s ease-in-out",
       position: "relative",
       display: "flex",
       flexDirection: "column",
-      alignItems: isRight ? "flex-end" : "flex-start",
+      alignItems: "flex-start",
     };
 
     const [previewIndex, setPreviewIndex] = useState(null);
@@ -120,14 +202,52 @@ const MessageBubble = React.forwardRef(
       >
         <div
           style={{
-            fontSize: "11px",
-            fontWeight: "bold",
-            marginBottom: "4px",
+            fontSize: "9px",
+            fontWeight: "400",
+            marginBottom: "0px",
             color: "#555",
-            textAlign: isRight ? "right" : "left",
+            textAlign: "right",
+            width: "100%",
+            marginRight: isRight ? "0px" : "35px",
+            display: "flex",
+            justifyContent: "flex-end",
+            alignItems: "center",
+            gap: "6px",
           }}
         >
-          {fromName || (fromRole === "user" ? "Usuario" : fromRole === "bot" ? "Bot" : "Admin")}
+          <span>
+            {fromName || (fromRole === "user" ? "Usuario" : fromRole === "bot" ? "Bot" : "Admin")}
+          </span>
+          {!isAIActive && (
+            <span
+              ref={iconRef}
+              style={{
+                fontSize: "14px",
+                color: "gray",
+                cursor: "pointer",
+                fontWeight: "bold",
+                lineHeight: "1",
+              }}
+              onClick={() => {
+                if (!imageOptionsOpen && iconRef.current) {
+                  const rect = iconRef.current.getBoundingClientRect();
+                  const isBottomHalf = rect.top > window.innerHeight / 2;
+                  const left = isRight ? rect.left - 158 : rect.right + 8;
+
+                  setMenuPosition({
+                    position: "fixed",
+                    top: isBottomHalf ? undefined : rect.top + 20,
+                    bottom: isBottomHalf ? window.innerHeight - rect.bottom + 10 : undefined,
+                    left,
+                    zIndex: 9999,
+                  });
+                }
+                setImageOptionsOpen((prev) => !prev);
+              }}
+            >
+              ⋮
+            </span>
+          )}
         </div>
 
         {replyTo && (
@@ -135,9 +255,9 @@ const MessageBubble = React.forwardRef(
             onClick={() => onJumpToReply?.(replyTo.id)}
             style={{
               background: "#f5f5f5",
-              borderLeft: "3px solid #1976d2",
-              padding: "6px 10px",
-              marginBottom: "8px",
+              borderLeft: "3px solid #21f3adff",
+              padding: "4px 8px",
+              marginBottom: "4px",
               borderRadius: "6px",
               fontSize: "13px",
               color: "#333",
@@ -145,13 +265,13 @@ const MessageBubble = React.forwardRef(
               cursor: "pointer",
             }}
           >
-            <div style={{ fontWeight: "bold", color: "#1976d2", marginBottom: "4px" }}>
+            <div style={{ fontWeight: "bold", color: "#0d6ba1ff", marginBottom: "4px" }}>
               {replyTo.fromName || "Usuario"}:
             </div>
 
             {replyTo.text ? (
               <div style={{ fontStyle: "italic" }}>
-                {replyTo.text.length > 80 ? replyTo.text.slice(0, 80) + "..." : replyTo.text}
+                {DOMPurify.sanitize(replyTo.text.length > 80 ? replyTo.text.slice(0, 80) + "..." : replyTo.text, { ALLOWED_TAGS: [] })}
               </div>
             ) : replyTo.fileType?.startsWith("image/") && replyTo.fileUrl ? (
               <img
@@ -170,8 +290,8 @@ const MessageBubble = React.forwardRef(
           </div>
         )}
 
-        {/* Icono de opciones */}
-        {showOptionsIcon && (
+        {/* Icono de opciones - OCULTADO: ahora en el nombre */}
+        {false && showOptionsIcon && (
           <div
             ref={iconRef}
             style={{
@@ -294,9 +414,9 @@ const MessageBubble = React.forwardRef(
           imageFiles.length === 1 ? (
             // Single image: respect natural size but constrain proportionally
             // Use inline-block so the bubble adapts to the image width instead of forcing full width
-            <div style={{ marginTop: "4px", display: "block", width: "100%", maxWidth: "clamp(140px, 40vw, 420px)" }}>
+            <div style={{ marginTop: "4px", display: "block", width: "auto", maxWidth: "clamp(160px, 50vw, 400px)" }}>
               <img
-                src={buildFileUrl(imageFiles[0].fileUrl)}
+                src={buildUrl(imageFiles[0].fileUrl)}
                 alt={imageFiles[0].fileName}
                 onClick={() => setPreviewIndex(0)}
                 style={{
@@ -314,15 +434,14 @@ const MessageBubble = React.forwardRef(
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(2, 1fr)",
+                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                 gridAutoRows: "auto",
-                gap: "6px",
-                marginTop: "6px",
-                width: "100%",
+                gap: "8px",
+                width: "clamp(160px, 50vw, 400px)",
               }}
             >
               {imageFiles.slice(0, 4).map((file, idx) => {
-                const source = buildFileUrl(file.fileUrl);
+                const source = buildUrl(file.fileUrl);
                 const isOverlay = imageFiles.length > 4 && idx === 3;
 
                 return (
@@ -331,8 +450,7 @@ const MessageBubble = React.forwardRef(
                     style={{
                       position: "relative",
                       width: "100%",
-                      height: "100%",
-                      borderRadius: "8px",
+                      borderRadius: "10px",
                       overflow: "hidden",
                       aspectRatio: "1 / 1",
                       cursor: "pointer",
@@ -346,7 +464,7 @@ const MessageBubble = React.forwardRef(
                         width: "100%",
                         height: "100%",
                         objectFit: "cover",
-                        borderRadius: "8px",
+                        borderRadius: "10px",
                         filter: isOverlay ? "brightness(0.6)" : "none",
                       }}
                     />
@@ -363,9 +481,9 @@ const MessageBubble = React.forwardRef(
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
-                          fontSize: "1.5rem",
+                          fontSize: "2rem",
                           fontWeight: "bold",
-                          borderRadius: "8px",
+                          borderRadius: "10px",
                         }}
                       >
                         +{imageFiles.length - 4}
@@ -410,7 +528,15 @@ const MessageBubble = React.forwardRef(
           })}
 
         {text ? (
-          <div>{text}</div>
+          <div style={{ 
+            textAlign: "left", 
+            wordWrap: "break-word", 
+            overflowWrap: "break-word", 
+            marginTop: "0px", 
+            width: "100%",
+            paddingRight: isRight ? "35px" : "0px",
+            paddingLeft: isRight ? "0px" : "0px"
+          }}>{DOMPurify.sanitize(text, { ALLOWED_TAGS: [] })}</div>
         ) : (
           files.length === 0 && (
             <div style={{ fontStyle: "italic", color: "#888" }}>
@@ -419,7 +545,7 @@ const MessageBubble = React.forwardRef(
           )
         )}
 
-        <div style={{ fontSize: "10px", color: "#555", marginTop: "0.2px", textAlign: "right" }}>
+        <div style={{ fontSize: "10px", color: "#888", marginTop: "0px", textAlign: "right", width: "100%", marginRight: isRight ? "0px" : "25px" }}>
           {formattedTime}
         </div>
 

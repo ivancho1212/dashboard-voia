@@ -4,7 +4,6 @@ export async function deleteConversationTag(tagId) {
     await axios.delete(`${BASE_URL}/api/ConversationTags/${tagId}`);
     return true;
   } catch (error) {
-    console.error("❌ [deleteConversationTag] Error al eliminar etiqueta:", error);
     return false;
   }
 }
@@ -26,7 +25,6 @@ export async function getTagsByConversationId(conversationId) {
       createdAt: tag.createdAt,
     }));
   } catch (error) {
-    console.error("❌ [getTagsByConversationId] Error al obtener etiquetas:", error);
     return [];
   }
 }
@@ -43,7 +41,6 @@ export async function createConversationTag({ conversationId, label, highlighted
     const response = await axios.post(`${BASE_URL}/api/ConversationTags`, payload);
     return response.data;
   } catch (error) {
-    console.error("❌ [createConversationTag] Error al crear etiqueta:", error);
     return null;
   }
 }

@@ -5,9 +5,21 @@ const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:5006"
 
 export const buildFileUrl = (fileUrl) => {
   if (!fileUrl) return "";
-  const cleanBase = BACKEND_URL.replace(/\/$/, "");
+  // If the fileUrl is already an absolute URL, return as-is
+  if (/^https?:\/\//i.test(fileUrl)) return fileUrl;
+
+  // If the fileUrl already contains the backend base, return as-is
+  if (fileUrl.startsWith(process.env.REACT_APP_BACKEND_URL)) return fileUrl;
+
+  const cleanBase = (process.env.REACT_APP_BACKEND_URL || "http://localhost:5006").replace(/\/$/, "");
   const cleanPath = fileUrl.startsWith("/") ? fileUrl : `/${fileUrl}`;
-  return `${cleanBase}${cleanPath}`;
+  
+  // ✅ Si es una URL de archivo protegido (/api/files/chat/...), agregar /inline
+  const finalUrl = cleanPath.includes("/api/files/chat/") && !cleanPath.includes("/inline") 
+    ? `${cleanBase}${cleanPath}/inline`
+    : `${cleanBase}${cleanPath}`;
+    
+  return finalUrl;
 };
 
 export const downloadImagesAsZip = async (images) => {
@@ -22,7 +34,6 @@ export const downloadImagesAsZip = async (images) => {
       const blob = await response.blob();
       folder.file(file.fileName || "imagen.jpg", blob);
     } catch (err) {
-      console.error("❌ Falló la descarga:", file.fileUrl, err);
       alert(`Error al descargar: ${file.fileName}`);
       return;
     }

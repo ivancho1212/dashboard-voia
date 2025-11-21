@@ -13,6 +13,7 @@ const MessageList = ({
   typingRef,
   primaryColor,
   secondaryColor,
+  isMobileView,
 }) => (
   <>
     <TransitionGroup style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -20,15 +21,26 @@ const MessageList = ({
         .filter((msg) => !msg?.meta?.internalOnly)
         .map((msg, index) => {
           const nodeRef = messageRefs.current[index];
+          // Asegura que timestamp sea string
+          const safeMsg = {
+            ...msg,
+            timestamp:
+              typeof msg.timestamp === "string"
+                ? msg.timestamp
+                : (msg.timestamp ? msg.timestamp.toISOString() : undefined)
+          };
+          // Usa tempId || id || text como key para evitar duplicados visuales
+          const key = msg.tempId || msg.id || msg.text || index;
           return (
-            <CSSTransition key={msg.uniqueKey} timeout={300} classNames="fade" nodeRef={nodeRef}>
+            <CSSTransition key={key} timeout={300} classNames="fade" nodeRef={nodeRef}>
               <MessageBubble
-                key={msg.uniqueKey}
-                message={msg}
+                key={key}
+                message={safeMsg}
                 index={index}
                 messageRef={nodeRef}
                 fontFamily={fontFamily}
                 openImageModal={openImageModal}
+                isMobileView={isMobileView}
               />
             </CSSTransition>
           );
@@ -69,6 +81,7 @@ MessageList.propTypes = {
   typingRef: PropTypes.object.isRequired,
   primaryColor: PropTypes.string,
   secondaryColor: PropTypes.string,
+  isMobileView: PropTypes.bool,
 };
 
 const TypingDots = ({ color = "#000" }) => (

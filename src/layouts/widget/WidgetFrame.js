@@ -4,6 +4,8 @@ import ChatWidget from "layouts/bot/style/components/ChatWidget";
 import { getBotDataWithToken } from "services/botService";
 import widgetAuthService from "services/widgetAuthService";
 import { getApiBaseUrl } from "config/environment";
+import { generateWidgetJwtAsync } from "services/widgetJwtService"; // ✅ NUEVO: JWT generator
+import axios from "axios"; // ✅ Para usar axios en WidgetFrame
 
 // Función robusta para detectar si es emoji
 function isEmoji(str) {
@@ -22,11 +24,13 @@ function WidgetFrame() {
   // Debug hooks will be declared after state hooks to avoid TDZ
   if (!window.widgetFrameRenderCount) window.widgetFrameRenderCount = 0;
   window.widgetFrameRenderCount++;
-  console.log(`[RENDER] WidgetFrame renderizado #${window.widgetFrameRenderCount} en`, new Date().toISOString());
   const searchParams = new URLSearchParams(window.location.search);
   const botId = parseInt(searchParams.get("bot"), 10);
   let tokenParam = searchParams.get("token");
   const userId = parseInt(searchParams.get("user"), 10) || null; // Para widgets, userId puede ser null
+  const isMobileView = searchParams.get("isMobile") === "true"; // Detectar vista móvil DESDE URL PARAM
+  const conversationId = searchParams.get("conversation") || null; // ID de conversación desde QR
+  const urlSecret = searchParams.get("secret") || null;  // ✅ Secret desde URL param
 
   // HOOKS SIEMPRE AL INICIO
   const [styleConfig, setStyleConfig] = useState(null);
@@ -34,31 +38,45 @@ function WidgetFrame() {
   const [error, setError] = useState(null);
   const [realToken, setRealToken] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false); // Desactivar auto-refresh por defecto
-  // Estado de visibilidad del chat
-  const [isOpen, setIsOpen] = useState(false);
+  // Estado de visibilidad del chat - EN MÓVIL, ABRIR POR DEFECTO; EN WEB, CERRADO
+  const [isOpen, setIsOpen] = useState(false); // Siempre empezar cerrado, luego isMobileView lo abre si es necesario
   // Ref used to measure the preferred size of the widget content
   const rootRef = useRef(null);
   const [containerSize, setContainerSize] = useState(null);
+  // ✅ NUEVO: clientSecret como STATE para que React lo rastree
+  const [clientSecret, setClientSecret] = useState(urlSecret);
 
-  // Debug hooks (deben estar dentro del componente y después de las declaraciones de estado)
+  // ✅ NUEVO: Effect para obtener JWT válido del backend cuando no hay secret en URL
   React.useEffect(() => {
-    console.log('[DEBUG WidgetFrame] Cambio en styleConfig:', styleConfig);
-  }, [styleConfig]);
-  React.useEffect(() => {
-    console.log('[DEBUG WidgetFrame] Cambio en isOpen:', isOpen);
-  }, [isOpen]);
-  React.useEffect(() => {
-    console.log('[DEBUG WidgetFrame] Cambio en loading:', loading);
-  }, [loading]);
-  React.useEffect(() => {
-    console.log('[DEBUG WidgetFrame] Cambio en error:', error);
-  }, [error]);
-  React.useEffect(() => {
-    console.log('[DEBUG WidgetFrame] Cambio en realToken:', realToken);
-  }, [realToken]);
-  React.useEffect(() => {
-    console.log('[DEBUG WidgetFrame] Cambio en autoRefresh:', autoRefresh);
-  }, [autoRefresh]);
+    if (!clientSecret && botId) {
+      // Primero intentar obtener token del backend
+      const apiBaseUrl = getApiBaseUrl();
+      
+      const generateBackendToken = async () => {
+        try {
+          const response = await axios.post(
+            `${apiBaseUrl}/BotIntegrations/generate-widget-token`,
+            { botId: botId },
+            { timeout: 5000, withCredentials: true }
+          );
+          
+          setClientSecret(response.data.token);
+        } catch (backendError) {
+          console.error('❌ [WidgetFrame] Error obteniendo token del backend:', backendError);
+          // Fallback: generar JWT en frontend
+          try {
+            const jwt = await generateWidgetJwtAsync(botId, "localhost");
+            setClientSecret(jwt);
+          } catch (jwtError) {
+            console.error('❌ [WidgetFrame] Error generando JWT local:', jwtError);
+            setClientSecret(`test-secret-bot-${botId}`);
+          }
+        }
+      };
+      
+      generateBackendToken();
+    }
+  }, [botId, clientSecret]); // Ejecutar cuando botId cambie o clientSecret sea null
 
   // useMemo para estilos, antes de cualquier return
   const styleToPass = useMemo(() => {
@@ -114,10 +132,6 @@ function WidgetFrame() {
   // Función para cargar configuración del bot
   const loadBotConfiguration = async () => {
     try {
-      console.log("🔧 WidgetFrame - Cargando configuración del bot...", { 
-        botId, 
-        tokenParam: tokenParam ? (String(tokenParam).substring(0, 20) + '...') : null
-      });
       
       // Fallback: try to find a token in localStorage (e.g., when embedding from dashboard)
       let finalToken = tokenParam;
@@ -125,7 +139,6 @@ function WidgetFrame() {
         const stored = localStorage.getItem('widgetToken') || localStorage.getItem('jwt') || localStorage.getItem('token');
         if (stored && stored !== 'undefined') {
           finalToken = stored;
-          console.log('🔁 Usando token desde localStorage como fallback.');
           // Set early so child can consume it when mounting
           setRealToken(stored);
         }
@@ -133,42 +146,50 @@ function WidgetFrame() {
       
       // Si el token es "auto", generar un JWT real
       if (tokenParam === "auto") {
-        console.log("🔄 Token es 'auto', generando JWT real...");
         try {
           finalToken = await widgetAuthService.getWidgetToken(botId);
-          console.log("✅ JWT real generado:", finalToken?.substring(0, 20) + '...');
           setRealToken(finalToken);
         } catch (jwtError) {
-          console.error("❌ Error generando JWT:", jwtError);
           finalToken = null;
         }
       }
       
       let botConfig = null;
       
-      // Intentar obtener configuración vía endpoint widget-settings (si se pasó token)
-      try {
-        botConfig = await getBotDataWithToken(botId, finalToken);
-        console.log("✅ Configuración obtenida:", botConfig);
-      } catch (configError) {
-        console.warn("⚠️ Error obteniendo configuración vía widget-settings (se intentó con token):", configError?.response?.status || configError.message || configError);
-        // Si el token dio 401, limpiarlo para no reutilizarlo
-        const status = configError?.response?.status;
-        if (status === 401 && finalToken) {
-          try {
-            // Limpiar token guardado para evitar negociaciones con token inválido
-            if (localStorage.getItem('widgetToken') === finalToken) localStorage.removeItem('widgetToken');
-            if (localStorage.getItem('jwt') === finalToken) localStorage.removeItem('jwt');
-            if (localStorage.getItem('token') === finalToken) localStorage.removeItem('token');
-          } catch (e) {
-            // ignore
+      // ✅ OPTIMIZACIÓN: No intentar con token si ya sabemos que fue rechazado (401)
+      const wasRejected = finalToken && widgetAuthService.wasTokenRejected(finalToken);
+      const isExpired = finalToken && !widgetAuthService.isTokenNotExpired(finalToken);
+      
+      if (isExpired && finalToken) {
+        if (localStorage.getItem('widgetToken') === finalToken) localStorage.removeItem('widgetToken');
+        if (localStorage.getItem('jwt') === finalToken) localStorage.removeItem('jwt');
+        if (localStorage.getItem('token') === finalToken) localStorage.removeItem('token');
+        finalToken = null;
+      }
+      
+      // Intentar obtener configuración vía endpoint widget-settings SOLO si:
+      // 1. Token existe
+      // 2. Token NO fue rechazado previamente (401)
+      // 3. Token NO está expirado
+      if (finalToken && !wasRejected && !isExpired) {
+        try {
+          botConfig = await getBotDataWithToken(botId, finalToken);
+        } catch (configError) {
+          const status = configError?.response?.status;
+          if (status === 401) {
+            // Token fue rechazado, marcarlo para no intentar de nuevo
+            widgetAuthService.markTokenAsInvalid(finalToken);
           }
+          botConfig = null; // Forzar fallback
         }
-
-        // Intentar cargar configuración directamente desde widgetAuthService cuando no hay token válido
+      } else if (finalToken && (wasRejected || isExpired)) {
+        const reason = wasRejected ? "rechazado por servidor" : "expirado";
+      }
+      
+      // Fallback a widgetAuthService si la petición falló o no hubo token válido
+      if (!botConfig) {
         try {
           const fallback = await widgetAuthService.getWidgetSettings(botId, finalToken);
-          console.log("ℹ️ Configuración obtenida vía widgetAuthService fallback:", fallback);
           botConfig = fallback?.settings || fallback;
 
           // Si el fallback devolvió un token válido, úsalo
@@ -181,23 +202,21 @@ function WidgetFrame() {
             try {
               const generated = await widgetAuthService.getWidgetToken(botId);
               if (generated) {
-                console.log("🔑 Token generado por fallback:", generated?.substring(0,20) + '...');
                 setRealToken(generated);
                 finalToken = generated;
                 try { localStorage.setItem('widgetToken', generated); } catch(e) {}
               }
             } catch (genErr) {
-              console.warn("⚠️ No se pudo generar token de widget tras fallback:", genErr);
+              console.error('❌ [WidgetFrame] Error generando token en fallback:', genErr.message);
             }
           }
         } catch (err2) {
-          console.warn("⚠️ Error fallback widgetAuthService:", err2);
+          console.error('❌ [WidgetFrame] Error en fallback de configuración:', err2.message);
         }
       }
       
       // Si aún no hay configuración, usar fallback
       if (!botConfig) {
-        console.log("🔄 Usando configuración por defecto como fallback...");
         botConfig = {
           styles: {
             Title: "Asistente Virtual",
@@ -236,7 +255,6 @@ function WidgetFrame() {
       }
       
     } catch (error) {
-      console.error("❌ Error general al cargar configuración del bot:", error);
       setError(`Error de configuración: ${error.message}`);
       setLoading(false);
     }
@@ -244,17 +262,6 @@ function WidgetFrame() {
 
   // Aplicar estilos globales para hacer transparente SOLO el contenedor iframe, no el widget
   useEffect(() => {
-    console.log('[DEBUG] WidgetFrame montado', {
-      botId,
-      tokenParam,
-      userId,
-      styleConfig,
-      loading,
-      error,
-      realToken,
-      autoRefresh,
-      location: window.location.href
-    });
     // Crear y agregar estilos CSS para hacer transparente solo el contenedor
     const style = document.createElement('style');
     style.textContent = `
@@ -279,17 +286,6 @@ function WidgetFrame() {
     document.head.appendChild(style);
     
     return () => {
-      console.log('[DEBUG] WidgetFrame desmontado', {
-        botId,
-        tokenParam,
-        userId,
-        styleConfig,
-        loading,
-        error,
-        realToken,
-        autoRefresh,
-        location: window.location.href
-      });
       // Cleanup al desmontar
       if (document.head.contains(style)) {
         document.head.removeChild(style);
@@ -303,7 +299,6 @@ function WidgetFrame() {
       try {
         return new URL(document.referrer).origin;
       } catch (e) {
-        console.warn('[child] document.referrer is empty or invalid; parent origin unknown');
         return null;
       }
     })();
@@ -316,7 +311,6 @@ function WidgetFrame() {
 
         const data = event.data;
         if (data.type === 'parent-applied-size' && data.width && data.height) {
-          console.log('[child] received parent-applied-size', data);
           // Apply container size and inform parent
           setContainerSize({ width: Number(data.width), height: Number(data.height) });
 
@@ -324,7 +318,6 @@ function WidgetFrame() {
           window.parent.postMessage({ type: 'child-ack' }, event.origin || '*');
         }
       } catch (e) {
-        console.error('[child] onMessage error', e);
       }
     }
 
@@ -333,13 +326,6 @@ function WidgetFrame() {
   }, []);
 
   useEffect(() => {
-    console.log('[DEBUG] useEffect de configuración disparado', {
-      botId,
-      tokenParam,
-      styleConfig,
-      styleConfigBotId: styleConfig?.botId,
-      styleConfigTokenParam: styleConfig?.tokenParam
-    });
     if (!botId || isNaN(botId) || botId <= 0) {
       setError("No se proporcionó un botId válido en la URL (?bot=ID). Ejemplo: ?bot=2");
       setLoading(false);
@@ -365,13 +351,10 @@ function WidgetFrame() {
         // Clamp preferred height to a sensible max so embeds/preview don't expand beyond widget design
         const MAX_WIDGET_HEIGHT = 700; // must match ChatWidget maxHeight
         if (preferredHeight > MAX_WIDGET_HEIGHT) preferredHeight = MAX_WIDGET_HEIGHT;
-        console.log('[child] measured preferredSize', { preferredWidth, preferredHeight });
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'preferred-size', width: preferredWidth, height: preferredHeight }, '*');
-          console.log('[child] sent preferred-size to parent');
         }
       } catch (e) {
-        console.error('[child] error measuring preferred size', e);
       }
     }, 50);
     return () => clearTimeout(t);
@@ -389,17 +372,6 @@ function WidgetFrame() {
     // return () => {
     //   clearInterval(refreshInterval);
     // };
-
-  console.log('🔧 WidgetFrame Debug:', { 
-    botId, 
-    tokenParam: tokenParam ? (String(tokenParam).substring(0, 20) + '...') : null, 
-    realToken: realToken ? (String(realToken).substring(0, 20) + '...') : null,
-    finalTokenToUse: (realToken || tokenParam) ? (String(realToken || tokenParam).substring(0, 20) + '...') : null,
-    userId, 
-    loading, 
-    error, 
-    styleConfig 
-  });
 
   if (loading) {
     // During load we render a compact spinner positioned where the closed launcher will appear.
@@ -496,14 +468,6 @@ function WidgetFrame() {
   styleToPass.secondaryColor = styleToPass.secondaryColor || "#ffffff";
   styleToPass.headerBackgroundColor = styleToPass.headerBackgroundColor || styleToPass.primaryColor || "#000000";
 
-  // Debug para ver qué configuración se está pasando
-  console.log("🔧 WidgetFrame - Estilos que se pasan al ChatWidget:", {
-    originalStyleConfig: styleConfig,
-    finalStyleToPass: styleToPass,
-    botId,
-    hasValidToken: !!(realToken || tokenParam)
-  });
-
   // Asegurar que tenga título
   if (!styleToPass.title) {
     styleToPass.title = styleConfig?.name || styleConfig?.settings?.styles?.name || "Asistente Virtual";
@@ -517,6 +481,7 @@ function WidgetFrame() {
       key={"main-widget"}
       botId={botId}
       userId={userId}
+      widgetClientSecret={clientSecret}  // ✅ NUEVO
       style={styleToPass}
       isDemo={false} // Siempre false para widgets - no usar modo demo
       isWidget={true}
@@ -526,6 +491,9 @@ function WidgetFrame() {
       // Pass ref and container size so child can be measured and adapt to parent-applied-size
       rootRef={rootRef}
       containerSize={containerSize}
+      // Parámetros para modo móvil
+      isMobileView={isMobileView}
+      conversationId={conversationId}
     />
   );
 }

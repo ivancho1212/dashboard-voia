@@ -6,8 +6,183 @@
  * @param {number} userId - ID del usuario que envía el archivo.
  */
 import axios from "axios";
+import { v4 as uuidv4 } from "uuid";
+
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
-// ✅ Envía una imagen o documento individual
+
+// ✅ Helper: Convert File to base64 para preview local
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
+/**
+ * ✅ ARQUITECTURA PROFESIONAL: Upload con messageId único, progress tracking y UpdateMessage
+ * 
+ * Flujo (como WhatsApp):
+ * 1. Generar messageId único (UUID)
+ * 2. Generar thumbnail local (blob URL)
+ * 3. Crear mensaje temporal con estado "pending"
+ * 4. RENDERIZAR INMEDIATAMENTE con blob URL
+ * 5. UPLOAD EN BACKGROUND con progress tracking
+ * 6. Cuando completa → SendMessage con estado "uploading"
+ * 7. Cliente recibe fileUrl del servidor
+ * 8. Invoca UpdateMessage para notificar cambio
+ * 9. MessageBubble actualiza silenciosamente (blob → CDN)
+ */
+export const sendChatFileWithProgress = async ({
+  connection,
+  conversationId,
+  file,
+  userId,
+  onProgress,  // ← Callback para actualizaciones de progreso
+  onMessageCreated  // ← Callback cuando se crea el mensaje temporal
+}) => {
+  if (!file) return null;
+
+  const token = localStorage.getItem("token");
+  const messageId = uuidv4();  // ← CRÍTICO: ID único del cliente
+
+  // 1️⃣ Generar thumbnail local INMEDIATAMENTE
+  let thumbnailUrl = null;
+  if (file.type.startsWith("image/")) {
+    try {
+      thumbnailUrl = await fileToBase64(file);
+      _logger?.info(`✅ Thumbnail generado para ${file.name}`);
+    } catch (e) {
+      console.warn("⚠️ No se pudo generar thumbnail:", e);
+    }
+  }
+
+  // 2️⃣ Crear mensaje temporal con estado "pending"
+  const tempMessage = {
+    messageId,
+    status: "pending",
+    fileName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
+    thumbnailUrl,  // ← Blob URL local
+    uploadProgress: 0,
+    from: "user"
+  };
+
+  // 3️⃣ RENDERIZAR INMEDIATAMENTE (callback)
+  if (onMessageCreated) {
+    onMessageCreated(tempMessage);
+  }
+
+  try {
+    // 4️⃣ Upload en background (multipart con progress tracking)
+    const uploadForm = new FormData();
+    uploadForm.append("file", file);
+    uploadForm.append("conversationId", String(conversationId));
+    uploadForm.append("messageId", messageId);  // ← Vincular con el mensaje
+
+    const response = await axios.post(
+      `${API_BASE_URL}/api/ChatUploadedFiles`,
+      uploadForm,
+      {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : undefined,
+          "Content-Type": "multipart/form-data"
+        },
+        onUploadProgress: (event) => {
+          const progress = Math.round((event.loaded / event.total) * 100);
+          
+          // 5️⃣ Notificar progreso al UI
+          if (onProgress) {
+            onProgress({
+              messageId,
+              uploadProgress: progress,
+              status: "uploading"
+            });
+          }
+
+          // 6️⃣ Enviar UpdateMessage para notificar a otros usuarios
+          if (connection?.invoke && progress > 0 && progress % 10 === 0) {
+            // Actualizar cada 10% para no saturar
+            connection.invoke("UpdateMessage", {
+              messageId,
+              conversationId,
+              status: "uploading",
+              uploadProgress: progress
+            }).catch(err => console.warn("⚠️ Error enviando progreso:", err));
+          }
+        }
+      }
+    );
+
+    const data = response.data || {};
+    const fileUrl = data.fileUrl || data.filePath || null;
+    const fileId = data.id || null;
+
+    if (!fileUrl) {
+      throw new Error("El servidor no devolvió URL del archivo");
+    }
+
+    _logger?.info(`✅ Upload completado: ${fileUrl}`);
+
+    // 7️⃣ Archivo subido exitosamente → Enviar UpdateMessage
+    if (connection?.invoke) {
+      try {
+        await connection.invoke("UpdateMessage", {
+          messageId,
+          conversationId,
+          fileId,
+          fileUrl,
+          status: "sent"  // ← Marcar como completado
+        });
+        
+        _logger?.info(`✅ UpdateMessage enviado. messageId: ${messageId}`);
+      } catch (hubErr) {
+        console.error("❌ Error en UpdateMessage:", hubErr);
+        // No fallar: el archivo está subido, solo la notificación falló
+      }
+    }
+
+    return {
+      success: true,
+      messageId,
+      fileUrl,
+      fileId,
+      thumbnailUrl,
+      fileType: data.fileType || file.type
+    };
+
+  } catch (error) {
+    console.error("❌ Error en upload:", error);
+
+    // 8️⃣ Si falla → Notificar estado "failed"
+    if (connection?.invoke) {
+      try {
+        await connection.invoke("UpdateMessage", {
+          messageId,
+          conversationId,
+          status: "failed"
+        });
+      } catch (hubErr) {
+        console.warn("⚠️ No se pudo notificar fallo:", hubErr);
+      }
+    }
+
+    // Notificar al callback
+    if (onProgress) {
+      onProgress({
+        messageId,
+        status: "failed",
+        error: error.message
+      });
+    }
+
+    throw error;
+  }
+};
+
+// ✅ Envía una imagen o documento individual (LEGACY - mantener para compatibilidad)
 /**
  * Subir un archivo al endpoint multipart del servidor y notificar al hub.
  * - Flujo anterior: el cliente convertía el archivo a base64 y lo enviaba por SignalR (SendFile).
@@ -15,11 +190,24 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
  * - Cambio: subimos por multipart/form-data a `POST /api/ChatUploadedFiles` (streaming en servidor),
  *   luego notificamos al hub invocando `SendFile` con un payload que contenga `fileUrl`.
  *   `ChatHub.SendFile` fue actualizado para soportar `fileUrl` (retrocompatible).
+ *
+ * - ACTUALIZACIÓN: Ahora también incluimos base64 en el payload para preview LOCAL inmediato
+ *   (se renderiza mientras se espera que el servidor procese el archivo).
  */
 export const sendChatFile = async ({ connection, conversationId, file, userId, invokeHub = true }) => {
   if (!file) return null;
 
   const token = localStorage.getItem("token");
+
+  // Pre-generate base64 for local preview while upload is in progress
+  let base64Str = null;
+  if (file.type.startsWith("image/")) {
+    try {
+      base64Str = await fileToBase64(file);
+    } catch (e) {
+      console.warn("⚠️ Could not generate base64 for preview:", e);
+    }
+  }
 
   // 1) Try multipart POST first — more reliable and server should return the public filePath
   try {
@@ -40,6 +228,7 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
         fileName: data.fileName || file.name,
         fileType: data.fileType || file.type,
         fileUrl,
+        fileContent: base64Str, // ← AGREGADO: base64 para preview local
         userId,
       };
       try {
@@ -52,7 +241,7 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
       }
     }
 
-    return { multipart: true, fileUrl, data };
+    return { multipart: true, fileUrl, data, base64: base64Str };
   } catch (mpErr) {
     console.warn("⚠️ Multipart upload failed, will try presigned fallback:", mpErr?.message || mpErr);
   }
@@ -88,6 +277,7 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
             fileName: file.name,
             fileType: file.type,
             fileUrl: filePath || uploadUrl,
+            fileContent: base64Str, // ← AGREGADO: base64 para preview local
             userId,
           });
         } catch (hubErr) {
@@ -98,7 +288,7 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
         }
       }
 
-      return { presigned: true, fileUrl: filePath || uploadUrl };
+      return { presigned: true, fileUrl: filePath || uploadUrl, base64: base64Str };
     }
   } catch (presErr) {
     console.error("❌ Presigned flow failed:", presErr);
@@ -106,7 +296,7 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
   }
 };
 
-// ✅ Envía varias imágenes agrupadas
+// ✅ Envía varias imágenes agrupadas (LEGACY - mantener para compatibilidad)
 export const sendGroupedImages = async ({ connection, conversationId, files, userId }) => {
   if (!files || files.length === 0) return;
 
@@ -116,11 +306,12 @@ export const sendGroupedImages = async ({ connection, conversationId, files, use
       files.map((f) => sendChatFile({ connection, conversationId, file: f, userId, invokeHub: false }))
     );
 
-    // Build payloads with fileUrl (prefer server-returned fileUrl/filePath)
+    // Build payloads with fileUrl + base64 para preview local
     const payload = uploads.map((u, idx) => ({
       fileName: files[idx].name,
       fileType: files[idx].type,
       fileUrl: u?.fileUrl || (u?.data && (u.data.filePath || u.data.fileUrl)) || null,
+      fileContent: u?.base64 || null, // ← AGREGADO: incluir base64 para preview local
     }));
 
     // Only include uploaded items that actually have a fileUrl
@@ -147,6 +338,7 @@ export const sendGroupedImages = async ({ connection, conversationId, files, use
     // Optional: rethrow or surface to caller
   }
 };
+
 // ✅ Obtener archivos ya subidos a una conversación
 export const getFilesByConversation = async (conversationId) => {
   try {

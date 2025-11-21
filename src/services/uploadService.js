@@ -1,11 +1,23 @@
 import axios from "axios";
 import { getApiBaseUrl } from "config/environment";
+import { validateFileForUpload, warnBlockedFileUpload } from "./fileValidationService";
+import { handleApiError } from "utils/errorHandler";
 
 const getAPIUrl = () => getApiBaseUrl();
 
-// Subir archivo genérico
+// ✅ MEJORADO: Subir archivo genérico con validación local
 export const uploadFile = async (file, path = "/upload") => {
   const token = localStorage.getItem("authToken");
+
+  // 1️⃣ Validación local primero (mejor UX, respuesta más rápida)
+  const validation = validateFileForUpload(file);
+  if (!validation.valid) {
+    warnBlockedFileUpload(file, validation);
+    const error = new Error(validation.error);
+    error.code = validation.code;
+    throw error;
+  }
+
   const formData = new FormData();
   formData.append("file", file);
 
@@ -18,16 +30,34 @@ export const uploadFile = async (file, path = "/upload") => {
     });
     return response.data;
   } catch (error) {
-    console.error("Error uploading file:", error);
-    throw error;
+    // 2️⃣ Manejo mejorado de errores del backend
+    const errorInfo = handleApiError(error, 'uploadFile');
+    
+    if (error.response?.status === 403) {
+      throw new Error("❌ No tienes permiso para acceder a este archivo");
+    }
+    if (error.response?.status === 400) {
+      throw new Error(error.response.data?.message || "❌ Tipo de archivo no permitido");
+    }
+    
+    console.error("Error uploading file:", errorInfo);
+    throw new Error(errorInfo.userMessage);
   }
 };
 
-// Subir imagen de avatar
+// ✅ MEJORADO: Subir imagen de avatar con validación
 export const uploadAvatar = async (file, type = "avatar") => {
   const token = localStorage.getItem("authToken");
+
+  // Validación local
+  const validation = validateFileForUpload(file);
+  if (!validation.valid) {
+    warnBlockedFileUpload(file, validation);
+    throw new Error(validation.error);
+  }
+
   const formData = new FormData();
-  formData.append("file", file); // Cambiar "avatar" por "file" para coincidir con el controlador
+  formData.append("file", file);
   if (type) {
     formData.append("type", type);
   }
@@ -39,18 +69,32 @@ export const uploadAvatar = async (file, type = "avatar") => {
         Authorization: token ? `Bearer ${token}` : "",
       },
     });
-    return response.data.url; // Retornar directamente la URL
+    return response.data.url;
   } catch (error) {
-    console.error("Error uploading avatar:", error);
-    throw error;
+    const errorInfo = handleApiError(error, 'uploadAvatar');
+    
+    if (error.response?.status === 403) {
+      throw new Error("❌ No tienes permiso para cambiar tu avatar");
+    }
+    
+    console.error("Error uploading avatar:", errorInfo);
+    throw new Error(errorInfo.userMessage);
   }
 };
 
-// Subir imagen de perfil de bot
+// ✅ MEJORADO: Subir imagen de perfil de bot con validación
 export const uploadBotAvatar = async (file, botId) => {
   const token = localStorage.getItem("authToken");
+
+  // Validación local
+  const validation = validateFileForUpload(file);
+  if (!validation.valid) {
+    warnBlockedFileUpload(file, validation);
+    throw new Error(validation.error);
+  }
+
   const formData = new FormData();
-  formData.append("file", file); // Cambiar "avatar" por "file"
+  formData.append("file", file);
   formData.append("botId", botId);
 
   try {
@@ -60,10 +104,19 @@ export const uploadBotAvatar = async (file, botId) => {
         Authorization: token ? `Bearer ${token}` : "",
       },
     });
-    return response.data.url; // Retornar directamente la URL
+    return response.data.url;
   } catch (error) {
-    console.error("Error uploading bot avatar:", error);
-    throw error;
+    const errorInfo = handleApiError(error, 'uploadBotAvatar');
+    
+    if (error.response?.status === 403) {
+      throw new Error("❌ No tienes permiso para cambiar avatar de este bot");
+    }
+    if (error.response?.status === 404) {
+      throw new Error("❌ El bot no existe");
+    }
+    
+    console.error("Error uploading bot avatar:", errorInfo);
+    throw new Error(errorInfo.userMessage);
   }
 };
 
@@ -90,7 +143,7 @@ export const uploadMultipleFiles = async (files, path = "/upload/multiple") => {
   }
 };
 
-// Eliminar archivo
+// ✅ MEJORADO: Eliminar archivo con manejo de errores robusto
 export const deleteFile = async (fileUrl) => {
   const token = localStorage.getItem("authToken");
   
@@ -103,7 +156,19 @@ export const deleteFile = async (fileUrl) => {
     });
     return response.data;
   } catch (error) {
-    console.error("Error deleting file:", error);
-    throw error;
+    const errorInfo = handleApiError(error, 'deleteFile');
+    
+    if (error.response?.status === 403) {
+      throw new Error("❌ No tienes permiso para eliminar este archivo");
+    }
+    if (error.response?.status === 404) {
+      throw new Error("❌ El archivo no existe");
+    }
+    if (error.response?.status === 409) {
+      throw new Error("❌ El archivo está en uso y no puede ser eliminado");
+    }
+    
+    console.error("Error deleting file:", errorInfo);
+    throw new Error(errorInfo.userMessage);
   }
 };

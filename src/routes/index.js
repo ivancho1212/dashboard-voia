@@ -9,6 +9,7 @@ import configRoutes from "./config";
 import authRoutes from "./auth";
 import otherRoutes from "./others";
 import widgetRoutes from "./widget";
+import chatRoutes from "./chat";
 import landingRoutes from "./landing";
 import legalRoutes from "./legal";
 
@@ -28,6 +29,7 @@ export function getAllRoutesForUser(user) {
     ...authRoutes,
     ...otherRoutes, 
     ...widgetRoutes,
+    ...chatRoutes,
     ...legalRoutes, 
   ];
 }

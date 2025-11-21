@@ -69,6 +69,7 @@ function BotAdminDashboard() {
   const [tempUrls, setTempUrls] = useState({});
   const [integrationIds, setIntegrationIds] = useState({}); // Para almacenar IDs de integraciones
   const [selectedFrameworks, setSelectedFrameworks] = useState({});
+  const [clientSecrets, setClientSecrets] = useState({}); // Para almacenar los client secrets de cada bot
   // small modal alert
   const [modalAlert, setModalAlert] = useState({ visible: false, message: '', color: 'info' });
   const [confirmDialog, setConfirmDialog] = useState({ open: false, botId: null });
@@ -190,6 +191,9 @@ function BotAdminDashboard() {
     setScripts(existingScripts);
     setAllowedUrls(existingUrls);
     setIntegrationIds(existingIds);
+
+    // Cargar client secrets para todos los bots
+    await loadBotApiSettings(botsList);
 
     console.log("✅ Integraciones cargadas para", Object.keys(existingScripts).length, "bots");
   };
@@ -368,6 +372,29 @@ function BotAdminDashboard() {
     }));
   };
 
+  const loadBotApiSettings = async (botsList) => {
+    const secrets = {};
+    for (const bot of botsList) {
+      try {
+        const response = await fetch(`http://localhost:5006/api/bots/${bot.id}/api-settings`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          secrets[bot.id] = data.clientSecret;
+        } else {
+          console.warn(`No se pudo obtener client secret para bot ${bot.id}`);
+        }
+      } catch (error) {
+        console.warn(`Error cargando client secret para bot ${bot.id}:`, error);
+      }
+    }
+    setClientSecrets(secrets);
+    return secrets;
+  };
+
   const getScriptByFramework = (botId, framework, config = {}) => {
     const base = getWidgetFrameUrl();
     const fw = (framework || 'html').toLowerCase();
@@ -377,12 +404,13 @@ function BotAdminDashboard() {
     const position = config?.position || config?.dataPosition || 'bottom-right';
     const language = config?.language || config?.dataLanguage || 'es';
     const allowedDomain = config?.allowedDomain || config?.allowed_domain || '';
+    const clientSecret = clientSecrets[botId] || ''; // Get the client secret from state
 
-    const dataAttrs = `data-user-id="${user.id}" data-bot-id="${botId}" data-bot="${botId}" data-api-base="${apiBase}" data-theme="${theme}" data-position="${position}" data-language="${language}" data-allowed-domain="${allowedDomain}"`;
+    const dataAttrs = `data-user-id="${user.id}" data-bot-id="${botId}" data-bot="${botId}" data-api-base="${apiBase}" data-theme="${theme}" data-position="${position}" data-language="${language}" data-allowed-domain="${allowedDomain}" data-client-secret="${clientSecret}"`;
 
     // compact: prefer a guarded inline loader when allowedDomain exists
     const compact = allowedDomain
-      ? `<script>(function(){try{const allowed='${allowedDomain}';const allowedHost=(new URL(allowed)).host;if(window.location.host!==allowedHost) return;var s=document.createElement('script');s.async=true;s.src='${base}';s.setAttribute('data-user-id','${user.id}');s.setAttribute('data-bot-id','${botId}');s.setAttribute('data-bot','${botId}');s.setAttribute('data-api-base','${apiBase}');s.setAttribute('data-theme','${theme}');s.setAttribute('data-position','${position}');s.setAttribute('data-language','${language}');s.setAttribute('data-allowed-domain','${allowedDomain}');document.body.appendChild(s);}catch(e){} })();</script>`
+      ? `<script>(function(){try{const allowed='${allowedDomain}';const allowedHost=(new URL(allowed)).host;if(window.location.host!==allowedHost) return;var s=document.createElement('script');s.async=true;s.src='${base}';s.setAttribute('data-user-id','${user.id}');s.setAttribute('data-bot-id','${botId}');s.setAttribute('data-bot','${botId}');s.setAttribute('data-api-base','${apiBase}');s.setAttribute('data-theme','${theme}');s.setAttribute('data-position','${position}');s.setAttribute('data-language','${language}');s.setAttribute('data-allowed-domain','${allowedDomain}');s.setAttribute('data-client-secret','${clientSecret}');document.body.appendChild(s);}catch(e){} })();</script>`
       : `<script async src="${base}" ${dataAttrs}></script>`;
 
     // full: framework-specific, ready-to-paste snippets
@@ -390,22 +418,22 @@ function BotAdminDashboard() {
       case 'react':
         return {
           compact,
-          full: `// Or in a component (e.g. LandingPage)\nuseEffect(() => {\n  try{ const allowed = '${allowedDomain}'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n  if (document.getElementById('voia-widget-js')) return;\n  const js = document.createElement('script'); js.id = 'voia-widget-js'; js.async = true; js.src = '${base}'; js.setAttribute('data-user-id', '${user.id}'); js.setAttribute('data-bot-id', '${botId}'); js.setAttribute('data-bot', '${botId}'); js.setAttribute('data-api-base', '${apiBase}'); js.setAttribute('data-theme', '${theme}'); js.setAttribute('data-position', '${position}'); js.setAttribute('data-language', '${language}'); js.setAttribute('data-allowed-domain', '${allowedDomain}'); document.body.appendChild(js);\n}, []);`
+          full: `// Or in a component (e.g. LandingPage)\nuseEffect(() => {\n  try{ const allowed = '${allowedDomain}'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n  if (document.getElementById('voia-widget-js')) return;\n  const js = document.createElement('script'); js.id = 'voia-widget-js'; js.async = true; js.src = '${base}'; js.setAttribute('data-user-id', '${user.id}'); js.setAttribute('data-bot-id', '${botId}'); js.setAttribute('data-bot', '${botId}'); js.setAttribute('data-api-base', '${apiBase}'); js.setAttribute('data-theme', '${theme}'); js.setAttribute('data-position', '${position}'); js.setAttribute('data-language', '${language}'); js.setAttribute('data-allowed-domain', '${allowedDomain}'); js.setAttribute('data-client-secret', '${clientSecret}'); document.body.appendChild(js);\n}, []);`
         };
       case 'angular':
         return {
           compact,
-          full: `<!-- Angular: paste in src/index.html before </body> OR use component snippet -->\n<script>(function(){try{const allowed='${allowedDomain}';if(allowed){const allowedHost=(new URL(allowed)).host;if(window.location.host!==allowedHost) return;}}catch(e){}var s=document.createElement('script');s.id='voia-widget-js';s.async=true;s.src='${base}';s.setAttribute('data-user-id','${user.id}');s.setAttribute('data-bot-id','${botId}');s.setAttribute('data-bot','${botId}');s.setAttribute('data-api-base','${apiBase}');s.setAttribute('data-theme','${theme}');s.setAttribute('data-position','${position}');s.setAttribute('data-language','${language}');s.setAttribute('data-allowed-domain','${allowedDomain}');document.body.appendChild(s);})();</script>\n\n// Component (app.component.ts)\nimport { Component, AfterViewInit } from '@angular/core';\n@Component({ selector: 'app-root', templateUrl: './app.component.html' })\nexport class AppComponent implements AfterViewInit {\n  ngAfterViewInit() {\n    try{ const allowed = '${allowedDomain}'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n    if (document.getElementById('voia-widget-js')) return;\n    const s = document.createElement('script'); s.id='voia-widget-js'; s.async=true; s.src='${base}'; s.setAttribute('data-user-id','${user.id}'); s.setAttribute('data-bot-id','${botId}'); s.setAttribute('data-bot','${botId}'); s.setAttribute('data-api-base','${apiBase}'); s.setAttribute('data-theme','${theme}'); s.setAttribute('data-position','${position}'); s.setAttribute('data-language','${language}'); s.setAttribute('data-allowed-domain','${allowedDomain}'); document.body.appendChild(s);\n  }\n}`
+          full: `<!-- Angular: paste in src/index.html before </body> OR use component snippet -->\n<script>(function(){try{const allowed='${allowedDomain}';if(allowed){const allowedHost=(new URL(allowed)).host;if(window.location.host!==allowedHost) return;}}catch(e){}var s=document.createElement('script');s.id='voia-widget-js';s.async=true;s.src='${base}';s.setAttribute('data-user-id','${user.id}');s.setAttribute('data-bot-id','${botId}');s.setAttribute('data-bot','${botId}');s.setAttribute('data-api-base','${apiBase}');s.setAttribute('data-theme','${theme}');s.setAttribute('data-position','${position}');s.setAttribute('data-language','${language}');s.setAttribute('data-allowed-domain','${allowedDomain}');s.setAttribute('data-client-secret','${clientSecret}');document.body.appendChild(s);})();</script>\n\n// Component (app.component.ts)\nimport { Component, AfterViewInit } from '@angular/core';\n@Component({ selector: 'app-root', templateUrl: './app.component.html' })\nexport class AppComponent implements AfterViewInit {\n  ngAfterViewInit() {\n    try{ const allowed = '${allowedDomain}'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n    if (document.getElementById('voia-widget-js')) return;\n    const s = document.createElement('script'); s.id='voia-widget-js'; s.async=true; s.src='${base}'; s.setAttribute('data-user-id','${user.id}'); s.setAttribute('data-bot-id','${botId}'); s.setAttribute('data-bot','${botId}'); s.setAttribute('data-api-base','${apiBase}'); s.setAttribute('data-theme','${theme}'); s.setAttribute('data-position','${position}'); s.setAttribute('data-language','${language}'); s.setAttribute('data-allowed-domain','${allowedDomain}'); s.setAttribute('data-client-secret','${clientSecret}'); document.body.appendChild(s);\n  }\n}`
         };
       case 'vue':
         return {
           compact,
-          full: `<!-- Vue: paste in public/index.html before </body> OR use component snippet -->\n<script>(function(){try{const allowed='${allowedDomain}';if(allowed){const allowedHost=(new URL(allowed)).host;if(window.location.host!==allowedHost) return;}}catch(e){}var s=document.createElement('script');s.id='voia-widget-js';s.async=true;s.src='${base}';s.setAttribute('data-user-id','${user.id}');s.setAttribute('data-bot-id','${botId}');s.setAttribute('data-bot','${botId}');s.setAttribute('data-api-base','${apiBase}');s.setAttribute('data-theme','${theme}');s.setAttribute('data-position','${position}');s.setAttribute('data-language','${language}');s.setAttribute('data-allowed-domain','${allowedDomain}');document.body.appendChild(s);})();</script>\n\n// Vue component (Options API)\nexport default {\n  name: 'VoiaWidgetLoader',\n  mounted() {\n    try{ const allowed = '${allowedDomain}'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n    if (document.getElementById('voia-widget-js')) return;\n    const s = document.createElement('script'); s.id = 'voia-widget-js'; s.async = true; s.src = '${base}'; s.setAttribute('data-user-id','${user.id}'); s.setAttribute('data-bot-id','${botId}'); s.setAttribute('data-bot','${botId}'); s.setAttribute('data-api-base','${apiBase}'); s.setAttribute('data-theme','${theme}'); s.setAttribute('data-position','${position}'); s.setAttribute('data-language','${language}'); s.setAttribute('data-allowed-domain','${allowedDomain}'); document.body.appendChild(s);\n  }\n}`
+          full: `<!-- Vue: paste in public/index.html before </body> OR use component snippet -->\n<script>(function(){try{const allowed='${allowedDomain}';if(allowed){const allowedHost=(new URL(allowed)).host;if(window.location.host!==allowedHost) return;}}catch(e){}var s=document.createElement('script');s.id='voia-widget-js';s.async=true;s.src='${base}';s.setAttribute('data-user-id','${user.id}');s.setAttribute('data-bot-id','${botId}');s.setAttribute('data-bot','${botId}');s.setAttribute('data-api-base','${apiBase}');s.setAttribute('data-theme','${theme}');s.setAttribute('data-position','${position}');s.setAttribute('data-language','${language}');s.setAttribute('data-allowed-domain','${allowedDomain}');s.setAttribute('data-client-secret','${clientSecret}');document.body.appendChild(s);})();</script>\n\n// Vue component (Options API)\nexport default {\n  name: 'VoiaWidgetLoader',\n  mounted() {\n    try{ const allowed = '${allowedDomain}'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n    if (document.getElementById('voia-widget-js')) return;\n    const s = document.createElement('script'); s.id = 'voia-widget-js'; s.async = true; s.src = '${base}'; s.setAttribute('data-user-id','${user.id}'); s.setAttribute('data-bot-id','${botId}'); s.setAttribute('data-bot','${botId}'); s.setAttribute('data-api-base','${apiBase}'); s.setAttribute('data-theme','${theme}'); s.setAttribute('data-position','${position}'); s.setAttribute('data-language','${language}'); s.setAttribute('data-allowed-domain','${allowedDomain}'); s.setAttribute('data-client-secret','${clientSecret}'); document.body.appendChild(s);\n  }\n}`
         };
       default:
         return {
           compact,
-          full: `<!-- Voia AI Assistant -->\n<!-- Pega este código antes del cierre </body> -->\n<script>\n  (function(d,s,id){\n    try{ const allowed='${allowedDomain}'; if (allowed){ const allowedHost=(new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n    var js, voiajs = d.getElementsByTagName(s)[0];\n    if (d.getElementById(id)) {return;}\n    js = d.createElement(s); js.id = id; js.async = true;\n    js.src = "${base}";\n    js.setAttribute('data-user-id', '${user.id}');\n    js.setAttribute('data-bot-id', '${botId}');\n    js.setAttribute('data-bot', '${botId}');\n    js.setAttribute('data-api-base', '${apiBase}');\n    js.setAttribute('data-theme', '${theme}');\n    js.setAttribute('data-position', '${position}');\n    js.setAttribute('data-language', '${language}');\n    voiajs.parentNode.insertBefore(js, voiajs);\n  }(document, 'script', 'voia-widget-js'));\n</script>\n<!-- Fin Voia AI Assistant -->`
+          full: `<!-- Voia AI Assistant -->\n<!-- Pega este código antes del cierre </body> -->\n<script>\n  (function(d,s,id){\n    try{ const allowed='${allowedDomain}'; if (allowed){ const allowedHost=(new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}\n    var js, voiajs = d.getElementsByTagName(s)[0];\n    if (d.getElementById(id)) {return;}\n    js = d.createElement(s); js.id = id; js.async = true;\n    js.src = "${base}";\n    js.setAttribute('data-user-id', '${user.id}');\n    js.setAttribute('data-bot-id', '${botId}');\n    js.setAttribute('data-bot', '${botId}');\n    js.setAttribute('data-api-base', '${apiBase}');\n    js.setAttribute('data-theme', '${theme}');\n    js.setAttribute('data-position', '${position}');\n    js.setAttribute('data-language', '${language}');\n    js.setAttribute('data-allowed-domain', '${allowedDomain}');\n    js.setAttribute('data-client-secret', '${clientSecret}');\n    voiajs.parentNode.insertBefore(js, voiajs);\n  }(document, 'script', 'voia-widget-js'));\n</script>\n<!-- Fin Voia AI Assistant -->`
         };
     }
   };

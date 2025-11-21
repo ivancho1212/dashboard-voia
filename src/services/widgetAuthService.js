@@ -5,12 +5,55 @@ const API_URL = "http://localhost:5006/api";
 class WidgetAuthService {
   constructor() {
     this.tokenCache = new Map();
+    this.invalidTokens = new Set(); // Cache de tokens que fallaron (401)
+  }
+
+  /**
+   * Valida si un JWT está expirado (solo validación de tiempo, no de seguridad)
+   * @param {string} token - JWT token
+   * @returns {boolean} - true si token NO está expirado
+   */
+  isTokenNotExpired(token) {
+    if (!token || typeof token !== 'string') return false;
+    
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return false;
+
+      const payload = JSON.parse(atob(parts[1]));
+      if (!payload.exp) return false;
+      
+      const now = Math.floor(Date.now() / 1000);
+      const isExpired = now > payload.exp;
+      
+      if (isExpired) {
+        return false;
+      }
+      
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Marcar un token como inválido (rechazado por servidor con 401)
+   */
+  markTokenAsInvalid(token) {
+    if (token) {
+      this.invalidTokens.add(token);
+    }
+  }
+
+  /**
+   * Verificar si un token fue previamente rechazado
+   */
+  wasTokenRejected(token) {
+    return this.invalidTokens.has(token);
   }
 
   async getWidgetToken(botId) {
     try {
-      console.log(`🔑 Generando token para bot ${botId}...`);
-      
       const response = await axios.post(`${API_URL}/BotIntegrations/generate-widget-token`, {
         botId: botId,
         allowedDomain: 'localhost' // Para desarrollo
@@ -21,25 +64,17 @@ class WidgetAuthService {
       });
 
       const tokenData = response.data;
-      console.log(`🔑 Token generado para bot: ${botId}`, {
-        token: tokenData.token?.substring(0, 20) + '...',
-        expiresAt: tokenData.expiresAt
-      });
-      
       return tokenData.token;
     } catch (error) {
-      console.error('❌ Error generando token de widget:', error);
       throw error;
     }
   }
 
   async getWidgetSettings(botId, token) {
     try {
-      console.log(` Cargando configuración del bot ${botId} desde la base de datos...`);
       const response = await axios.get(`${API_URL}/BotStyles/widget/${botId}`);
       
       if (response.data && response.data.styles) {
-        console.log(" Datos obtenidos directamente de la DB:", response.data);
         return {
           settings: response.data,
           isValid: true,
@@ -50,7 +85,6 @@ class WidgetAuthService {
         throw new Error(`Datos incompletos recibidos de la API para el bot ${botId}`);
       }
     } catch (error) {
-      console.error(` Error crítico al obtener datos del bot ${botId} desde la DB:`, error.message);
       throw new Error(`No se pudieron cargar los datos del bot ${botId} desde la base de datos. Error: ${error.message}`);
     }
   }

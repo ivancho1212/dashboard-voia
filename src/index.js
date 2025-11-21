@@ -8,14 +8,14 @@ import { SoftUIControllerProvider } from "context";
 import { AuthProvider } from "contexts/AuthContext";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
+// NOTE: React.StrictMode temporarily disabled for debugging duplicate renders in development.
+// Re-enable after finishing investigation.
 root.render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <AuthProvider>
-        <SoftUIControllerProvider>
-          <App />
-        </SoftUIControllerProvider>
-      </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>
+  <BrowserRouter>
+    <AuthProvider>
+      <SoftUIControllerProvider>
+        <App />
+      </SoftUIControllerProvider>
+    </AuthProvider>
+  </BrowserRouter>
 );

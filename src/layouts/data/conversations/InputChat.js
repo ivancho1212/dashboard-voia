@@ -58,12 +58,12 @@ const InputChat = forwardRef(function InputChat(
       {replyTo && (
         <div
           style={{
-            background: "#e3f2fd",
+            background: "#e3fdf1ff",
             padding: "8px 12px",
-            borderLeft: "4px solid #2196f3",
+            borderLeft: "4px solid #21f3adff",
             borderRadius: "10px",
             fontSize: "13px",
-            color: "#0d47a1",
+            color: "#0d6ba1ff",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",

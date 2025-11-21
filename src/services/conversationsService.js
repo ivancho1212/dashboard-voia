@@ -1,18 +1,31 @@
+import axios from "./axiosConfig";
+import { logClaims, hasRole } from "services/authService";
+
+const BASE_URL = "http://localhost:5006"; // ⚠️ Solo para desarrollo
+
+// small helper to check auth token presence before calling protected endpoints
+function _ensureToken() {
+  const token = localStorage.getItem("token");
+  if (!token) {
+    return null;
+  }
+  return token;
+}
+
 // ✅ Mover conversación a papelera (soft delete)
 export async function moveConversationToTrash(conversationId) {
   try {
+    if (!_ensureToken() === null) {
+      // _ensureToken already logs missing token; continue to attempt request anyway
+    }
     const response = await axios.patch(
       `${BASE_URL}/api/Conversations/${conversationId}/move-to-trash`
     );
     return response.data;
   } catch (error) {
-    console.error("❌ [moveConversationToTrash] Error al mover a papelera:", error);
     return null;
   }
 }
-import axios from "./axiosConfig";
-
-const BASE_URL = "http://localhost:5006"; // ⚠️ Solo para desarrollo
 
 // ✅ Cargar conversaciones del usuario
 export async function getConversationsByUser(userId) {
@@ -35,7 +48,6 @@ export async function getConversationsByUser(userId) {
       isWithAI: c.isWithAI ?? true, // ← añadido aquí
     }));
   } catch (error) {
-    console.error("❌ [getConversationsByUser] Error al obtener conversaciones:", error);
     return [];
   }
 }
@@ -43,14 +55,19 @@ export async function getConversationsByUser(userId) {
 // ✅ Nuevo: Actualizar el estado de una conversación
 export async function updateConversationStatus(conversationId, newStatus) {
   try {
+    if (!_ensureToken()) return null; // avoid calling if no token
+
+    // Quick role check: ConversationsController requires Admin role
+    if (!hasRole('Admin')) {
+      return null;
+    }
+
     const response = await axios.patch(
       `${BASE_URL}/api/Conversations/${conversationId}/status`,
       { status: newStatus } // El cuerpo coincide con el UpdateStatusDto
     );
-    console.log("✅ [updateConversationStatus] Estado actualizado:", response.data);
     return response.data;
   } catch (error) {
-    console.error("❌ [updateConversationStatus] Error al actualizar el estado:", error);
     return null;
   }
 }
@@ -62,7 +79,6 @@ export async function getConversationHistory(conversationId) {
     const response = await axios.get(`${BASE_URL}/api/Conversations/history/${conversationId}`);
     return response.data;
   } catch (error) {
-    console.error("❌ [getConversationHistory] Error al obtener historial:", error);
     return null; // Devolver null para manejar el error en el componente
   }
 }
@@ -77,18 +93,34 @@ export async function getMessagesPaginated(conversationId, before = null, limit 
     // Response shape: { conversationId, messages: [...], hasMore, nextBefore }
     return response.data;
   } catch (error) {
-    console.error("❌ [getMessagesPaginated] Error al obtener mensajes paginados:", error);
+    return null;
+  }
+}
+
+// Nuevo: obtener mensajes paginados agrupados por día desde el servidor
+export async function getMessagesGrouped(conversationId, before = null, limit = 50) {
+  try {
+    const params = {};
+    if (before) params.before = before;
+    if (limit) params.limit = limit;
+    const response = await axios.get(`${BASE_URL}/api/Conversations/${conversationId}/messages/grouped`, { params });
+    return response.data;
+  } catch (error) {
     return null;
   }
 }
 // ✅ Nuevo: Marcar mensajes como leídos en una conversación
 export async function markMessagesAsRead(conversationId) {
   try {
+    if (!_ensureToken()) return null;
+
+    if (!hasRole('Admin')) {
+      return null;
+    }
+
     const response = await axios.post(`${BASE_URL}/api/Messages/mark-read/${conversationId}`);
-    console.log("✅ [markMessagesAsRead] Mensajes marcados como leídos:", response.data);
     return response.data;
   } catch (error) {
-    console.error("❌ [markMessagesAsRead] Error al marcar mensajes como leídos:", error);
     return null;
   }
 }
@@ -128,7 +160,6 @@ export async function getMessagesByConversationId(conversationId) {
       };
     });
   } catch (error) {
-    console.error("❌ [getMessagesByConversationId] Error al obtener mensajes:", error);
     // Return null to indicate the fetch failed (distinguish from an empty but successful response)
     return null;
   }
@@ -141,10 +172,8 @@ export async function updateConversationIsWithAI(conversationId, isWithAI) {
       `${BASE_URL}/api/Conversations/${conversationId}/with-ai`,
       { isWithAI } // Suponiendo que el backend espera un body con { isWithAI: true/false }
     );
-    console.log("✅ [updateConversationIsWithAI] Estado IA actualizado:", response.data);
     return response.data;
   } catch (error) {
-    console.error("❌ [updateConversationIsWithAI] Error al actualizar IA:", error);
     return null;
   }
 }
@@ -171,7 +200,6 @@ export async function getConversationsWithLastMessage() {
       isWithAI: c.isWithAI,
     }));
   } catch (error) {
-    console.error("❌ [getConversationsWithLastMessage] Error:", error);
     return [];
   }
 }

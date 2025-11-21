@@ -1,6 +1,7 @@
 import TrashView from './TrashView';
 import Button from '@mui/material/Button';
 import { useEffect, useState, useRef } from "react";
+import PropTypes from 'prop-types';
 
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
@@ -18,13 +19,19 @@ import Tooltip from "@mui/material/Tooltip";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { getFilesByConversation } from "services/chatUploadedFilesService";
-import { DragDropContext, Droppable, Draggable } from "react-beautiful-dnd";
+// ✅ NUEVO: Protección contra inyección de prompts
+import { detectPromptInjection } from "services/promptInjectionService";
+import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
+import { SortableContext, horizontalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useTheme } from '@mui/material/styles';
 
 import {
   getConversationsByUser,
   getMessagesByConversationId,
   getConversationHistory,
   getMessagesPaginated,
+  getMessagesGrouped,
   updateConversationStatus,
   markMessagesAsRead,
   updateConversationIsWithAI,
@@ -68,8 +75,12 @@ function Conversations() {
   const messageRefs = useRef({});
   const chatPanelRef = useRef(null);
   const connectionRef = useRef(null);
+  const isDraggingRef = useRef(false);
   const messageCache = useRef(new Map());
   const messageCursor = useRef(new Map()); // stores { hasMore, nextBefore } per conversationId
+  // Tracks how many messages (tail) are currently visible per conversation.
+  const visibleCounts = useRef(new Map());
+  const DEFAULT_VISIBLE_ON_OPEN = 30; // show recent 30 messages by default (WhatsApp-like)
   const typingStopTimeout = useRef(null);
 
   const [showScrollButtons, setShowScrollButtons] = useState(false);
@@ -86,18 +97,151 @@ function Conversations() {
 
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [loadingConversationId, setLoadingConversationId] = useState(null);
-  const [ticker, setTicker] = useState(0);
 
   const { user } = useAuth();
   const userId = user?.id;
+  const theme = useTheme();
 
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-        setTicker(prev => prev + 1);
-    }, 1000); // Check every 1 second
+  // TabsBar implemented with dnd-kit (sortable)
+  function SortableTab({ tab, activeTab, setActiveTab, setOpenTabs, tabRefs, isDraggingRef }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: String(tab.id) });
+    const baseBg = activeTab === tab.id ? theme.palette.info.main : theme.palette.info.light;
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      display: 'flex',
+      alignItems: 'center',
+      minHeight: 40,
+      padding: '0 12px',
+      marginRight: 8,
+      marginTop: 8,
+      cursor: isDragging ? 'grabbing' : 'grab',
+      flexShrink: 0,
+      borderTopLeftRadius: 8,
+      borderTopRightRadius: 8,
+      backgroundColor: baseBg,
+      boxShadow: isDragging ? '0 8px 20px rgba(0,0,0,0.18)' : (activeTab === tab.id ? '0px 8px 16px rgba(0, 0, 0, 0.12)' : 'none'),
+      zIndex: isDragging ? 9999 : (activeTab === tab.id ? 3 : 1),
+      color: theme.palette.common.white,
+      fontWeight: activeTab === tab.id ? 'bold' : 'normal',
+      transition: 'box-shadow 120ms ease, transform 120ms ease',
+    };
 
-    return () => clearInterval(intervalId);
-  }, []);
+    return (
+      <div
+        ref={(el) => { setNodeRef(el); tabRefs.current[tab.id] = el; }}
+        {...attributes}
+        {...listeners}
+        onClick={() => { if (isDraggingRef.current) return; setActiveTab(tab.id); }}
+        style={style}
+        role="button"
+        aria-pressed={activeTab === tab.id}
+      >
+        <Tooltip title={tab.alias || `Usuario ${String(tab.id).slice(-4)}`} arrow>
+          <Box display="flex" alignItems="center" sx={{ maxWidth: { xs: 140, sm: 160, md: 180, lg: 200 }, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            <Box component="span" sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff', fontSize: '0.80rem' }}>
+              {tab.alias || `Usuario ${String(tab.id).slice(-4)}`}
+            </Box>
+            <IconButton size="small" onClick={(e) => {
+              e.stopPropagation();
+              if (isDraggingRef.current) return;
+              setOpenTabs((prev) => { const updated = prev.filter((t) => t.id !== tab.id); if (activeTab === tab.id) { setActiveTab(updated[0]?.id || null); } return updated; });
+            }} sx={{ ml: 1, padding: '1px', color: '#fff', fontSize: '0.90rem' }}><CloseIcon fontSize="inherit" /></IconButton>
+          </Box>
+        </Tooltip>
+      </div>
+    );
+  }
+
+  // PropTypes for SortableTab (fixes ESLint react/prop-types warnings)
+  SortableTab.propTypes = {
+    tab: PropTypes.object.isRequired,
+    activeTab: PropTypes.string,
+    setActiveTab: PropTypes.func.isRequired,
+    setOpenTabs: PropTypes.func.isRequired,
+    tabRefs: PropTypes.object.isRequired,
+    isDraggingRef: PropTypes.object.isRequired,
+  };
+
+  function TabsBar({ openTabs, activeTab, setActiveTab, setOpenTabs, tabContainerRef, tabRefs, showScrollButtons, isDraggingRef }) {
+    const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+    const [activeId, setActiveId] = useState(null);
+
+    const localMouseMoveHandler = (e) => {
+      try {
+        const el = tabContainerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        const margin = 80;
+        const step = 30;
+        if (e.clientX < rect.left + margin) el.scrollLeft = Math.max(0, el.scrollLeft - step);
+        else if (e.clientX > rect.right - margin) el.scrollLeft = Math.min(el.scrollWidth, el.scrollLeft + step);
+      } catch (err) { /* ignore */ }
+    };
+
+    useEffect(() => {
+      return () => { try { document.removeEventListener('mousemove', localMouseMoveHandler); } catch (e) {} };
+    }, []);
+
+    return (
+      <DndContext
+        sensors={sensors}
+        onDragStart={(event) => { isDraggingRef.current = true; setActiveId(event.active.id); document.addEventListener('mousemove', localMouseMoveHandler); }}
+        onDragEnd={(event) => {
+          isDraggingRef.current = false;
+          document.removeEventListener('mousemove', localMouseMoveHandler);
+          const { active, over } = event;
+          if (!over) { setActiveId(null); return; }
+          const oldIndex = openTabs.findIndex(t => String(t.id) === String(active.id));
+          const newIndex = openTabs.findIndex(t => String(t.id) === String(over.id));
+          if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+            const reordered = arrayMove(openTabs, oldIndex, newIndex);
+            setOpenTabs(reordered);
+          }
+          setActiveId(null);
+        }}
+        onDragCancel={() => { isDraggingRef.current = false; setActiveId(null); document.removeEventListener('mousemove', localMouseMoveHandler); }}
+      >
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+          {showScrollButtons && <IconButton onClick={() => { const el = tabContainerRef.current; if (el) el.scrollLeft -= 150; }} sx={{ position: 'absolute', left: 0, zIndex: 2, backgroundColor: '#fff' }}><ChevronLeftIcon /></IconButton>}
+          <div id="scrollable-tab-container" ref={(el) => { tabContainerRef.current = el; }} style={{ overflowX: 'auto', display: 'flex', alignItems: 'flex-end', scrollBehavior: 'smooth', paddingLeft: showScrollButtons ? 20 : 8, paddingRight: showScrollButtons ? 20 : 8, width: '100%' }}>
+            <SortableContext items={openTabs.map(t => String(t.id))} strategy={horizontalListSortingStrategy}>
+              {openTabs.map((tab, index) => (
+                <SortableTab
+                  key={tab.id}
+                  tab={tab}
+                  index={index}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  setOpenTabs={setOpenTabs}
+                  tabRefs={tabRefs}
+                  isDraggingRef={isDraggingRef}
+                />
+              ))}
+            </SortableContext>
+          </div>
+          {showScrollButtons && <IconButton onClick={() => { const el = tabContainerRef.current; if (el) el.scrollLeft += 150; }} sx={{ position: 'absolute', right: 0, zIndex: 2, backgroundColor: '#fff' }}><ChevronRightIcon /></IconButton>}
+        </div>
+        <DragOverlay>{/* optional drag preview */}</DragOverlay>
+      </DndContext>
+    );
+  }
+
+  TabsBar.propTypes = {
+    openTabs: PropTypes.array.isRequired,
+    activeTab: PropTypes.string,
+    setActiveTab: PropTypes.func.isRequired,
+    setOpenTabs: PropTypes.func.isRequired,
+    tabContainerRef: PropTypes.object.isRequired,
+    tabRefs: PropTypes.object.isRequired,
+    showScrollButtons: PropTypes.bool,
+    isDraggingRef: PropTypes.object.isRequired,
+  };
+
+  // NOTE: removed an always-updating ticker state that forced a re-render every
+  // second. That was generating continuous ChatPanel render logs during dev.
+  // If you need a periodic timer later, prefer a ref-based timer or scope it
+  // to the component that actually needs updates (avoid app-level state here).
 
   const handleToggleIA = async (conversationId) => {
     const newState = !iaPausedMap[conversationId];
@@ -214,7 +358,26 @@ function Conversations() {
             if (existing.some((m) => String(m.id) === String(newMsg.id))) return prev;
             const normalizedMsg = { ...newMsg, text: newMsg.text || "" };
             const finalId = normalizedMsg.id ? String(normalizedMsg.id) : crypto.randomUUID();
-            return { ...prev, [convId]: [...existing, { ...normalizedMsg, id: finalId }] };
+            const toAppend = { ...normalizedMsg, id: finalId };
+
+            // Update message cache as well so history and pagination remain consistent
+            try {
+              const cache = messageCache.current.get(convId) || [];
+              console.debug(`📨 [SignalR] conv=${convId} cacheBefore=${cache.length} attemptingAppendId=${finalId}`);
+              if (!cache.some((m) => String(m.id) === String(finalId))) {
+                cache.push(toAppend);
+                // keep cache sorted chronologically
+                cache.sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+                messageCache.current.set(convId, cache);
+                console.debug(`📨 [SignalR] conv=${convId} cacheAfter=${cache.length} first=${cache[0]?.timestamp} last=${cache[cache.length-1]?.timestamp}`);
+              } else {
+                console.debug(`📨 [SignalR] conv=${convId} message ${finalId} already present in cache`);
+              }
+            } catch (e) {
+              // ignore cache update failures
+            }
+
+            return { ...prev, [convId]: [...existing, toAppend] };
           });
 
           setConversationList((prevList) =>
@@ -277,6 +440,13 @@ function Conversations() {
     const exists = openTabs.find((t) => t.id === idStr);
     if (!exists) {
       setOpenTabs((prev) => [...prev, { ...conv, id: idStr, unreadCount: 0 }]);
+      // Ensure the tabs container scrolls to the end when a new tab is opened
+      setTimeout(() => {
+        const el = tabContainerRef.current;
+        if (el) {
+          try { el.scrollLeft = el.scrollWidth; } catch (e) { /* ignore */ }
+        }
+      }, 120);
       setIaPausedMap((prev) => ({ ...prev, [conv.id]: !conv.isWithAI }));
     }
     setActiveTab(idStr);
@@ -305,7 +475,10 @@ function Conversations() {
 
       const cached = messageCache.current.get(idStr);
     if (cached) {
-      setMessages((prev) => ({ ...prev, [idStr]: cached }));
+      // When we have a cached full history, only render the most-recent slice
+      const visible = Math.min(DEFAULT_VISIBLE_ON_OPEN, cached.length);
+      visibleCounts.current.set(idStr, visible);
+      setMessages((prev) => ({ ...prev, [idStr]: cached.slice(-visible) }));
       if (conv.unreadCount > 0) {
         try {
           await markMessagesAsRead(conv.id);
@@ -316,117 +489,184 @@ function Conversations() {
     } else {
       setLoadingConversationId(idStr);
       try {
-        // Cargamos la última página usando el endpoint paginado. Esto evita traer TODO el historial
-        // y nos da un cursor (nextBefore) para paginar hacia atrás.
-        const paged = await getMessagesPaginated(conv.id, null, 50);
-        console.log("🔎 [getMessagesPaginated] payload for conv", conv.id, paged);
-        if (paged && Array.isArray(paged.messages) && paged.messages.length > 0) {
-          const normalized = paged.messages.map((msg) => {
-            // support API returning PascalCase (C#) or camelCase (JS)
-            const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
-            const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
-            // Normalize various casings/values into a stable lowercase role
-            let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
-            try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
-            let fromRole = (fromRoleRaw || "").toLowerCase();
-            if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") {
-              // Treat unknown variants as public/user
-              fromRole = "user";
-            }
-            const from = msg.from ?? msg.From ?? null;
-            const fromId = msg.fromId ?? msg.FromId ?? msg.fromId ?? msg.FromId ?? msg.FromId ?? null;
-            const fromName = msg.fromName ?? msg.FromName ?? msg.fromName ?? msg.FromName ?? null;
+        // Cargamos solo los mensajes necesarios inicialmente para evitar descargar TODO el historial.
+        // Estrategia:
+        // - Si la conversación tiene mensajes no leídos (conv.unreadCount > 0), solicitamos sólo
+        //   esos mensajes + un pequeño contexto (mínimo 10, máximo 100).
+        // - Si no hay no leídos, solicitamos una ventana pequeña (por ejemplo 20) y permitimos
+        //   paginar hacia atrás al hacer scroll (loadMoreOlderMessages).
+        const unread = Number(conv.unreadCount || 0);
+  const MIN_INITIAL = 10;
+  const DEFAULT_INITIAL = 20;
+  const MAX_INITIAL = 25; // evita pedir cantidades enormes (ajustado a 25 por petición)
+        let initialLimit;
+        if (unread > 0) {
+          initialLimit = Math.min(Math.max(unread, MIN_INITIAL), MAX_INITIAL);
+        } else {
+          initialLimit = DEFAULT_INITIAL;
+        }
 
-            // preserve other fields
-            const rest = { ...msg };
-            return {
-              ...rest,
-              id: String(id),
-              text,
-              fromRole,
-              from,
-              fromId,
-              fromName,
-            };
+        // Prefer server-side grouped-by-day response when available. This returns a shape like:
+        // { conversationId, days: [{ date, label, messages: [...] }], hasMore, nextBefore }
+  const grouped = await getMessagesGrouped(conv.id, null, initialLimit);
+  console.debug("🔎 [getMessagesGrouped] request:", { conversationId: conv.id, initialLimit });
+  console.debug("🔎 [getMessagesGrouped] payload for conv", conv.id, grouped);
+        // Server now provides days newest-first (orderedNewestFirst=true). Do not reverse on client.
+  if (grouped && Array.isArray(grouped.days) && grouped.days.length > 0) {
+          // Debug: log counts per day to help troubleshoot missing dividers / all-loaded behavior
+          try {
+            const counts = grouped.days.map(d => ({ date: d.date, label: d.label, count: Array.isArray(d.messages) ? d.messages.length : 0 }));
+            console.debug("🔎 [getMessagesGrouped] days summary:", counts);
+          } catch (e) { /* ignore */ }
+          const flattened = [];
+          grouped.days.forEach((day) => {
+            flattened.push({ id: `day-divider-${conv.id}-${day.date}`, __dayDivider: true, label: day.label, timestamp: day.date });
+            const msgs = Array.isArray(day.messages) ? day.messages : [];
+            msgs.forEach((msg) => {
+              const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+              const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+              let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+              try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+              let fromRole = (fromRoleRaw || "").toLowerCase();
+              if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+              const from = msg.from ?? msg.From ?? null;
+              const fromId = msg.fromId ?? msg.FromId ?? null;
+              const fromName = msg.fromName ?? msg.FromName ?? null;
+              flattened.push({ ...msg, id: String(id), text, fromRole, from, fromId, fromName });
+            });
           });
-          // Merge fetched page with any existing messages (SignalR optimistic / preview)
+
+          // Debug: report flattened window shape (first/last items, days order)
+          try {
+            console.debug(`🔍 [handleSelectConversation] conv=${conv.id} grouped.orderedNewestFirst=${!!grouped.orderedNewestFirst} daysOrder=`, grouped.days.map(d => d.date));
+            console.debug(`🔍 [handleSelectConversation] conv=${conv.id} flattened count=${flattened.length}`, {
+              first: flattened[0],
+              last: flattened[flattened.length - 1],
+            });
+          } catch (e) { /* ignore debug errors */ }
+
+          // Merge fetched grouped history with any existing messages (SignalR optimistic / preview)
           setMessages((prev) => {
             const existing = prev[idStr] || [];
             const map = new Map();
-            // add fetched history first (older items)
-            normalized.forEach((m) => map.set(String(m.id), m));
-            // then existing to preserve optimistic messages at the end
+            flattened.forEach((m) => map.set(String(m.id), m));
             existing.forEach((m) => map.set(String(m.id), m));
             const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
-            // update cache and cursor info
+            // store full merged history in cache but only render the tail (recent messages)
             messageCache.current.set(idStr, merged);
-            if (paged.hasMore) {
-              messageCursor.current.set(idStr, { hasMore: true, nextBefore: paged.nextBefore });
+            if (grouped.hasMore) {
+              messageCursor.current.set(idStr, { hasMore: true, nextBefore: grouped.nextBefore });
             } else {
               messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
             }
-            return { ...prev, [idStr]: merged };
-          });
+            // Determine how many messages to show on open: prefer initialLimit or default
+            const desiredVisible = Math.min(Math.max(initialLimit || DEFAULT_VISIBLE_ON_OPEN, DEFAULT_VISIBLE_ON_OPEN), merged.length);
+            visibleCounts.current.set(idStr, desiredVisible);
+            const visibleSlice = merged.slice(-desiredVisible);
 
-          // If the last page we loaded contains only admin messages, and there are older pages,
-          // automatically fetch up to N older pages so the admin immediately sees public/user or bot messages.
-          try {
-            const mergedNow = messageCache.current.get(idStr) || [];
-            const onlyAdmins = mergedNow.length > 0 && mergedNow.every(m => (m.fromRole || (m.FromRole || m.from || 'user')).toString().toLowerCase() === 'admin');
-            if (onlyAdmins) {
-              const maxAutoPages = 3; // don't loop forever; tune as needed
-              for (let i = 0; i < maxAutoPages; i++) {
-                const added = await loadMoreOlderMessages(conv.id);
-                if (!added) break; // no more messages or error
-                const now = messageCache.current.get(idStr) || [];
-                const hasNonAdmin = now.some(m => (m.fromRole || (m.FromRole || m.from || '')).toString().toLowerCase() !== 'admin');
-                if (hasNonAdmin) break;
-              }
-            }
-          } catch (autoErr) {
-            console.warn("⚠️ Auto-prefetch older pages failed:", autoErr);
-          }
-          console.log("🔎 [getConversationHistory] normalized messages stored in cache for conv", idStr, normalized.map(m => ({ id: m.id, text: m.text })));
-          if (conv.unreadCount > 0) {
+            // Debug: log merged cache and visible slice info for diagnostics (after visibleSlice is known)
             try {
-              await markMessagesAsRead(conv.id);
-            } catch (error) {
-              console.warn("❌ Error marcando mensajes como leídos:", error);
-            }
-          }
-        } else {
-          // If the main history endpoint returned empty, try a fallback endpoint
-          console.warn(`⚠️ [getConversationHistory] empty history for conv ${conv.id}, trying fallback /api/Messages/by-conversation`);
-          try {
-            const fallback = await getMessagesByConversationId(conv.id);
-            console.log(`🔁 [fallback] messages for conv ${conv.id}:`, fallback);
-            if (Array.isArray(fallback) && fallback.length > 0) {
-              const fallbackNormalized = fallback.map((msg) => ({
-                ...msg,
-                id: msg.id ? String(msg.id) : `${idStr}-${Date.now()}`,
-                text: msg.text || msg.messageText || "",
-              }));
-              // Merge with existing to avoid wiping SignalR/preview messages
-              setMessages((prev) => {
-                const existing = prev[idStr] || [];
-                const map = new Map();
-                existing.forEach((m) => map.set(String(m.id), m));
-                fallbackNormalized.forEach((m) => map.set(String(m.id), m));
-                const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
-                messageCache.current.set(idStr, merged);
-                // fallback -> no cursor info available
-                return { ...prev, [idStr]: merged };
+              const first = merged[0];
+              const last = merged[merged.length - 1];
+              console.debug(`🗂️ [handleSelectConversation] conv=${conv.id} mergedCount=${merged.length} firstTs=${first?.timestamp || first?.Timestamp} lastTs=${last?.timestamp || last?.Timestamp}`);
+              console.debug(`🗂️ [handleSelectConversation] conv=${conv.id} desiredVisible=${desiredVisible} visibleSliceCount=${visibleSlice.length}`, {
+                visibleFirst: visibleSlice[0],
+                visibleLast: visibleSlice[visibleSlice.length - 1],
               });
-              console.log("🔁 [fallback] normalized stored for conv", idStr, fallbackNormalized.map(m => ({ id: m.id, text: m.text })));
-            } else {
-              console.warn(`🔁 [fallback] returned no messages for conv ${conv.id}, preserving existing messages`);
-            }
-          } catch (fbErr) {
-            console.error(`❌ [fallback] error loading messages for conv ${conv.id}`, fbErr);
-            // Preserve any existing messages (from SignalR or cache) instead of wiping them.
-            const cachedNow = messageCache.current.get(idStr);
-            if (cachedNow) {
-              setMessages((prev) => ({ ...prev, [idStr]: cachedNow }));
+            } catch (e) { /* ignore */ }
+
+            (async () => {
+              try {
+                const files = await getFilesByConversation(conv.id);
+                if (Array.isArray(files) && files.length > 0) {
+                  const fileItems = files.map((f) => ({
+                    id: `file-${f.id}`,
+                    text: null,
+                    fromRole: 'user',
+                    fromName: f.userName || `Sesión ${conv.id}`,
+                    timestamp: f.uploadedAt || f.UploadedAt || new Date().toISOString(),
+                    fileUrl: f.filePath || f.fileUrl || f.filePathServer || f.path || null,
+                    fileName: f.fileName || f.fileNameOriginal || f.name,
+                    fileType: f.fileType || f.fileType || 'application/octet-stream',
+                    _origin: 'uploaded_file',
+                    _fileId: f.id,
+                  }));
+
+                  const current = messageCache.current.get(idStr) || merged;
+                  const byId = new Map();
+                  current.forEach((m) => byId.set(String(m.id), m));
+                  fileItems.forEach((fi) => { if (!byId.has(String(fi.id))) byId.set(String(fi.id), fi); });
+                  const mergedWithFiles = Array.from(byId.values()).sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+                  messageCache.current.set(idStr, mergedWithFiles);
+                  // update the visible slice according to the current visible count
+                  const currentVisible = visibleCounts.current.get(idStr) || desiredVisible || DEFAULT_VISIBLE_ON_OPEN;
+                  const visibleAfterFiles = mergedWithFiles.slice(-currentVisible);
+                  setMessages((prev2) => ({ ...prev2, [idStr]: visibleAfterFiles }));
+                }
+              } catch (fileErr) {
+                console.warn('[getFilesByConversation] failed to fetch/merge files for conv', conv.id, fileErr);
+              }
+            })();
+
+            // return only the visible slice to render (recent messages)
+            return { ...prev, [idStr]: visibleSlice };
+          });
+        } else {
+          // Fallback: use the paged endpoint if grouped not available
+          const paged = await getMessagesPaginated(conv.id, null, initialLimit);
+          console.log("🔎 [getMessagesPaginated fallback] payload for conv", conv.id, paged);
+          if (paged && Array.isArray(paged.messages) && paged.messages.length > 0) {
+            const normalized = paged.messages.map((msg) => {
+              const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+              const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+              let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+              try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+              let fromRole = (fromRoleRaw || "").toLowerCase();
+              if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+              const fromId = msg.fromId ?? msg.FromId ?? null;
+              const fromName = msg.fromName ?? msg.FromName ?? null;
+              return { ...msg, id: String(id), text, fromRole, fromId, fromName };
+            });
+            setMessages((prev) => {
+              const existing = prev[idStr] || [];
+              const map = new Map();
+              normalized.forEach((m) => map.set(String(m.id), m));
+              existing.forEach((m) => map.set(String(m.id), m));
+              const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+              messageCache.current.set(idStr, merged);
+              if (paged.hasMore) {
+                messageCursor.current.set(idStr, { hasMore: true, nextBefore: paged.nextBefore });
+              } else {
+                messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
+              }
+
+              // determine visible slice for paged fallback (similar to grouped)
+              const fallbackVisible = Math.min(Math.max(initialLimit || DEFAULT_VISIBLE_ON_OPEN, DEFAULT_VISIBLE_ON_OPEN), merged.length);
+              visibleCounts.current.set(idStr, fallbackVisible);
+              const fallbackSlice = merged.slice(-fallbackVisible);
+              return { ...prev, [idStr]: fallbackSlice };
+            });
+          } else {
+            // If the grouped and paged endpoints returned empty, try older fallback
+            console.warn(`⚠️ [getConversationHistory] empty history for conv ${conv.id}, trying fallback /api/Messages/by-conversation`);
+            try {
+              const fb = await getMessagesByConversationId(conv.id);
+              if (Array.isArray(fb) && fb.length > 0) {
+                const fallbackNormalized = fb.map((msg) => ({ ...msg, id: msg.id ? String(msg.id) : `${idStr}-${Date.now()}`, text: msg.text || msg.messageText || "" }));
+                setMessages((prev) => {
+                  const existing = prev[idStr] || [];
+                  const map = new Map();
+                  existing.forEach((m) => map.set(String(m.id), m));
+                  fallbackNormalized.forEach((m) => map.set(String(m.id), m));
+                  const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+                  messageCache.current.set(idStr, merged);
+                  return { ...prev, [idStr]: merged };
+                });
+              }
+            } catch (fbErr) {
+              console.error(`❌ [fallback] error loading messages for conv ${conv.id}`, fbErr);
+              const cachedNow = messageCache.current.get(idStr);
+              if (cachedNow) setMessages((prev) => ({ ...prev, [idStr]: cachedNow }));
             }
           }
         }
@@ -450,44 +690,79 @@ function Conversations() {
     if (!cursor.hasMore || !cursor.nextBefore) return 0;
     try {
       const before = cursor.nextBefore;
-      const paged = await getMessagesPaginated(conversationId, before, 50);
-      if (!paged || !Array.isArray(paged.messages) || paged.messages.length === 0) {
+  // Use grouped endpoint so we load a window already grouped by day (includes files)
+  console.debug("🔃 [loadMoreOlderMessages] requesting grouped for conv", conversationId, { before });
+  const grouped = await getMessagesGrouped(conversationId, before, 50);
+  console.debug("🔃 [loadMoreOlderMessages] response grouped:", grouped && grouped.days ? grouped.days.map(d => ({ date: d.date, label: d.label, count: (d.messages||[]).length })) : grouped);
+      if (!grouped || !Array.isArray(grouped.days) || grouped.days.length === 0) {
         messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
         return 0;
       }
 
-      const normalized = paged.messages.map((msg) => {
-        const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
-        const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
-        let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
-        try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
-        let fromRole = (fromRoleRaw || "").toLowerCase();
-        if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
-        const fromId = msg.fromId ?? msg.FromId ?? null;
-        const fromName = msg.fromName ?? msg.FromName ?? null;
-        return { ...msg, id: String(id), text, fromRole, fromId, fromName };
+  // Flatten grouped.days into day-divider objects + messages (preserve server labels)
+      const flattened = [];
+      grouped.days.forEach((day) => {
+        // day.date is like 'yyyy-MM-dd' and day.label is localized (e.g., 'Hoy', 'Ayer')
+        flattened.push({ __dayDivider: true, id: `day-divider-${conversationId}-${day.date}`, label: day.label, timestamp: day.date });
+        const msgs = Array.isArray(day.messages) ? day.messages : [];
+        msgs.forEach((msg) => {
+          const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+          const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+          let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+          try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+          let fromRole = (fromRoleRaw || "").toLowerCase();
+          if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+          const fromId = msg.fromId ?? msg.FromId ?? msg.fromId ?? null;
+          const fromName = msg.fromName ?? msg.FromName ?? msg.alias ?? msg.fromName ?? null;
+          flattened.push({ ...msg, id: String(id), text, fromRole, fromId, fromName });
+        });
       });
 
-      // Prepend older messages to cache
+      // Debug: show what older window contained
+      try {
+        console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} incomingDays=`, grouped.days.map(d => ({ date: d.date, count: (d.messages||[]).length })));
+        console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} flattened count=${flattened.length}`, { first: flattened[0], last: flattened[flattened.length - 1] });
+      } catch (e) { /* ignore */ }
+
+      // Prepend flattened window to cache preserving existing messages
       setMessages((prev) => {
         const existing = prev[idStr] || [];
         const map = new Map();
-        // add normalized older first
-        normalized.forEach((m) => map.set(String(m.id), m));
+        // add incoming older window first
+        flattened.forEach((m) => map.set(String(m.id || `day-${Math.random().toString(36).slice(2,6)}`), m));
         // then existing messages
         existing.forEach((m) => map.set(String(m.id), m));
         const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
         messageCache.current.set(idStr, merged);
+        // Debug: after prepend, show sizes and visible window (compute newVisible first)
+        try {
+          const addedMessages = flattened.filter((x) => !x.__dayDivider).length;
+          const currentVisible = visibleCounts.current.get(idStr) || Math.min(DEFAULT_VISIBLE_ON_OPEN, existing.length);
+          const newVisible = Math.min(merged.length, currentVisible + addedMessages);
+          const first = merged[0];
+          const last = merged[merged.length - 1];
+          console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} mergedCount=${merged.length} addedMessages=${addedMessages} currentVisible=${currentVisible} newVisible=${newVisible}`);
+          console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} merged first/last:`, { first, last });
+        } catch (e) { /* ignore */ }
         // update cursor
-        if (paged.hasMore) {
-          messageCursor.current.set(idStr, { hasMore: true, nextBefore: paged.nextBefore });
+        if (grouped.hasMore) {
+          messageCursor.current.set(idStr, { hasMore: true, nextBefore: grouped.nextBefore });
         } else {
           messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
         }
-        return { ...prev, [idStr]: merged };
+
+        // expand visible count to include newly loaded older messages
+        const currentVisible = visibleCounts.current.get(idStr) || Math.min(DEFAULT_VISIBLE_ON_OPEN, existing.length);
+        const addedMessages = flattened.filter((x) => !x.__dayDivider).length;
+        const newVisible = Math.min(merged.length, currentVisible + addedMessages);
+        visibleCounts.current.set(idStr, newVisible);
+        const visibleSlice = merged.slice(-newVisible);
+        return { ...prev, [idStr]: visibleSlice };
       });
 
-      return normalized.length;
+      // Return number of message items (exclude day dividers) for continuity
+      const messageCount = flattened.filter((x) => !x.__dayDivider).length;
+      return messageCount;
     } catch (err) {
       console.error("❌ Error cargando página antigua:", err);
       return 0;
@@ -524,6 +799,25 @@ function Conversations() {
   };
 
   const handleSendAdminMessage = async (text, conversationId, messageId, replyToMessageId = null, replyToText = null) => {
+    // ✅ NUEVO: Detectar inyección de prompts antes de enviar
+    const injectionDetection = detectPromptInjection(text);
+    if (injectionDetection.detected) {
+      console.warn(`⚠️ [PromptInjection] Patrones detectados: ${injectionDetection.patterns.join(', ')} (Riesgo: ${injectionDetection.riskScore}/100)`);
+      
+      // Mostrar alerta al usuario
+      const confirmed = window.confirm(
+        `⚠️ Advertencia de Seguridad:\n\n` +
+        `Se detectaron ${injectionDetection.patterns.length} patrón(es) de inyección de prompt.\n` +
+        `Nivel de riesgo: ${injectionDetection.riskScore}/100\n\n` +
+        `¿Deseas continuar de todas formas?`
+      );
+      
+      if (!confirmed) {
+        console.info("📌 Envío de mensaje cancelado por el usuario (sospecha de inyección)");
+        return;
+      }
+    }
+
     const connection = connectionRef.current;
     if (!connection || connection.state !== "Connected") {
       console.warn("SignalR connection not ready yet");
@@ -548,10 +842,21 @@ function Conversations() {
     });
 
     try {
-      await connection.invoke("AdminMessage", Number(conversationId), text, replyToMessageId, replyToText);
+      // Normalize replyToMessageId to an integer if possible. The client may have
+      // preview or optimistic message IDs (e.g. 'preview-39' or UUIDs) which
+      // will fail server-side binding when the hub expects an int?.
+      let safeReplyToId = null;
+      if (replyToMessageId !== null && replyToMessageId !== undefined) {
+        const parsed = Number(replyToMessageId);
+        safeReplyToId = Number.isFinite(parsed) && !Number.isNaN(parsed) ? parsed : null;
+      }
+      console.debug(`🛰️ [AdminMessage.invoke] conv=${conversationId} textLen=${String(text || '').length} safeReplyToId=${safeReplyToId}`, { replyToMessageId, replyToText });
+      await connection.invoke("AdminMessage", Number(conversationId), text, safeReplyToId, replyToText);
       setReplyToMessage(null);
     } catch (err) {
-      console.error("❌ Error sending message:", err);
+      // Show a clearer error message in the console and remove optimistic message
+      // so UI is consistent. Keep original error object for debugging.
+      console.error("❌ Error sending AdminMessage (invoke failed):", err && err.message ? err.message : err);
       setMessages((prev) => {
         const existing = prev[convId] || [];
         return { ...prev, [convId]: existing.filter((m) => m.id !== messageId) };
@@ -611,56 +916,16 @@ function Conversations() {
           <Grid item xs={12} md={8} lg={8}>
             <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column", borderRadius: 0 }}>
               <SoftBox sx={{ flex: 1, display: "flex", minHeight: 0, flexDirection: "column", position: "relative", pb: 2 }}>
-                <DragDropContext onDragEnd={(result) => {
-                  const { source, destination } = result;
-                  if (!destination) return;
-                  const reordered = Array.from(openTabs);
-                  const [moved] = reordered.splice(source.index, 1);
-                  reordered.splice(destination.index, 0, moved);
-                  setOpenTabs(reordered);
-                }}>
-                  <Droppable droppableId="tabs" direction="horizontal">
-                    {(provided) => (
-                      <Box sx={{ position: "relative", display: "flex", alignItems: "center", mb: 1 }}>
-                        {showScrollButtons && <IconButton onClick={() => { const el = tabContainerRef.current; if (el) el.scrollLeft -= 150; }} sx={{ position: "absolute", left: 0, zIndex: 2, backgroundColor: "#fff", "&:hover": { backgroundColor: "grey.200" } }}><ChevronLeftIcon /></IconButton>}
-                        <Box
-                          id="scrollable-tab-container"
-                          ref={(el) => { tabContainerRef.current = el; provided.innerRef(el); }}
-                          {...provided.droppableProps}
-                          sx={{ overflowX: "auto", display: "flex", alignItems: "flex-end", scrollBehavior: "smooth", px: showScrollButtons ? 5 : 1, width: "100%" }}
-                        >
-                          {openTabs.map((tab, index) => {
-                            const isActive = activeTab === tab.id;
-                            return (
-                              <Draggable key={tab.id} draggableId={tab.id.toString()} index={index}>
-                                {(provided) => (
-                                  <Box
-                                    ref={(el) => { provided.innerRef(el); tabRefs.current[tab.id] = el; }}
-                                    {...provided.draggableProps}
-                                    {...provided.dragHandleProps}
-                                    onClick={() => setActiveTab(tab.id)}
-                                    sx={{ display: "flex", alignItems: "center", minHeight: "40px", px: 2, mr: 0.5, mt: 2, cursor: "pointer", flexShrink: 0, borderTopLeftRadius: "8px", borderTopRightRadius: "8px", backgroundColor: isActive ? "info.main" : "transparent", boxShadow: isActive ? "0px 8px 16px rgba(0, 0, 0, 0.3)" : "none", zIndex: isActive ? 3 : 1, color: isActive ? "#fff" : "inherit", fontWeight: isActive ? "bold" : "normal", "&:hover": { backgroundColor: isActive ? "info.dark" : "action.hover" } }}
-                                  >
-                                    <Tooltip title={tab.alias || `Usuario ${tab.id.slice(-4)}`} arrow>
-                                      <Box display="flex" alignItems="center" sx={{ maxWidth: { xs: 140, sm: 160, md: 180, lg: 200 }, flexShrink: 0, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>
-                                        <Box component="span" sx={{ flexGrow: 1, overflow: "hidden", textOverflow: "ellipsis", color: isActive ? "#fff" : "inherit", fontSize: "0.80rem" }}>
-                                          {tab.alias || `Usuario ${tab.id.slice(-4)}`}
-                                        </Box>
-                                        <IconButton size="small" onClick={(e) => { e.stopPropagation(); setOpenTabs((prev) => { const updated = prev.filter((t) => t.id !== tab.id); if (activeTab === tab.id) { setActiveTab(updated[0]?.id || null); } return updated; }); }} sx={{ ml: 1, padding: "1px", color: isActive ? "#fff" : "inherit", fontSize: "0.90rem" }}><CloseIcon fontSize="inherit" /></IconButton>
-                                      </Box>
-                                    </Tooltip>
-                                  </Box>
-                                )}
-                              </Draggable>
-                            );
-                          })}
-                          {provided.placeholder}
-                        </Box>
-                        {showScrollButtons && <IconButton onClick={() => { const el = tabContainerRef.current; if (el) el.scrollLeft += 150; }} sx={{ position: "absolute", right: 0, zIndex: 2, backgroundColor: "#fff", "&:hover": { backgroundColor: "grey.200" } }}><ChevronRightIcon /></IconButton>}
-                      </Box>
-                    )}
-                  </Droppable>
-                </DragDropContext>
+                <TabsBar
+                  openTabs={openTabs}
+                  activeTab={activeTab}
+                  setActiveTab={setActiveTab}
+                  setOpenTabs={setOpenTabs}
+                  tabContainerRef={tabContainerRef}
+                  tabRefs={tabRefs}
+                  showScrollButtons={showScrollButtons}
+                  isDraggingRef={isDraggingRef}
+                />
 
                 {selectedConversation ? (
                   <ChatPanel

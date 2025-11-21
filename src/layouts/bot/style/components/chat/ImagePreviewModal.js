@@ -6,6 +6,7 @@ const ImagePreviewModal = ({
   isOpen,
   onClose,
   imageGroup,
+  imageGroupBlobUrls = {},
   activeImageIndex,
   setActiveImageIndex,
 }) => {
@@ -13,9 +14,12 @@ const ImagePreviewModal = ({
 
   const currentImage = imageGroup[activeImageIndex];
 
-  const imageUrl = currentImage?.fileUrl.startsWith("http")
-    ? currentImage?.fileUrl
-    : `http://localhost:5006${currentImage?.fileUrl}`;
+  // 🔹 PRIORIZAR blob URL para evitar CORS issues
+  const imageUrl = imageGroupBlobUrls?.[currentImage?.fileUrl] || (
+    currentImage?.fileUrl.startsWith("http")
+      ? currentImage?.fileUrl
+      : `http://localhost:5006${currentImage?.fileUrl}`
+  );
 
   return ReactDOM.createPortal(
     <div
@@ -97,6 +101,7 @@ ImagePreviewModal.propTypes = {
       fileUrl: PropTypes.string.isRequired,
     })
   ).isRequired,
+  imageGroupBlobUrls: PropTypes.object,
   activeImageIndex: PropTypes.number.isRequired,
   setActiveImageIndex: PropTypes.func.isRequired,
 };

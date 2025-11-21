@@ -133,7 +133,7 @@ const TagChip = ({ tag, index, isExpanded, onToggle, backgroundColor, onDelete }
                                                                                 <Tooltip title="Eliminar" placement="top">
                                                                                     <span
                                                                                         style={{
-                                                                                            color: '#ff1744',
+                                                                                            color: '#ffffff', // changed from red to white per design request
                                                                                             cursor: 'pointer',
                                                                                             fontWeight: 'bold',
                                                                                             fontSize: '1.2em',
