@@ -1,19 +1,38 @@
 import axios from "axios";
 
 const API_BASE_URL = "http://localhost:5006/api/Users";
+const CSRF_TOKEN_URL = "http://localhost:5006/api/Auth/csrf-token";
+
+// Función para obtener el token CSRF
+async function getCsrfToken() {
+  try {
+    const response = await axios.get(CSRF_TOKEN_URL);
+    return {
+      token: response.data.token,
+      headerName: response.data.header_name || "X-CSRF-Token"
+    };
+  } catch (error) {
+    console.error("Error obteniendo CSRF token:", error);
+    throw error;
+  }
+}
 
 // Función para iniciar sesión
 export const login = async (email, password) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/login`, {
-      email,
-      password,
-    });
-
+    const csrf = await getCsrfToken();
+    const response = await axios.post(
+      `${API_BASE_URL}/login`,
+      { email, password },
+      {
+        headers: {
+          [csrf.headerName]: csrf.token
+        }
+      }
+    );
     if (response.data.token) {
       localStorage.setItem("token", response.data.token);
     }
-
     return response.data;
   } catch (error) {
     console.error("Error de inicio de sesión:", error.response ? error.response.data : error.message);
@@ -24,11 +43,32 @@ export const login = async (email, password) => {
 // Función para registrar un usuario
 export const register = async (newUser) => {
   try {
-    const response = await axios.post(`${API_BASE_URL}/register`, newUser);
+    const csrf = await getCsrfToken();
+    const response = await axios.post(
+      `${API_BASE_URL}/register`,
+      newUser,
+      {
+        headers: {
+          [csrf.headerName]: csrf.token
+        }
+      }
+    );
     return response.data;
   } catch (error) {
-    console.error("Error al registrar:", error.response?.data?.Details || error.message);
-    throw new Error(error.response?.data?.message || "Error desconocido");
+    if (error.response && error.response.data) {
+      // Mostrar el contenido completo de la respuesta de error
+      console.error("[DEBUG] Respuesta completa del backend:", error.response.data);
+      const { Message, Errors, Details } = error.response.data;
+      if (Errors && Array.isArray(Errors)) {
+        Errors.forEach(e => console.error("[IdentityError]", e.description || e.code));
+        throw { message: Message || Details || "Error desconocido", errors: Errors };
+      }
+      // Si no hay Message ni Errors, mostrar todo el objeto
+      throw new Error(JSON.stringify(error.response.data));
+    } else {
+      console.error("Error desconocido:", error);
+      throw new Error("Error desconocido");
+    }
   }
 };
 

@@ -9,7 +9,12 @@ export const getIaProviders = async () => {
 };
 
 export const createIaProvider = async (data) => {
-  const response = await axios.post(`${API_BASE_URL}/api/BotIaProviders`, data);
+  const token = localStorage.getItem("token");
+  const response = await axios.post(
+    `${API_BASE_URL}/api/BotIaProviders`,
+    data,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
   return response.data;
 };
 

@@ -113,7 +113,29 @@ const UserCreation = () => {
       });
       setUserFormErrors({});
     } catch (err) {
-      setUserError("No se pudo registrar el usuario");
+      // Mostrar errores de Identity de forma clara
+      if (err && err.errors && Array.isArray(err.errors)) {
+        const errorList = err.errors.map(e => e.description).join("\n");
+        setUserError(errorList);
+      } else if (err && err.message) {
+        // Si el mensaje es un JSON, intenta extraer los errores
+        try {
+          const parsed = JSON.parse(err.message);
+          if (parsed.errors && Array.isArray(parsed.errors)) {
+            const errorList = parsed.errors.map(e => e.description).join("\n");
+            setUserError(errorList);
+            return;
+          }
+          // Manejo de error de clave foránea o base de datos
+          if (parsed.details && parsed.details.includes("Cannot add or update a child row: a foreign key constraint fails")) {
+            setUserError("El tipo de documento seleccionado no es válido. Por favor, selecciona uno existente.");
+            return;
+          }
+        } catch {}
+        setUserError("No se pudo registrar el usuario. Verifica los datos ingresados.");
+      } else {
+        setUserError("No se pudo registrar el usuario");
+      }
     }
   };
 

@@ -36,7 +36,7 @@ function SignIn() {
       navigate("/dashboard");
     } catch (err) {
       console.error(err);
-      setError("Credenciales incorrectas");
+      setError(err?.message || "Credenciales incorrectas");
     }
   };
 

@@ -39,17 +39,15 @@
   }
   iframe.src = baseUrl;
 
-  // Minimal, non-invasive defaults. Let the host page control positioning if desired.
-  // Iframe default styles — visible and positioned in the corner by default
+  // Inicialmente oculto para evitar parpadeo
   iframe.style.cssText = `
-    display: block;
-    width: 420px; /* initial fallback larger so child can measure its preferred layout */
-    height: 720px; /* initial fallback larger so child can measure its preferred layout */
+    display: none;
+    width: 420px;
+    height: 720px;
     border: none;
     background: transparent;
     z-index: 9999;
-    pointer-events: auto; /* allow interactions by default */
-    /* Default position: make widget visible by default without forcing full-screen */
+    pointer-events: auto;
     position: fixed;
     bottom: 20px;
     right: 20px;
@@ -104,7 +102,6 @@
               case 'top-right':
                 iframe.style.top = `${topOffset}px`; iframe.style.right = `${margin}px`; break;
               case 'center-left':
-                // center vertically relative to viewport; add small topOffset to nudge below header if present
                 iframe.style.top = navbarHeight ? `calc(50% + ${navbarHeight / 2}px)` : '50%'; iframe.style.left = `${margin}px`; iframe.style.transform = 'translateY(-50%)'; break;
               case 'center-right':
                 iframe.style.top = navbarHeight ? `calc(50% + ${navbarHeight / 2}px)` : '50%'; iframe.style.right = `${margin}px`; iframe.style.transform = 'translateY(-50%)'; break;
@@ -116,6 +113,8 @@
         } catch (e) {
           console.warn('[parent] error applying child position config', e);
         }
+        // Mostrar el iframe solo cuando el widget esté listo
+        iframe.style.display = 'block';
 
         event.source.postMessage({ type: 'parent-received-ready' }, event.origin);
         return;

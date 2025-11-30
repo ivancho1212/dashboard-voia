@@ -293,6 +293,15 @@ function Conversations() {
           }
           setTypingState((prev) => ({ ...prev, [convId]: { isTyping: true, sender } }));
         });
+        // Suscripción al evento de nueva conversación
+        connection.on("NewConversation", (conv) => {
+          console.log("🆕 Nueva conversación recibida:", conv);
+          setConversationList((prevList) => {
+            // Evitar duplicados por id
+            if (prevList.some((c) => String(c.id) === String(conv.id))) return prevList;
+            return [conv, ...prevList];
+          });
+        });
 
         connection.on("ReceiveStopTyping", (conversationId, sender) => {
           const convId = String(conversationId);
@@ -900,7 +909,46 @@ function Conversations() {
                     onClearHighlight={(id) => setHighlightedIds((prev) => prev.filter((cid) => cid !== id))}
                     onSelect={(id) => {
                       const conv = conversationList.find((c) => c.id === id);
-                      if (conv) handleSelectConversation(conv);
+                      if (conv) {
+                        // Marcar como leída si tiene mensajes no leídos
+                        if (conv.unreadCount > 0) {
+                          markMessagesAsRead(conv.id).then(() => {
+                            setConversationList((prevList) =>
+                              prevList.map((item) => (item.id == conv.id ? { ...item, unreadCount: 0 } : item))
+                            );
+                          });
+                        }
+                        // Si no hay mensajes en el estado, cargar historial
+                        const idStr = String(conv.id);
+                        if (!messages[idStr] || messages[idStr].length === 0) {
+                          setLoadingConversationId(idStr);
+                          getMessagesGrouped(conv.id, null, 20).then((grouped) => {
+                            if (grouped && Array.isArray(grouped.days) && grouped.days.length > 0) {
+                              const flattened = [];
+                              grouped.days.forEach((day) => {
+                                flattened.push({ id: `day-divider-${conv.id}-${day.date}`, __dayDivider: true, label: day.label, timestamp: day.date });
+                                const msgs = Array.isArray(day.messages) ? day.messages : [];
+                                msgs.forEach((msg) => {
+                                  const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+                                  const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+                                  let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+                                  try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+                                  let fromRole = (fromRoleRaw || "").toLowerCase();
+                                  if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+                                  const fromId = msg.fromId ?? msg.FromId ?? null;
+                                  const fromName = msg.fromName ?? msg.FromName ?? null;
+                                  flattened.push({ ...msg, id: String(id), text, fromRole, fromId, fromName });
+                                });
+                              });
+                              // Mostrar solo los más recientes
+                              const visible = Math.min(20, flattened.length);
+                              setMessages((prev) => ({ ...prev, [idStr]: flattened.slice(-visible) }));
+                            }
+                            setLoadingConversationId(null);
+                          });
+                        }
+                        handleSelectConversation(conv);
+                      }
                       setHighlightedIds((prev) => prev.filter((cid) => cid !== id));
                     }}
                     onStatusChange={handleUpdateConversationStatus}

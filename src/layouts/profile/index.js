@@ -534,108 +534,74 @@ function Overview() {
                       {/* separator between description and phases */}
                       <Divider sx={{ my: 1, mx: 2 }} />
 
-                      {/* Row 3: process icons (4-slot fixed area). Show up to 4 phases in fixed positions; unreached phases render as muted placeholders */}
-                      {/* Phases: explicit 2x2 layout (Entrenamiento + Datos on top; Estilos + Integración below) */}
-                      <SoftBox sx={{ px: 2, pt: 0.5 }}>
-                        {/* Top row: Entrenamiento | Datos */}
-                        <SoftBox sx={{ display: 'flex', justifyContent: 'space-between', gap: 2, mb: 1 }}>
-                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.training ? 'pointer' : 'default' }} onClick={() => phases.training && handlePhaseClick(bot, 'training')}>
-                            {phases.training ? (
-                              <>
-                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
-                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
-                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
-                                  </svg>
-                                  <SchoolIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
-                                  {!phases.finished && (
-                                    <Tooltip title={`Configurar Entrenamiento`}>
-                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/training/${bot.id}`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
-                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                                </Box>
-                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Entrenamiento</SoftTypography>
-                              </>
-                            ) : (
-                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
-                            )}
-                          </SoftBox>
 
-                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.dataCapture ? 'pointer' : 'default' }} onClick={() => phases.dataCapture && handlePhaseClick(bot, 'dataCapture')}>
-                            {phases.dataCapture ? (
-                              <>
-                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
-                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
-                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
-                                  </svg>
-                                  <StorageIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
-                                  {!phases.finished && (
-                                    <Tooltip title={`Configurar Datos`}>
-                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/captured-data/${bot.id}`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
-                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                                </Box>
-                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Datos</SoftTypography>
-                              </>
-                            ) : (
-                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
-                            )}
-                          </SoftBox>
-                        </SoftBox>
-
-                        {/* Bottom row: Estilos | Integración */}
-                        <SoftBox sx={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.styles ? 'pointer' : 'default' }} onClick={() => phases.styles && handlePhaseClick(bot, 'styles')}>
-                            {phases.styles ? (
-                              <>
-                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
-                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
-                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
-                                  </svg>
-                                  <PaletteIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
-                                  {!phases.finished && (
-                                    <Tooltip title={`Configurar Estilos`}>
-                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/style/${bot.id}`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
-                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                                </Box>
-                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Estilos</SoftTypography>
-                              </>
-                            ) : (
-                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
-                            )}
-                          </SoftBox>
-
-                          <SoftBox display="flex" flexDirection="column" alignItems="center" sx={{ width: '48%', cursor: phases.integration ? 'pointer' : 'default' }} onClick={() => phases.integration && handlePhaseClick(bot, 'integration')}>
-                            {phases.integration ? (
-                              <>
-                                <Box position="relative" width={{ xs: 52, md: 60 }} height={{ xs: 52, md: 60 }} display="flex" alignItems="center" justifyContent="center">
-                                  <svg viewBox="0 0 70 70" width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
-                                    <circle cx="35" cy="35" r="27" fill="none" stroke="#e6e6e6" strokeWidth="2.0" />
-                                  </svg>
-                                  <IntegrationInstructionsIcon sx={{ fontSize: { xs: '22px !important', md: '26px !important' }, color: 'info.main', zIndex: 2 }} />
-                                  {!phases.finished && (
-                                    <Tooltip title={`Configurar Integración`}>
-                                      <IconButton onClick={(e) => { e.stopPropagation(); navigate(`/bots/integration`, { state: { botId: bot.id, edit: true } }); }} sx={{ position: 'absolute', top: 6, right: 2, bgcolor: '#fff', p: 0, zIndex: 3, border: '1px solid #e0e0e0' }}>
-                                        <SettingsIcon sx={{ fontSize: '14px !important', color: '#bdbdbd' }} />
-                                      </IconButton>
-                                    </Tooltip>
-                                  )}
-                                </Box>
-                                <SoftTypography variant="caption" sx={{ color: 'info.main', fontSize: 12, textAlign: 'center', mt: 0.5 }}>Integración</SoftTypography>
-                              </>
-                            ) : (
-                              <Box sx={{ width: { xs: 52, md: 60 }, height: { xs: 52, md: 60 } }} />
-                            )}
-                          </SoftBox>
-                        </SoftBox>
-
-                        </SoftBox>
+                      {/* Row 3: vertical button list for bot phases */}
+                      <SoftBox sx={{ px: 2, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {/* Entrenamiento */}
+                        <Button
+                          variant={phases.training ? 'contained' : 'outlined'}
+                          color={phases.training ? 'info' : 'inherit'}
+                          startIcon={<SchoolIcon sx={{ color: 'info.main' }} />}
+                          endIcon={!phases.finished && phases.training ? (
+                            <Tooltip title="Configurar Entrenamiento">
+                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                            </Tooltip>
+                          ) : null}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.training ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          onClick={() => phases.training && handlePhaseClick(bot, 'training')}
+                          disabled={!phases.training}
+                        >
+                          <span style={{ color: 'var(--mui-palette-info-main)' }}>Entrenamiento</span>
+                        </Button>
+                        {/* Datos */}
+                        <Button
+                          variant={phases.dataCapture ? 'contained' : 'outlined'}
+                          color={phases.dataCapture ? 'info' : 'inherit'}
+                          startIcon={<StorageIcon sx={{ color: 'info.main' }} />}
+                          endIcon={!phases.finished && phases.dataCapture ? (
+                            <Tooltip title="Configurar Datos">
+                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                            </Tooltip>
+                          ) : null}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.dataCapture ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          onClick={() => phases.dataCapture && handlePhaseClick(bot, 'dataCapture')}
+                          disabled={!phases.dataCapture}
+                        >
+                          <span style={{ color: 'var(--mui-palette-info-main)' }}>Datos</span>
+                        </Button>
+                        {/* Estilos */}
+                        <Button
+                          variant={phases.styles ? 'contained' : 'outlined'}
+                          color={phases.styles ? 'info' : 'inherit'}
+                          startIcon={<PaletteIcon sx={{ color: 'info.main' }} />}
+                          endIcon={!phases.finished && phases.styles ? (
+                            <Tooltip title="Configurar Estilos">
+                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                            </Tooltip>
+                          ) : null}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.styles ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          onClick={() => phases.styles && handlePhaseClick(bot, 'styles')}
+                          disabled={!phases.styles}
+                        >
+                          <span style={{ color: 'var(--mui-palette-info-main)' }}>Estilos</span>
+                        </Button>
+                        {/* Integración */}
+                        <Button
+                          variant={phases.integration ? 'contained' : 'outlined'}
+                          color={phases.integration ? 'info' : 'inherit'}
+                          startIcon={<IntegrationInstructionsIcon sx={{ color: 'info.main' }} />}
+                          endIcon={!phases.finished && phases.integration ? (
+                            <Tooltip title="Configurar Integración">
+                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                            </Tooltip>
+                          ) : null}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.integration ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          onClick={() => phases.integration && handlePhaseClick(bot, 'integration')}
+                          disabled={!phases.integration}
+                        >
+                          <span style={{ color: 'var(--mui-palette-info-main)' }}>Integración</span>
+                        </Button>
+                      </SoftBox>
 
                       {/* divider between phases and bottom row */}
                       <Divider sx={{ my: 1.5, mx: 2 }} />

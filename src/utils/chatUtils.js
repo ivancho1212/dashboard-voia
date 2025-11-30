@@ -160,6 +160,7 @@ function normalizeMessage(msg) {
     timestamp: msg.timestamp ?? new Date().toISOString(),
     color: msg.color ?? (typeof getSenderColor !== 'undefined' ? getSenderColor(msg.from) : undefined),
     uniqueKey,
+    conversationId: msg.conversationId // <-- CONSERVAR EL CAMPO
   };
 }
 
