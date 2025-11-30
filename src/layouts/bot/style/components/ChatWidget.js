@@ -125,19 +125,57 @@ function ChatWidget({
     const handleMobileInactivityExpired = (event) => {
       // Validar que sea el evento correcto
       if (event.data?.type === 'mobile-inactivity-expired') {
+        // Encapsular limpieza en función robusta
+        const cleanUpAfterBackendConfirmation = () => {
+          try {
+            clearCache();
+            sessionStorage.removeItem(CACHE_KEY);
+            localStorage.removeItem(CACHE_KEY);
+          } catch (e) {
+            console.error('❌ Error limpiando caché:', e);
+          }
+          window.__cacheCleaning = true;
+          setConversationId(null);
+          conversationIdRef.current = null;
+          setMessages([]);
+          setPromptSent(false);
+          promptSentRef.current = false;
+          welcomeShownRef.current = false;
+          setIsOpen(false);
+          setIsMobileConversationExpired && setIsMobileConversationExpired(false);
+          setIsMobileSessionActive && setIsMobileSessionActive(false);
+          setBlockMessage && setBlockMessage("");
+          setIsBlockedByOtherDevice && setIsBlockedByOtherDevice(false);
+          setIaWarning && setIaWarning(null);
+          setBotContext && setBotContext(null);
+          setCapturedFields && setCapturedFields([]);
+          setPreviewImageUrl && setPreviewImageUrl(null);
+          setIsImageModalOpen && setIsImageModalOpen(false);
+          setImageGroup && setImageGroup([]);
+          setImageGroupBlobUrls && setImageGroupBlobUrls({});
+          setActiveImageIndex && setActiveImageIndex(0);
+          setTypingSender && setTypingSender(null);
+          setIsTyping && setIsTyping(false);
+          setWelcomeMessage && setWelcomeMessage(null);
+          setBotStyle && setBotStyle(null);
+          setIsBotReady && setIsBotReady(false);
+          setShowConnectionDebug && setShowConnectionDebug(false);
+          setConnectionStatus && setConnectionStatus("desconocido");
+          setIsDemo && setIsDemo(false);
+          setUserLocation && setUserLocation(null);
+          setMessage && setMessage("");
+          setTimeout(() => { window.__cacheCleaning = false; }, 1000);
+        };
 
-        // Limpiar caché cuando móvil expira
-        clearCache();
-
-        // Cerrar el widget
-        setIsOpen(false);
-
-        // Resetear estado
-        setConversationId(null);
-        conversationIdRef.current = null;
-        setMessages([]);
-        setPromptSent(false);
-        promptSentRef.current = false;
+        // Aquí deberías llamar a la función SOLO tras confirmación del backend
+        // Por ejemplo, tras recibir un evento SignalR o respuesta fetch:
+        // Ejemplo:
+        // connection.invoke('CloseConversation', conversationIdRef.current)
+        //   .then(() => cleanUpAfterBackendConfirmation())
+        //   .catch(err => console.error('Error cerrando conversación en backend:', err));
+        //
+        // Si ya tienes la confirmación, llama directamente:
+        // cleanUpAfterBackendConfirmation();
       }
     };
 
@@ -808,6 +846,10 @@ function ChatWidget({
   // ✅ Lógica de guardado de caché que se activa con cada cambio de mensajes.
   useEffect(() => {
     if (conversationId && messages.length > 0) {
+      console.log('[LOG][CACHE] Guardando conversación en caché:', {
+        conversationId,
+        messages
+      });
       saveConversationCache(conversationId, messages);
     }
   }, [messages, conversationId]);
@@ -815,9 +857,8 @@ function ChatWidget({
   // 🔴 Ref para rastrear si fue una transición de abierto a cerrado
   const wasOpenRef = useRef(false);
 
-  // 🔴 SAFETY: Si el widget se cierra, asegurar que el estado está limpio
-  // 🆕 IMPORTANTE: SOLO hacer esto EN WEB, no en móvil (isMobileView)
-  // 🆕 IMPORTANTE: Solo limpiar cuando hay TRANSICIÓN de abierto a cerrado, no en cada cambio de estado
+  // 🔴 SAFETY: Si el widget se cierra manualmente, solo limpiar estado en memoria (NO caché ni backend)
+  // Al reabrir, si hay caché válido y no ha expirado, se recupera la conversación anterior
   useEffect(() => {
     // Solo en web, no en móvil
     if (isMobileView) {
@@ -829,18 +870,30 @@ function ChatWidget({
     const wasOpenBefore = wasOpenRef.current;
     wasOpenRef.current = isOpen;
 
-
     if (wasOpenBefore && !isOpen && (conversationId || messages.length > 0)) {
+      if (cleanupInProgressRef.current) {
+        console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Proceso de limpieza ya iniciado, se cancela duplicado.`);
+        return;
+      }
+      cleanupInProgressRef.current = true;
+      // Limpiar solo el estado en memoria
       setConversationId(null);
       conversationIdRef.current = null;
       setMessages([]);
       setPromptSent(false);
       promptSentRef.current = false;
-
-      // 🔴 CRÍTICO: Resetear welcomeShownRef para permitir que la bienvenida se muestre en la próxima apertura
       welcomeShownRef.current = false;
-
-      // NO limpiar caché aquí: solo se elimina por expiración real
+      // NO limpiar caché ni cerrar conversación en backend aquí
+      try {
+        clearCache();
+        sessionStorage.removeItem(CACHE_KEY);
+        localStorage.removeItem(CACHE_KEY);
+        console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Caché y storage borrados por cierre manual. CACHE_KEY:`, CACHE_KEY);
+      } catch (e) {
+        console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Falló al borrar caché/storage por cierre manual.`, e);
+      }
+      console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Widget cerrado manualmente por el usuario.`);
+      setTimeout(() => { cleanupInProgressRef.current = false; }, 1000);
     }
   }, [isMobileView, isOpen, conversationId, messages.length, CACHE_KEY]);
 
@@ -870,7 +923,8 @@ function ChatWidget({
     const handleReceiveMessage = (msg) => {
       const newMessage = normalizeMessage(msg);
       if (!newMessage.color) newMessage.color = getSenderColor(newMessage.from);
-      // (Eliminado log de mensaje recibido)
+      // LOG: Mensaje recibido
+      console.log('[LOG][MESSAGE] Mensaje recibido:', newMessage);
       // ✅ Skip welcome message if it matches the locally sent one
       if (newMessage.from === "bot" && lastWelcomeTextRef.current && newMessage.text === lastWelcomeTextRef.current) {
         lastWelcomeTextRef.current = null;
@@ -933,6 +987,11 @@ function ChatWidget({
 
     const initConnection = async () => {
       try {
+        // Usar el valor correcto de widgetToken
+        const widgetToken = propWidgetToken;
+        connection = createHubConnection(widgetToken, widgetClientSecret);
+        connectionRef.current = connection;
+
         // ✅ Prioridades para determinar qué conversationId usar:
         // 1️⃣ Si viene desde QR (propConversationId) → USAR ESE EXACTAMENTE
         // 2️⃣ Si ya existe conversación en ref (reapertura) → USAR ESE
@@ -1051,10 +1110,20 @@ function ChatWidget({
             alert(`⚠️ ${userMessage}`);
 
             try {
+              clearCache();
               sessionStorage.removeItem(CACHE_KEY);
               localStorage.removeItem(CACHE_KEY);
+              // Limpieza total de refs y estados
+              setConversationId(null);
+              conversationIdRef.current = null;
+              setMessages([]);
+              setPromptSent(false);
+              promptSentRef.current = false;
+              welcomeShownRef.current = false;
+              loadedConversationsRef.current = new Set();
+              console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Caché, storage y estados borrados por cierre manual. CACHE_KEY:`, CACHE_KEY);
             } catch (e) {
-              console.error('❌ Error limpiando caché:', e);
+              console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Falló al borrar caché/storage por cierre manual.`, e);
             }
 
             setIsOpen(false);
@@ -1066,109 +1135,16 @@ function ChatWidget({
           }
         }
 
-        // ✅ El widget NUNCA carga historial de conversaciones EN DESKTOP
-        // Solo el chat panel (dashboard) debe cargar historial
-        // EN MÓVIL: El historial se carga arriba (antes de SignalR)
-
-        connection = createHubConnection(convIdNum, propWidgetToken || undefined);
-        connectionRef.current = connection;
-
-        // ✅ REGISTRO DE EVENTOS CORRECTO
-        connection.on("ReceiveMessage", handleReceiveMessage);
-
-        // Handle ack that the message was queued (contains conversationId, messageId, tempId)
-        handleMessageQueued = (payload) => {
+        // ✅ CRÍTICO: Unir lógica de JoinRoom y UserIsActive en una sola llamada
+        // Esto asegura que el usuario se una a la sala y se marque como activo en un solo paso
+        const joinAndActivate = async (convId) => {
           try {
-            const { conversationId: cqId, messageId, tempId } = payload || {};
-            if (cqId !== conversationIdRef.current) return;
-
-            setMessages(prev => prev.map(m => {
-              if (m.tempId && tempId && m.tempId === tempId) {
-                // Update the temp message with the real id and mark as queued
-                return { ...m, id: messageId ? String(messageId) : m.id, status: 'queued' };
-              }
-              return m;
-            }));
-          } catch (e) {
+            await connection.invoke("JoinRoom", convId);
+            await connection.invoke("UserIsActive", convId);
+          } catch (err) {
+            console.error('❌ [SignalR] Error al unir y activar usuario:', err);
           }
         };
-
-        connection.on("MessageQueued", handleMessageQueued);
-
-        connection.on("ReceiveTyping", (convId, sender) => {
-          if (convId === conversationIdRef.current) {
-            setTypingSender(sender);
-            setIsTyping(true);
-          }
-        });
-
-        connection.on("ReceiveStopTyping", (convId, sender) => {
-          // Usamos una función de callback para asegurar que tenemos el valor más reciente de typingSender
-          setTypingSender(currentTypingSender => {
-            if (convId === conversationIdRef.current && currentTypingSender === sender) {
-              setIsTyping(false);
-              return null; // Resetea el sender
-            }
-            return currentTypingSender; // No hay cambios si no coincide
-          });
-        });
-
-        // Mobile session lock/unlock (server should broadcast MobileSessionChanged(conversationId, blocked))
-        handleMobileSessionChanged = (convId, blocked) => {
-          try {
-            if (convId === conversationIdRef.current) {
-              setIsMobileLocked(Boolean(blocked));
-            }
-          } catch (e) {
-          }
-        };
-        connection.on("MobileSessionChanged", handleMobileSessionChanged);
-
-
-        // 🟢 ESCUCHAR: Cuando móvil inicia sesión
-        connection.on("MobileSessionStarted", (data) => {
-          console.log('📱 [SignalR] MobileSessionStarted recibido:', data);
-          if (data && data.conversationId === conversationIdRef.current) {
-            // Bloquear el widget y mostrar el mensaje en el overlay
-            if (typeof setIsBlockedByOtherDevice === 'function') {
-              setIsBlockedByOtherDevice(true);
-            }
-            if (typeof setBlockMessage === 'function') {
-              setBlockMessage("🔗 La conversación fue continuada desde la versión móvil.");
-            }
-          }
-        });
-
-        // 🔴 ESCUCHAR: Cuando móvil cierra/expira
-        connection.on("MobileSessionEnded", (data) => {
-          console.log('📱 [SignalR] MobileSessionEnded recibido:', data);
-          // Limpiar almacenamiento
-          try {
-            sessionStorage.removeItem(CACHE_KEY);
-            localStorage.removeItem(CACHE_KEY);
-          } catch (e) {
-            console.warn('⚠️ [MobileSessionEnded] Error limpiando storage:', e);
-          }
-          // 🆕 CRÍTICO: Resetear refs de estado para permitir bienvenida en siguiente apertura
-          welcomeShownRef.current = false;
-          promptSentRef.current = false;
-          qrHistoryLoadedRef.current = false; // 🆕 Resetear bandera QR para próxima sesión
-          conversationIdRef.current = null; // 🆕 CRÍTICO: Resetear conversationIdRef para NO reutilizar la ID
-          console.log('✅ [MobileSessionEnded] refs reseteados (welcome, promptSent, qrHistoryLoaded, conversationIdRef)');
-          // Limpiar overlay y bloqueo
-          if (typeof setIsBlockedByOtherDevice === 'function') {
-            setIsBlockedByOtherDevice(false);
-          }
-          if (typeof setBlockMessage === 'function') {
-            setBlockMessage(null);
-          }
-          // Cerrar widget automáticamente
-          console.log('🔴 [MobileSessionEnded] Cerrando widget porque móvil expiró/cerró');
-          setIsOpen(false);
-          setConversationId(null);
-          setMessages([]);
-          setPromptSent(false);
-        });
 
         // Inicializar conexión SOLO si conversationId está definido
         if (convIdNum) {
@@ -1176,9 +1152,8 @@ function ChatWidget({
           setConnectionStatus("conectado");
           setIsConnected(true);
 
-          await connection.invoke("JoinRoom", convIdNum);
-
-          await connection.invoke("UserIsActive", convIdNum);
+          // ✅ Usar nueva función unificada
+          await joinAndActivate(convIdNum);
         }
 
       } catch (err) {
@@ -1242,6 +1217,7 @@ function ChatWidget({
         // Si la conversación está expirada/cerrada en el backend, limpiar caché y estado
         if (!response || response?.error || response?.status === 410 || response?.status === 404) {
           try {
+            clearCache();
             sessionStorage.removeItem(CACHE_KEY);
             localStorage.removeItem(CACHE_KEY);
           } catch (e) { }
@@ -1363,11 +1339,12 @@ function ChatWidget({
   const maxDemoMessages = 5;
 
   // 🔴 LÓGICA DE INACTIVIDAD (3 minutos = 180,000 ms)
-  const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutos
+  const INACTIVITY_TIMEOUT = 1 * 60 * 1000; // 1 minuto
   const inactivityTimerRef = useRef(null);
   const closeTimerRef = useRef(null);
   const inactivityWarningShownRef = useRef(false);
   const [showInactivityMessage, setShowInactivityMessage] = useState(false);
+  const cleanupInProgressRef = useRef(false);
 
   // Función para resetear el timer de inactividad
   const resetInactivityTimer = useCallback(() => {
@@ -1393,19 +1370,38 @@ function ChatWidget({
     inactivityTimerRef.current = setTimeout(() => {
       setShowInactivityMessage(true);
       inactivityWarningShownRef.current = true;
+      console.log(`[LOG][INACTIVITY][${new Date().toISOString()}] Inactividad detectada. Mostrando mensaje de advertencia.`);
 
       // Después de 30 segundos más, cerrar el widget automáticamente
       closeTimerRef.current = setTimeout(() => {
+        if (cleanupInProgressRef.current) {
+          console.log(`[LOG][INACTIVITY][${new Date().toISOString()}] Proceso de limpieza ya iniciado, se cancela duplicado.`);
+          return;
+        }
+        cleanupInProgressRef.current = true;
         // ✅ LIMPIAR CACHÉ - Solo cuando cierre por inactividad
         try {
+          clearCache();
           sessionStorage.removeItem(CACHE_KEY);
+          localStorage.removeItem(CACHE_KEY);
+          // Limpieza total de refs y estados
+          setConversationId(null);
+          conversationIdRef.current = null;
+          setMessages([]);
+          setPromptSent(false);
+          promptSentRef.current = false;
+          welcomeShownRef.current = false;
+          loadedConversationsRef.current = new Set();
+          console.log(`[LOG][INACTIVITY][${new Date().toISOString()}] Caché, storage y estados borrados por inactividad. CACHE_KEY:`, CACHE_KEY);
         } catch (e) {
-          // Falló al limpiar caché
+          console.log(`[LOG][INACTIVITY][${new Date().toISOString()}] Falló al borrar caché/storage por inactividad.`, e);
         }
 
         setIsOpen(false);
         setShowInactivityMessage(false);
         inactivityWarningShownRef.current = false;
+        console.log(`[LOG][INACTIVITY][${new Date().toISOString()}] Widget cerrado automáticamente por inactividad.`);
+        setTimeout(() => { cleanupInProgressRef.current = false; }, 1000);
       }, 30 * 1000); // 30 segundos adicionales
     }, INACTIVITY_TIMEOUT);
   }, [isOpen, CACHE_KEY, isMobileSessionActive, isBlockedByOtherDevice]);
@@ -1472,12 +1468,16 @@ function ChatWidget({
   }, [resetInactivityTimer]);
 
 
+  // LOGS de creación de conversación y mensajes
   const sendMessage = async () => {
     if (!isBotReady) return;
 
     const trimmedMessage = message.trim();
     if (!trimmedMessage) return;
     if (isMobileLocked) return;
+
+    // LOG: Mensaje de usuario
+    console.log('[LOG][MESSAGE] Usuario envía mensaje:', trimmedMessage);
 
     // Optimistic UI: mostrar el mensaje del usuario inmediatamente
     const tempId = uuidv4();
@@ -1513,15 +1513,11 @@ function ChatWidget({
         modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
         temperature: botContext?.settings?.temperature || 0.7,
         maxTokens: botContext?.settings?.maxTokens || 150,
-        userLocation: userLocation || { country: 'Unknown', city: 'Unknown', language: 'es' },
-        contextMessage: `El usuario está ubicado en ${userLocation?.city || 'una ciudad desconocida'}, ${userLocation?.country || 'país desconocido'}. Responde considerando su contexto geográfico.`,
-        capturedFields: capturedFields || []
+        userLocation: userLocation || { country: 'Unknown', city: 'Unknown', language: 'es' }
       };
-      await connection.invoke("SendMessage", convId, payload);
-      if (!promptSent) {
-        setPromptSent(true);
-        promptSentRef.current = true;
-      }
+      // LOG: Payload enviado al backend
+      console.log('[LOG][MESSAGE] Payload enviado al backend:', payload);
+      await connection.invoke("SendMessage", payload);
     } catch (err) {
       setMessages(prev => prev.map(m => m.tempId === tempId ? { ...m, status: "error" } : m));
       setIsTyping(false);
@@ -1961,9 +1957,12 @@ function ChatWidget({
 
                     // Limpiar caché de sessionStorage
                     try {
+                      clearCache();
                       sessionStorage.removeItem(CACHE_KEY);
+                      localStorage.removeItem(CACHE_KEY);
+                      console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Caché y storage borrados por cierre manual. CACHE_KEY:`, CACHE_KEY);
                     } catch (e) {
-                      console.warn('⚠️  [ChatWidget] Error al limpiar sessionStorage:', e);
+                      console.log(`[LOG][MANUAL_CLOSE][${new Date().toISOString()}] Falló al borrar caché/storage por cierre manual.`, e);
                     }
 
 
