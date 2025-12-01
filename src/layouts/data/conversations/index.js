@@ -296,10 +296,23 @@ function Conversations() {
         // Suscripción al evento de nueva conversación
         connection.on("NewConversation", (conv) => {
           console.log("🆕 Nueva conversación recibida:", conv);
-          setConversationList((prevList) => {
-            // Evitar duplicados por id
-            if (prevList.some((c) => String(c.id) === String(conv.id))) return prevList;
-            return [conv, ...prevList];
+          // Convertir id a string para evitar errores de tipo
+          const convStr = { ...conv, id: String(conv.id) };
+          // Cargar mensajes de la conversación recién creada
+          import("services/conversationsService").then(({ getMessagesByConversationId }) => {
+            getMessagesByConversationId(convStr.id).then((msgs) => {
+              // Actualizar mensajes en el estado
+              setMessages((prev) => ({ ...prev, [convStr.id]: msgs || [] }));
+              // Actualizar el último mensaje en la conversación
+              const lastMsg = msgs && msgs.length > 0 ? msgs[msgs.length - 1].text : "";
+              setConversationList((prevList) => {
+                // Evitar duplicados por id
+                if (prevList.some((c) => String(c.id) === String(convStr.id))) return prevList.map(c =>
+                  c.id === convStr.id ? { ...c, lastMessage: lastMsg } : c
+                );
+                return [{ ...convStr, lastMessage: lastMsg }, ...prevList];
+              });
+            });
           });
         });
 
@@ -363,30 +376,21 @@ function Conversations() {
 
           setMessages((prev) => {
             const existing = prev[convId] || [];
-            // Compare IDs as strings to avoid type mismatches (number vs string)
-            if (existing.some((m) => String(m.id) === String(newMsg.id))) return prev;
-            const normalizedMsg = { ...newMsg, text: newMsg.text || "" };
-            const finalId = normalizedMsg.id ? String(normalizedMsg.id) : crypto.randomUUID();
-            const toAppend = { ...normalizedMsg, id: finalId };
-
-            // Update message cache as well so history and pagination remain consistent
+            // Fusionar por id y timestamp, priorizando mensajes únicos
+            const allMessages = [...existing, newMsg];
+            const uniqueMap = new Map();
+            allMessages.forEach(m => {
+              // Clave única: id + timestamp
+              const key = `${String(m.id)}_${m.timestamp || ''}`;
+              uniqueMap.set(key, m);
+            });
+            // Ordenar por timestamp
+            const merged = Array.from(uniqueMap.values()).sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+            // Actualizar cache
             try {
-              const cache = messageCache.current.get(convId) || [];
-              console.debug(`📨 [SignalR] conv=${convId} cacheBefore=${cache.length} attemptingAppendId=${finalId}`);
-              if (!cache.some((m) => String(m.id) === String(finalId))) {
-                cache.push(toAppend);
-                // keep cache sorted chronologically
-                cache.sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
-                messageCache.current.set(convId, cache);
-                console.debug(`📨 [SignalR] conv=${convId} cacheAfter=${cache.length} first=${cache[0]?.timestamp} last=${cache[cache.length-1]?.timestamp}`);
-              } else {
-                console.debug(`📨 [SignalR] conv=${convId} message ${finalId} already present in cache`);
-              }
-            } catch (e) {
-              // ignore cache update failures
-            }
-
-            return { ...prev, [convId]: [...existing, toAppend] };
+              messageCache.current.set(convId, merged);
+            } catch (e) {}
+            return { ...prev, [convId]: merged };
           });
 
           setConversationList((prevList) =>
@@ -396,6 +400,49 @@ function Conversations() {
                 : conv
             )
           );
+          });
+
+          // 🆕 Suscribimos al evento UpdateConversation para actualizar el último mensaje en tiempo real
+          connection.on("UpdateConversation", (conv) => {
+            if (!conv || !conv.id) return;
+            const convId = String(conv.id);
+            console.log('[UpdateConversation] recibido:', conv);
+            setConversationList((prevList) =>
+              prevList.map((c) =>
+                c.id === convId
+                  ? { ...c, lastMessage: conv.lastMessage, updatedAt: conv.updatedAt, status: conv.status, blocked: conv.blocked, isWithAI: conv.isWithAI }
+                  : c
+              )
+            );
+            // Fusionar el mensaje recibido por socket con los del backend, evitando duplicados
+            if (conv.lastMessage) {
+              setMessages((prev) => {
+                const existing = prev[convId] || [];
+                // Si el array está vacío, espera a que el backend lo llene y luego fusiona
+                if (existing.length === 0) {
+                  console.log('[UpdateConversation] Mensajes aún no cargados, esperando backend.');
+                  return prev;
+                }
+                // Evitar duplicados por texto y timestamp
+                const alreadyExists = existing.some(m => m.text === conv.lastMessage && m.timestamp === conv.updatedAt);
+                if (alreadyExists) {
+                  console.log('[UpdateConversation] Mensaje ya existe en el chat:', conv.lastMessage);
+                  return prev;
+                }
+                const newMsg = {
+                  id: `update-${convId}-${Date.now()}`,
+                  text: conv.lastMessage,
+                  from: 'user',
+                  timestamp: conv.updatedAt,
+                  fromRole: 'user',
+                  __fromUpdateConversation: true
+                };
+                console.log('[UpdateConversation] Fusionando mensaje al chat:', newMsg);
+                // Fusionar y ordenar por timestamp
+                const merged = [...existing, newMsg].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+                return { ...prev, [convId]: merged };
+              });
+            }
         });
 
         if (connection.state === "Disconnected") {
@@ -430,10 +477,19 @@ function Conversations() {
     const fetchData = async () => {
       try {
         const data = await getConversationsWithLastMessage(userId);
-        const conversations = data.map((conv) => ({ ...conv, id: String(conv.id), updatedAt: conv.lastMessage?.timestamp || conv.updatedAt, }));
-        setConversationList(conversations);
+        const fetchedConversations = data.map((conv) => ({ ...conv, id: String(conv.id), updatedAt: conv.lastMessage?.timestamp || conv.updatedAt, }));
+        setConversationList(prevList => {
+          // Fusiona las conversaciones nuevas (SignalR) con las del fetch, evitando duplicados
+          const merged = [...fetchedConversations];
+          prevList.forEach(conv => {
+            if (!merged.some(c => c.id === conv.id)) {
+              merged.push(conv);
+            }
+          });
+          return merged;
+        });
         const initialIaPausedMap = {};
-        conversations.forEach(conv => {
+        fetchedConversations.forEach(conv => {
           initialIaPausedMap[conv.id] = !conv.isWithAI;
         });
         setIaPausedMap(initialIaPausedMap);
@@ -537,11 +593,17 @@ function Conversations() {
               let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
               try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
               let fromRole = (fromRoleRaw || "").toLowerCase();
-              if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+              // Detectar usuario público
+              const publicUserId = msg.publicUserId || msg.PublicUserId;
+              if (publicUserId) {
+                fromRole = "user";
+              } else if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") {
+                fromRole = "user";
+              }
               const from = msg.from ?? msg.From ?? null;
               const fromId = msg.fromId ?? msg.FromId ?? null;
               const fromName = msg.fromName ?? msg.FromName ?? null;
-              flattened.push({ ...msg, id: String(id), text, fromRole, from, fromId, fromName });
+              flattened.push({ ...msg, id: String(id), text, fromRole, from, fromId, fromName, publicUserId });
             });
           });
 
@@ -631,10 +693,15 @@ function Conversations() {
               let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
               try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
               let fromRole = (fromRoleRaw || "").toLowerCase();
-              if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+              const publicUserId = msg.publicUserId || msg.PublicUserId;
+              if (publicUserId) {
+                fromRole = "user";
+              } else if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") {
+                fromRole = "user";
+              }
               const fromId = msg.fromId ?? msg.FromId ?? null;
               const fromName = msg.fromName ?? msg.FromName ?? null;
-              return { ...msg, id: String(id), text, fromRole, fromId, fromName };
+              return { ...msg, id: String(id), text, fromRole, fromId, fromName, publicUserId };
             });
             setMessages((prev) => {
               const existing = prev[idStr] || [];

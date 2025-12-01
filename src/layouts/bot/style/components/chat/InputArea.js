@@ -183,7 +183,10 @@ const InputArea = ({
         }
         value={message}
         disabled={isInputDisabled}
-        onChange={(e) => handleTyping(e.target.value)}
+        onChange={(e) => {
+          handleTyping(e.target.value);
+          if (typeof onUserActivity === 'function') onUserActivity();
+        }}
         onBlur={handleStopTyping}
         onKeyDown={(e) => {
           if (isInputDisabled) return;
@@ -249,6 +252,7 @@ InputArea.propTypes = {
   isInputDisabled: PropTypes.bool,
   allowImageUpload: PropTypes.bool,
   allowFileUpload: PropTypes.bool,
+  onUserActivity: PropTypes.func,
 };
 
 export default InputArea;

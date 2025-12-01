@@ -41,12 +41,16 @@ function ConversationList({
     handleCloseMenu();
   };
 
+  useEffect(() => {
+    console.log('[ConversationList] conversations prop:', conversations);
+  }, [conversations]);
+
   const filtered = useMemo(() => {
-    return conversations
-      .filter((conv) => conv.lastMessage || (messagesMap[conv.id] || []).length > 0)
+    const result = conversations
+      // Mostrar correctamente conversaciones expiradas/cerradas
       .filter((conv) => {
         if (filter === "active") return conv.status === "activa";
-        if (filter === "closed") return conv.status === "cerrada";
+        if (filter === "closed") return conv.status === "cerrada" || conv.status === "closed" || conv.status === "expired" || conv.status === "expirada";
         if (filter === "pending") return conv.status === "pendiente";
         if (filter === "resolved") return conv.status === "resuelta";
         if (filter === "blocked") return conv.blocked === true;
@@ -59,6 +63,8 @@ function ConversationList({
         return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
       })
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    console.log('[ConversationList] filtered conversations:', result);
+    return result;
   }, [conversations, messagesMap, filter, search]);
 
   useEffect(() => {

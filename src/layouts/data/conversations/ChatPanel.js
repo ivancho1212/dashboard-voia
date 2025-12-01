@@ -368,6 +368,8 @@ const ChatPanel = forwardRef(
 
     const getBlockedIcon = () => <BlockIcon />;
     const processedMessages = useMemo(() => {
+      // LOG: mensajes recibidos y normalizados
+      console.log('[ChatPanel] mensajes prop:', messages);
       // Normalize messages (same as before) then insert day dividers.
       const normalized = messages.map((msg) => {
         // If the backend/client already inserted a day-divider object, pass it through unchanged.
@@ -418,11 +420,14 @@ const ChatPanel = forwardRef(
           }
         }
 
-        // Normalize fromRole to a stable lowercase value. Treat unknowns as 'user'.
+        // Detectar mensajes del usuario público por publicUserId
+        const publicUserId = msg.publicUserId || msg.fromPublicUserId;
         let rawFrom = msg.fromRole ?? msg.from ?? "user";
         try { rawFrom = String(rawFrom); } catch (e) { rawFrom = "user"; }
         let normalizedFromRole = (rawFrom || "").toLowerCase();
-        if (normalizedFromRole !== "admin" && normalizedFromRole !== "bot" && normalizedFromRole !== "user") {
+        if (publicUserId) {
+          normalizedFromRole = "user";
+        } else if (normalizedFromRole !== "admin" && normalizedFromRole !== "bot" && normalizedFromRole !== "user") {
           normalizedFromRole = "user";
         }
 
@@ -436,7 +441,11 @@ const ChatPanel = forwardRef(
 
         return {
           ...msg,
-          fromName: normalizedFromRole === "admin" ? "Admin" : `Sesión ${conversationId}`,
+          fromName: publicUserId
+            ? `Usuario público ${publicUserId}`
+            : normalizedFromRole === "admin"
+            ? "Admin"
+            : `Sesión ${conversationId}`,
           text: normalizedText,
           fromRole: normalizedFromRole,
           files: normalizedFiles.length > 0 ? normalizedFiles : undefined,

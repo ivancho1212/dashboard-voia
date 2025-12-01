@@ -6,6 +6,7 @@ import { buildFileUrl, downloadImagesAsZip } from "utils/fileHelpers";
 const MessageBubble = React.forwardRef(
   ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen, isAIActive }, ref) => {
     const { fromRole, fromName, text, timestamp, files = [], replyTo } = msg;
+    console.log('[MessageBubble] Renderizando mensaje:', msg);
     const isRight = ["admin", "bot"].includes(fromRole);
 
     const backgroundColor =
