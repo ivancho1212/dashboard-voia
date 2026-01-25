@@ -341,22 +341,9 @@ function Conversations() {
         });
 
         connection.on("NewConversationOrMessage", (msg) => {
-          if (msg.from === 'admin') {
-            return; // Ignore echoed admin messages (already handled optimistically)
-          }
-
-          // Debug: log raw incoming message for troubleshooting
-          console.log(`📨 Nuevo mensaje recibido (raw):`, msg);
-          try {
-            console.debug("📨 Nuevo mensaje recibido (details):", {
-              conversationId: msg.conversationId,
-              id: msg.id,
-              from: msg.from,
-              text: msg.text,
-              files: msg.files,
-              images: msg.images
-            });
-          } catch (e) { console.warn("Debug log failed", e); }
+          // Loguear todos los mensajes recibidos para depuración
+          console.log("📨 [SignalR] Mensaje recibido:", msg);
+          // Procesar y agregar el mensaje al estado, sin filtrar por 'from'
           const convId = String(msg.conversationId);
 
           const newMsg = { ...msg };

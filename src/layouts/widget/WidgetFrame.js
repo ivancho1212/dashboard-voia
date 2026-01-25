@@ -1,5 +1,6 @@
 // Mover estos useEffect dentro del componente WidgetFrame
 import React, { useEffect, useState, useMemo, useRef } from "react";
+import PropTypes from 'prop-types';
 import ChatWidget from "layouts/bot/style/components/ChatWidget";
 import { getBotDataWithToken } from "services/botService";
 import widgetAuthService from "services/widgetAuthService";
@@ -20,17 +21,36 @@ function isEmoji(str) {
   return emojiRegex.test(trimmed);
 }
 
-function WidgetFrame() {
+function WidgetFrame(props) {
   // Debug hooks will be declared after state hooks to avoid TDZ
   if (!window.widgetFrameRenderCount) window.widgetFrameRenderCount = 0;
   window.widgetFrameRenderCount++;
-  const searchParams = new URLSearchParams(window.location.search);
-  const botId = parseInt(searchParams.get("bot"), 10);
-  let tokenParam = searchParams.get("token");
-  const userId = parseInt(searchParams.get("user"), 10) || null; // Para widgets, userId puede ser null
-  const isMobileView = searchParams.get("isMobile") === "true"; // Detectar vista móvil DESDE URL PARAM
-  const conversationId = searchParams.get("conversation") || null; // ID de conversación desde QR
-  const urlSecret = searchParams.get("secret") || null;  // ✅ Secret desde URL param
+  
+  // ✅ Si no hay props, leer de query params (cuando se carga como iframe desde /widget-frame)
+  const queryParams = new URLSearchParams(window.location.search);
+  
+  // ✅ Obtener parámetros desde props (pasados por widget/index.js) O desde URL
+  const botId = props.botId 
+    ? parseInt(props.botId, 10) 
+    : queryParams.get('bot') 
+      ? parseInt(queryParams.get('bot'), 10) 
+      : null;
+      
+  const userId = props.userId 
+    ? parseInt(props.userId, 10) 
+    : queryParams.get('user') 
+      ? parseInt(queryParams.get('user'), 10) 
+      : null;
+      
+  const isMobileView = props.isMobile === true || queryParams.get('isMobile') === 'true';
+  
+  const urlSecret = props.clientSecret || queryParams.get('secret') || null;
+  
+  // Parámetros adicionales para móvil
+  // ✅ Mantener como string para evitar warnings de PropTypes
+  const conversationId = queryParams.get('conversation') || null;
+    
+  const tokenParam = queryParams.get('token') || null;
 
   // HOOKS SIEMPRE AL INICIO
   const [styleConfig, setStyleConfig] = useState(null);
@@ -189,16 +209,8 @@ function WidgetFrame() {
       // Fallback a widgetAuthService si la petición falló o no hubo token válido
       if (!botConfig) {
         try {
-          const fallback = await widgetAuthService.getWidgetSettings(botId, finalToken);
-          botConfig = fallback?.settings || fallback;
-
-          // Si el fallback devolvió un token válido, úsalo
-          if (fallback && fallback.isValid && fallback.token) {
-            setRealToken(fallback.token);
-            finalToken = fallback.token;
-            try { localStorage.setItem('widgetToken', fallback.token); } catch(e) {}
-          } else {
-            // Si no se devolvió token, solicitar uno nuevo al endpoint de generación
+          // ✅ Si no hay token, generar uno ANTES de llamar a getWidgetSettings
+          if (!finalToken) {
             try {
               const generated = await widgetAuthService.getWidgetToken(botId);
               if (generated) {
@@ -207,7 +219,20 @@ function WidgetFrame() {
                 try { localStorage.setItem('widgetToken', generated); } catch(e) {}
               }
             } catch (genErr) {
-              console.error('❌ [WidgetFrame] Error generando token en fallback:', genErr.message);
+              console.error('❌ [WidgetFrame] Error generando token para fallback:', genErr.message);
+            }
+          }
+
+          // Ahora sí, cargar configuración con token
+          if (finalToken) {
+            const fallback = await widgetAuthService.getWidgetSettings(botId, finalToken);
+            botConfig = fallback?.settings || fallback;
+
+            // Si el fallback devolvió un token válido, úsalo
+            if (fallback && fallback.isValid && fallback.token) {
+              setRealToken(fallback.token);
+              finalToken = fallback.token;
+              try { localStorage.setItem('widgetToken', fallback.token); } catch(e) {}
             }
           }
         } catch (err2) {
@@ -260,38 +285,8 @@ function WidgetFrame() {
     }
   };
 
-  // Aplicar estilos globales para hacer transparente SOLO el contenedor iframe, no el widget
-  useEffect(() => {
-    // Crear y agregar estilos CSS para hacer transparente solo el contenedor
-    const style = document.createElement('style');
-    style.textContent = `
-      /* Solo hacer transparente el contenedor iframe, NO el ChatWidget */
-      html, body {
-        margin: 0 !important;
-        padding: 0 !important;
-        /* Do not force overflow hidden; let widget decide behavior inside iframe */
-        overflow: visible !important;
-        background: transparent !important;
-        height: 100% !important;
-      }
-      /* Root should fill the iframe viewport in percent units (no vw/vh here) */
-      #root {
-        background: transparent !important;
-        width: 100% !important;
-        height: 100% !important;
-        position: relative !important;
-        box-sizing: border-box !important;
-      }
-    `;
-    document.head.appendChild(style);
-    
-    return () => {
-      // Cleanup al desmontar
-      if (document.head.contains(style)) {
-        document.head.removeChild(style);
-      }
-    };
-  }, []);
+  // El ChatWidget con previewMode={true} maneja su propia posición fixed
+  // No necesitamos aplicar estilos al contenedor #via-widget-root
 
   // PostMessage listener -> wait for parent to inform applied size
   useEffect(() => {
@@ -485,6 +480,7 @@ function WidgetFrame() {
       style={styleToPass}
       isDemo={false} // Siempre false para widgets - no usar modo demo
       isWidget={true}
+      previewMode={true} // ✅ Usar estilos de preview para posición fixed y tamaño correcto
       widgetToken={widgetTokenToPass}
       isOpen={isOpen}
       setIsOpen={setIsOpen}
@@ -497,5 +493,19 @@ function WidgetFrame() {
     />
   );
 }
+
+WidgetFrame.propTypes = {
+  botId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  userId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  isMobile: PropTypes.bool,
+  clientSecret: PropTypes.string,
+};
+
+WidgetFrame.defaultProps = {
+  botId: null,
+  userId: null,
+  isMobile: false,
+  clientSecret: null,
+};
 
 export default WidgetFrame;

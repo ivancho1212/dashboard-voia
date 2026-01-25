@@ -300,12 +300,26 @@ export default function StyleEditor({
           >
             {[
               "Arial",
+              "Helvetica",
               "Roboto",
+              "Open Sans",
+              "Lato",
+              "Montserrat",
+              "Poppins",
+              "Inter",
+              "Nunito",
               "Georgia",
-              "Comic Sans MS",
-              "Courier New",
+              "Garamond",
               "Times New Roman",
+              "Palatino",
+              "Courier New",
+              "Consolas",
+              "Monaco",
+              "Comic Sans MS",
               "Verdana",
+              "Trebuchet MS",
+              "Tahoma",
+              "Impact",
             ].map((font) => (
               <MenuItem key={font} value={font} style={{ fontFamily: font, width: "100%" }}>
                 {font}

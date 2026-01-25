@@ -26,6 +26,20 @@ const API_URL = "http://localhost:5006/api";
 export default function MobileChat() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // --- NUEVO: Si viene fingerprint en la URL, guardarlo en localStorage antes de cualquier otra cosa ---
+  React.useEffect(() => {
+    const fingerprint = searchParams.get("fingerprint");
+    if (fingerprint) {
+      try {
+        localStorage.setItem("voia_browser_fingerprint", fingerprint);
+        // Opcional: window.voiaFingerprint?.debugFingerprint?.();
+        // console.log("[MobileChat] Fingerprint recibido y guardado desde URL:", fingerprint);
+      } catch (e) {
+        // console.error("[MobileChat] Error guardando fingerprint:", e);
+      }
+    }
+  }, [searchParams]);
   
   // 🔴 INACTIVIDAD: Referencias para timers
   const inactivityTimerRef = useRef(null);
@@ -48,9 +62,10 @@ export default function MobileChat() {
   // 🆕 VALIDACIÓN: Verificar si conversación existe y no está expirada
   useEffect(() => {
     const validateConversation = async () => {
-      // Si NO hay conversationId en la URL, permitir crear nueva
+      // ❌ MÓVIL NO DEBE CREAR CONVERSACIONES - requiere conversationId
       if (!conversationId) {
-        setConversationStatus('valid');
+        console.error('❌ [MobileChat] No se proporcionó conversationId - móvil NO puede crear conversaciones');
+        setConversationStatus('expired');
         setIsValidating(false);
         return;
       }

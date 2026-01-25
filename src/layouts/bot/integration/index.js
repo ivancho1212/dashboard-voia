@@ -162,6 +162,7 @@ function BotAdminDashboard() {
       try {
         const integration = await getBotIntegrationByBotId(bot.id);
         if (integration) {
+          console.log(`📦 Integración encontrada para bot ${bot.id}:`, integration);
           const allowedDomain = integration.allowedDomain || '';
 
           // Generate framework-aware scripts using saved integration config
@@ -182,12 +183,15 @@ function BotAdminDashboard() {
           existingIds[bot.id] = integration.botId || bot.id; // Usamos lo que venga
           // Keep the selected framework in UI state so copy/generation prefer it
           setSelectedFrameworks(prev => ({ ...prev, [bot.id]: (integration.framework || 'html').toLowerCase() }));
+        } else {
+          console.log(`ℹ️ No hay integración para bot ${bot.id}`);
         }
       } catch (error) {
-        console.log(`ℹ️ No hay integración existente para bot ${bot.id}`);
+        console.log(`ℹ️ No hay integración existente para bot ${bot.id} (error capturado)`);
       }
     }
 
+    console.log(`📊 Scripts finales antes de setScripts:`, existingScripts);
     setScripts(existingScripts);
     setAllowedUrls(existingUrls);
     setIntegrationIds(existingIds);
@@ -299,11 +303,14 @@ function BotAdminDashboard() {
     if (!confirmed || !botId) return;
 
     try {
+      console.log(`🗑️ Eliminando integración para bot ${botId}...`);
       await deleteBotIntegrationByBotId(botId);
+      console.log(`✅ Backend confirmó eliminación para bot ${botId}`);
 
       setScripts(prev => {
         const newScripts = { ...prev };
         delete newScripts[botId];
+        console.log(`🧹 Script eliminado del estado local para bot ${botId}`, newScripts);
         return newScripts;
       });
       setAllowedUrls(prev => {
@@ -321,10 +328,16 @@ function BotAdminDashboard() {
       setTempUrls(prev => { const n={...prev}; delete n[botId]; return n; });
       setEditingUrl(prev => { const n={...prev}; delete n[botId]; return n; });
       setShowFullScript(prev => { const n={...prev}; delete n[botId]; return n; });
+      setClientSecrets(prev => { const n={...prev}; delete n[botId]; return n; });
+      
+      console.log(`✅ Todos los estados limpiados para bot ${botId}`);
       showModal("✅ Integración eliminada correctamente", "success");
+      
       // Re-sync integrations to ensure UI reflects backend state (hide previews)
       try {
+        console.log(`🔄 Recargando integraciones para verificar eliminación...`);
         await loadIntegrationsForBots(eligibleBots);
+        console.log(`✅ Integraciones recargadas correctamente`);
       } catch (err) {
         console.warn('Error reloading integrations after delete', err);
       }

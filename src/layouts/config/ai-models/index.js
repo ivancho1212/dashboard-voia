@@ -76,9 +76,11 @@ function AIModelsConfig() {
         await deleteIaProvider(id);
         const updated = await getIaProviders();
         setProviders(updated);
+        alert("✅ Proveedor eliminado correctamente.");
       } catch (err) {
-        console.error("Error al eliminar proveedor:", err);
-        alert("Error al eliminar proveedor.");
+        const errorMessage = err.response?.data?.message || "Error al eliminar proveedor.";
+        console.error("Error al eliminar proveedor:", errorMessage);
+        alert(errorMessage);
       }
     }
   };

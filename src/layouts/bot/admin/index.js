@@ -72,9 +72,11 @@ function BotTemplatesContainer() {
     try {
       await deleteBotTemplate(botToDelete.id);
       setBots((prev) => prev.filter((b) => b.id !== botToDelete.id));
+      alert("✅ Plantilla eliminada correctamente.");
     } catch (error) {
-      console.error("Error al eliminar bot:", error);
-      alert("No se pudo eliminar la plantilla. Intenta de nuevo.");
+      const errorMessage = error.response?.data?.message || "No se pudo eliminar la plantilla. Intenta de nuevo.";
+      console.error("Error al eliminar bot:", errorMessage);
+      alert(errorMessage);
     }
   };
 

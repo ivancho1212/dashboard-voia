@@ -4,6 +4,7 @@
  * 🎨 Efecto de "vidrio empañado" cubriendo todo el widget
  */
 
+import React from 'react';
 import PropTypes from 'prop-types';
 
 export default function DeviceConflictOverlay({ isBlocked, blockMessage }) {

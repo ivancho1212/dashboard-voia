@@ -36,9 +36,11 @@ function ModelConfigList() {
       try {
         await deleteModelConfig(id);
         setModelConfigs((prev) => prev.filter((c) => c.id !== id));
+        alert("✅ Configuración eliminada correctamente.");
       } catch (error) {
-        console.error("Error eliminando la configuración:", error);
-        alert("No se pudo eliminar la configuración. Inténtalo de nuevo.");
+        const errorMessage = error.response?.data?.message || "No se pudo eliminar la configuración. Inténtalo de nuevo.";
+        console.error("Error eliminando la configuración:", errorMessage);
+        alert(errorMessage);
       }
     }
   };

@@ -17,7 +17,7 @@ async function getCsrfToken() {
   }
 }
 
-// Función para iniciar sesión
+// Función para iniciar sesión (ahora soporta refreshToken)
 export const login = async (email, password) => {
   try {
     const csrf = await getCsrfToken();
@@ -33,11 +33,46 @@ export const login = async (email, password) => {
     if (response.data.token) {
       localStorage.setItem("token", response.data.token);
     }
+    if (response.data.refreshToken) {
+      localStorage.setItem("refreshToken", response.data.refreshToken);
+    }
     return response.data;
   } catch (error) {
     console.error("Error de inicio de sesión:", error.response ? error.response.data : error.message);
     throw error.response ? error.response.data : new Error("Error al intentar iniciar sesión");
   }
+};
+
+// Función para refrescar el access token usando el refresh token
+export const refreshAccessToken = async () => {
+  // El backend espera el refresh token en la cookie httpOnly, no en el body
+  const response = await axios.post(
+    "http://localhost:5006/api/Auth/refresh",
+    {},
+    { withCredentials: true }
+  );
+  if (response.data.accessToken || response.data.token) {
+    // Soporta ambos nombres por compatibilidad
+    const newToken = response.data.accessToken || response.data.token;
+    localStorage.setItem("token", newToken);
+    return newToken;
+  }
+  throw new Error("No se pudo refrescar el token");
+};
+
+// Función para logout que limpia ambos tokens
+
+export const logout = async () => {
+  try {
+    // Llama al backend para revocar el refresh token y eliminar la cookie
+    await axios.post("http://localhost:5006/api/Auth/logout", {}, { withCredentials: true });
+  } catch (e) {
+    // Si falla, igual limpia el localStorage
+    console.warn("[logout] Error llamando a /api/Auth/logout:", e);
+  }
+  localStorage.removeItem("token");
+  localStorage.removeItem("refreshToken");
+  localStorage.removeItem("user");
 };
 
 // Función para registrar un usuario

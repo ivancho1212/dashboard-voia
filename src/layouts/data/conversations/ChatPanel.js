@@ -1,3 +1,58 @@
+// --- JWT DIAGNOSTIC PANEL ---
+function parseJwt(token) {
+  if (!token) return null;
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join(''));
+    return JSON.parse(jsonPayload);
+  } catch (e) { return null; }
+}
+
+function JwtDiagnosticPanel() {
+  const [token, setToken] = React.useState(null);
+  const [claims, setClaims] = React.useState(null);
+  const [expired, setExpired] = React.useState(false);
+
+  React.useEffect(() => {
+    const t = localStorage.getItem('token');
+    setToken(t);
+    if (t) {
+      const c = parseJwt(t);
+      setClaims(c);
+      if (c && c.exp) {
+        const now = Math.floor(Date.now() / 1000);
+        setExpired(c.exp < now);
+      }
+    }
+  }, []);
+
+  if (!token) return (
+    <div style={{background:'#fee',color:'#900',padding:8,marginBottom:8,border:'1px solid #f99',borderRadius:4}}>
+      <b>JWT:</b> No hay token en localStorage
+    </div>
+  );
+  // Buscar role y sub en claims alternativos
+  const role = claims?.role || claims?.roles || claims?.["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 'N/A';
+  const sub = claims?.sub || claims?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || 'N/A';
+
+  return (
+    <div style={{background:'#eef',color:'#003',padding:8,marginBottom:8,border:'1px solid #99f',borderRadius:4,fontSize:13}}>
+      <b>JWT:</b> {expired ? <span style={{color:'#c00'}}>Expirado</span> : <span style={{color:'#090'}}>Vigente</span>}<br/>
+      <b>exp:</b> {claims?.exp ? new Date(claims.exp*1000).toLocaleString() : 'N/A'}<br/>
+      <b>role:</b> {role}<br/>
+      <b>sub:</b> {sub}<br/>
+      <b>aud:</b> {claims?.aud || 'N/A'}<br/>
+      <b>iss:</b> {claims?.iss || 'N/A'}<br/>
+      <details>
+        <summary>Ver claims completos</summary>
+        <pre style={{fontSize:11,whiteSpace:'pre-wrap'}}>{JSON.stringify(claims, null, 2)}</pre>
+      </details>
+    </div>
+  );
+}
 import React, {
   useState,
   useEffect,
@@ -78,6 +133,11 @@ const ChatPanel = forwardRef(
     const [isUserAtBottom, setIsUserAtBottom] = useState(true);
     const lastMessageIdRef = useRef(null);
     const [hasNewMessageBelow, setHasNewMessageBelow] = useState(false);
+    // Mensajes en tiempo real
+    const [liveMessages, setLiveMessages] = useState([]);
+    const hubConnectionRef = useRef(null);
+    // Importar SignalR
+    const { createHubConnection } = require("services/signalr");
   const [debugDayDividers, setDebugDayDividers] = useState(0);
   const [bannerLabel, setBannerLabel] = useState("");
   const [topVisibleDayLabel, setTopVisibleDayLabel] = useState("");
@@ -145,7 +205,8 @@ const ChatPanel = forwardRef(
 
     const inputRef = useRef(null);
     const scrollToBottom = () => {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      // Scroll hacia arriba (top) para mostrar el mensaje más reciente
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     };
     const [hasMounted, setHasMounted] = useState(false);
     const lastLoggedForConvRef = useRef(null); // avoid duplicate heavy logs across StrictMode double-mounts
@@ -157,8 +218,44 @@ const ChatPanel = forwardRef(
       // Marcar como montado para que los useLayoutEffect que dependen de hasMounted
       useEffect(() => {
         setHasMounted(true);
-        return () => setHasMounted(false);
-      }, []);
+        // Suscribirse a SignalR solo si hay conversationId
+        if (conversationId) {
+          const connection = createHubConnection(conversationId);
+          hubConnectionRef.current = connection;
+          connection.start().then(async () => {
+            // Unirse explícitamente al grupo 'admin' para recibir todos los mensajes
+            try {
+              await connection.invoke("JoinAdmin");
+            } catch (e) {
+              console.warn("[SignalR] No se pudo unir al grupo admin:", e);
+            }
+            // Suscribirse a todos los eventos relevantes
+            connection.on("NewConversationOrMessage", (msg) => {
+              console.log("📨 [SignalR] Mensaje recibido:", msg);
+              setLiveMessages((prev) => {
+                if (prev.some((m) => m.id === msg.id)) return prev;
+                return [...prev, msg];
+              });
+            });
+            connection.on("ReceiveMessage", (msg) => {
+              // Mensajes directos de la conversación (por compatibilidad)
+              console.log("📨 [SignalR] ReceiveMessage:", msg);
+              setLiveMessages((prev) => {
+                if (prev.some((m) => m.id === msg.id)) return prev;
+                return [...prev, msg];
+              });
+            });
+          });
+        }
+        return () => {
+          setHasMounted(false);
+          // Limpiar conexión SignalR
+          if (hubConnectionRef.current) {
+            hubConnectionRef.current.stop();
+            hubConnectionRef.current = null;
+          }
+        };
+      }, [conversationId]);
 
     useEffect(() => {
       if (iaPaused && inputRef.current) inputRef.current.focus();
@@ -369,9 +466,26 @@ const ChatPanel = forwardRef(
     const getBlockedIcon = () => <BlockIcon />;
     const processedMessages = useMemo(() => {
       // LOG: mensajes recibidos y normalizados
-      console.log('[ChatPanel] mensajes prop:', messages);
-      // Normalize messages (same as before) then insert day dividers.
-      const normalized = messages.map((msg) => {
+      // Unificar historial y mensajes en tiempo real, deduplicando por id
+      const msgMap = new Map();
+      [...messages, ...liveMessages].forEach((msg) => {
+        if (!msg) return;
+        const key = msg.id?.toString() || msg.tempId?.toString() || JSON.stringify(msg);
+        // Si ya existe, priorizar el de SignalR (liveMessages)
+        if (!msgMap.has(key) || liveMessages.some((m) => (m.id?.toString() || m.tempId?.toString()) === key)) {
+          msgMap.set(key, msg);
+        }
+      });
+      // Ordenar descendente por fecha (más nuevo arriba)
+      const allMessages = Array.from(msgMap.values()).sort((a, b) => {
+        const ta = new Date(a.timestamp || a.createdAt || 0).getTime();
+        const tb = new Date(b.timestamp || b.createdAt || 0).getTime();
+        return tb - ta;
+      });
+      // Log para depuración
+      console.log('[ChatPanel] mensajes prop:', allMessages);
+      // Normalize messages (same as antes) then insert day dividers.
+      const normalized = allMessages.map((msg) => {
         // If the backend/client already inserted a day-divider object, pass it through unchanged.
         if (msg && msg.__dayDivider) return msg;
         const normalizedText = msg.text || msg.question || msg.content || "";
@@ -838,6 +952,7 @@ const ChatPanel = forwardRef(
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, position: "relative" }}>
+        <JwtDiagnosticPanel />
         {/* HEADER */}
         <Box
           sx={{

@@ -1,4 +1,5 @@
 const path = require('path');
+const webpack = require('webpack');
 
 module.exports = {
   entry: './src/widget/index.js',
@@ -11,6 +12,20 @@ module.exports = {
     },
   },
   mode: 'development',
+  plugins: [
+    new webpack.DefinePlugin({
+      'process.env.NODE_ENV': JSON.stringify('development'),
+      'process.env.REACT_APP_API_URL': JSON.stringify('http://localhost:5006'),
+      'process.env.REACT_APP_BACKEND_URL': JSON.stringify('http://localhost:5006'),
+      'process.env.PUBLIC_URL': JSON.stringify(''),
+      'process.env.REACT_APP_DEV_API_URL': JSON.stringify('http://localhost:5006/api'),
+      'process.env.REACT_APP_DEV_WIDGET_URL': JSON.stringify('http://localhost:3000/widget-frame'),
+      'process.env.REACT_APP_DEV_DASHBOARD_URL': JSON.stringify('http://localhost:3000'),
+      'process.env.REACT_APP_PROD_API_URL': JSON.stringify('https://api.voia-dashboard.lat/api'),
+      'process.env.REACT_APP_PROD_WIDGET_URL': JSON.stringify('https://voia-dashboard.lat/widget-frame'),
+      'process.env.REACT_APP_PROD_DASHBOARD_URL': JSON.stringify('https://voia-dashboard.lat'),
+    }),
+  ],
   module: {
     rules: [
       {
@@ -18,11 +33,21 @@ module.exports = {
         exclude: /node_modules/,
         use: {
           loader: 'babel-loader',
+          options: {
+            presets: ['@babel/preset-react'],
+          },
         },
       },
     ],
   },
   resolve: {
     extensions: ['.js', '.jsx'],
+    alias: {
+      layouts: path.resolve(__dirname, 'src/layouts'),
+      services: path.resolve(__dirname, 'src/services'),
+      config: path.resolve(__dirname, 'src/config'),
+      hooks: path.resolve(__dirname, 'src/hooks'),
+      utils: path.resolve(__dirname, 'src/utils'),
+    },
   },
 }

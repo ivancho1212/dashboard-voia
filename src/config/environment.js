@@ -20,6 +20,9 @@ const currentConfig = isDevelopment ? config.development : config.production;
 
 export default currentConfig;
 
+// ✅ Exportar API_URL directamente para uso en componentes
+export const API_URL = currentConfig.apiBaseUrl;
+
 // Funciones de utilidad
 export const getApiBaseUrl = () => currentConfig.apiBaseUrl;
 export const getWidgetFrameUrl = () => currentConfig.widgetFrameUrl;

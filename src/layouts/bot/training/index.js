@@ -304,6 +304,30 @@ function BotTraining() {
         }
       }
 
+      // Validaciones de IDs y archivo
+      const botIdToUse = createdBotId || botParamId;
+      const templateIdToUse = template?.id || bot?.botTemplateId;
+      if (!botIdToUse || !templateIdToUse || !userId) {
+        setFileErrors((prev) => {
+          const m = new Map(prev);
+          m.set(file.name, 'Faltan datos requeridos para la subida (botId, templateId o userId)');
+          return m;
+        });
+        Swal.fire({ icon: 'error', title: 'Error de datos', text: `No se pudo subir ${file.name}: Faltan datos requeridos (botId, templateId o userId)` });
+        resolve({ error: true });
+        return;
+      }
+      if (!(file instanceof File || file instanceof Blob)) {
+        setFileErrors((prev) => {
+          const m = new Map(prev);
+          m.set(file.name, 'El archivo no es válido');
+          return m;
+        });
+        Swal.fire({ icon: 'error', title: 'Archivo inválido', text: `No se pudo subir ${file.name}: El archivo no es válido` });
+        resolve({ error: true });
+        return;
+      }
+
       // Añadir un placeholder con progress 0 para que aparezca en la UI
       const placeholder = { name: file.name, fileObject: file, uploadProgress: 0 };
       setFiles((prev) => [...prev, placeholder]);
@@ -313,13 +337,13 @@ function BotTraining() {
         setFiles((prev) => prev.map((f) => (f === placeholder ? { ...f, uploadProgress: percent } : f)));
       };
 
-      const resp = await uploadFile(file, createdBotId || botParamId, template?.id || bot?.botTemplateId, userId, validSessionId, onUploadProgress);
+      const resp = await uploadFile(file, botIdToUse, templateIdToUse, userId, validSessionId, onUploadProgress);
 
       if (resp && resp.id) {
         // reemplazar placeholder por la respuesta real
         setFiles((prev) => prev.map((f) => (f === placeholder ? resp : f)));
         try {
-          const bid = Number(createdBotId || botParamId);
+          const bid = Number(botIdToUse);
           localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
           window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
         } catch (e) { /* ignore */ }
@@ -335,7 +359,7 @@ function BotTraining() {
         setFiles((prev) => prev.map((f) => (f === placeholder ? { ...f, uploadProgress: 100 } : f)));
       }
       resolve(resp);
-      } catch (err) {
+    } catch (err) {
       console.error('Error subiendo archivo', file.name, err);
       // Key errors by filename so they map to displayed items
       setFileErrors((prev) => {

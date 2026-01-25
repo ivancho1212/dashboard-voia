@@ -72,7 +72,14 @@ class WidgetAuthService {
 
   async getWidgetSettings(botId, token) {
     try {
-      const response = await axios.get(`${API_URL}/BotStyles/widget/${botId}`);
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await axios.get(`${API_URL}/BotStyles/widget/${botId}`, {
+        headers
+      });
       
       if (response.data && response.data.styles) {
         return {

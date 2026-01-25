@@ -3,6 +3,7 @@ import SoftBox from "components/SoftBox";
 import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
 import Card from "@mui/material/Card";
+import ConversationHistory from "./components/ConversationHistory";
 
 function ViewBot({ bot, onBack, onEdit }) {
   return (
@@ -27,6 +28,13 @@ function ViewBot({ bot, onBack, onEdit }) {
           </SoftBox>
         )}
 
+        {/* Integración del historial de mensajes */}
+        {bot.conversationId && bot.userName && (
+          <SoftBox mt={4}>
+            <ConversationHistory conversationId={bot.conversationId} userName={bot.userName} />
+          </SoftBox>
+        )}
+
         <SoftBox mt={2} display="flex" gap={1}>
           <SoftButton onClick={onBack} color="secondary">Volver</SoftButton>
           <SoftButton onClick={() => onEdit(bot)} color="info">Editar</SoftButton>
@@ -46,7 +54,9 @@ ViewBot.propTypes = {
         role: PropTypes.string,
         content: PropTypes.string,
       })
-    )
+    ),
+    conversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    userName: PropTypes.string,
   }).isRequired,
   onBack: PropTypes.func.isRequired,
   onEdit: PropTypes.func.isRequired,

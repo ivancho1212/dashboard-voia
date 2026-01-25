@@ -17,7 +17,7 @@ const LandingPage = () => {
 useEffect(() => {
   try{ const allowed = 'http://localhost:3000'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}
   if (document.getElementById('voia-widget-js')) return;
-  const js = document.createElement('script'); js.id = 'voia-widget-js'; js.async = true; js.src = 'http://localhost:3000/widget.js'; js.setAttribute('data-user-id', '5'); js.setAttribute('data-bot-id', '1'); js.setAttribute('data-bot', '1'); js.setAttribute('data-api-base', 'http://localhost:3000'); js.setAttribute('data-theme', 'auto'); js.setAttribute('data-position', 'bottom-right'); js.setAttribute('data-language', 'es'); js.setAttribute('data-allowed-domain', 'http://localhost:3000'); js.setAttribute('data-client-secret', ''); document.body.appendChild(js);
+  const js = document.createElement('script'); js.id = 'voia-widget-js'; js.async = true; js.src = 'http://localhost:3000/widget.js'; js.setAttribute('data-user-id', '5'); js.setAttribute('data-bot-id', '4'); js.setAttribute('data-bot', '4'); js.setAttribute('data-api-base', 'http://localhost:3000'); js.setAttribute('data-theme', 'auto'); js.setAttribute('data-position', 'bottom-right'); js.setAttribute('data-language', 'es'); js.setAttribute('data-allowed-domain', 'http://localhost:3000'); js.setAttribute('data-client-secret', ''); document.body.appendChild(js);
 }, []);
 
   // Scroll al anchor si viene de Navbar

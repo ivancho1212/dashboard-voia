@@ -498,7 +498,7 @@ function Overview() {
                         <Tooltip title="Eliminar bot">
                           <IconButton
                             size="small"
-                            sx={{ color: '#888', transition: 'color 0.2s', '&:hover': { color: '#ff9800' } }}
+                            sx={{ color: '#888', transition: 'color 0.2s', '&:hover': { color: '#e53935' } }}
                             onClick={() => handleDeleteBot(bot)}
                           >
                             <DeleteIcon />
@@ -511,20 +511,20 @@ function Overview() {
                         <SoftTypography variant="h6" fontWeight="bold" mb={1} sx={{ textAlign: 'left', color: 'info.main', fontSize: { xs: 13, md: 15 }, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bot.name}</SoftTypography>
                       </SoftBox>
 
-                      {/* Row 2: Description (clamped) */}
-                      <SoftBox sx={{ height: { xs: 72, md: 88 }, overflow: 'hidden', px: 2 }} textAlign="left">
+                      {/* Row 2: Description (más espacio, menos clamp) */}
+                      <SoftBox sx={{ height: { xs: 110, md: 130 }, overflow: 'auto', px: 2, mb: 0.5 }} textAlign="left">
                         <SoftTypography
                           variant="body2"
                           color="text"
                           sx={{
-                            textAlign: 'left',
-                            fontSize: { xs: 11, md: 12 },
+                            textAlign: 'justify',
+                            fontSize: { xs: 12, md: 13 },
                             display: '-webkit-box',
-                            WebkitLineClamp: 3,
+                            WebkitLineClamp: 6,
                             WebkitBoxOrient: 'vertical',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
-                            lineHeight: 1.3,
+                            lineHeight: 1.35,
                           }}
                         >
                           {bot.description || 'Sin descripción'}
@@ -535,21 +535,21 @@ function Overview() {
                       <Divider sx={{ my: 1, mx: 2 }} />
 
 
-                      {/* Row 3: vertical button list for bot phases */}
-                      <SoftBox sx={{ px: 2, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {/* Row 3: vertical button list for bot phases (más compacto) */}
+                      <SoftBox sx={{ px: 2, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                         {/* Entrenamiento */}
                         <Button
                           variant={phases.training ? 'contained' : 'outlined'}
                           color={phases.training ? 'info' : 'inherit'}
-                          startIcon={<SchoolIcon sx={{ color: 'info.main' }} />}
+                          startIcon={<SchoolIcon sx={{ color: 'info.main', fontSize: 18 }} />}
                           endIcon={!phases.finished && phases.training ? (
                             <Tooltip title="Configurar Entrenamiento">
-                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                              <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.training ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.training ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
                           onClick={() => phases.training && handlePhaseClick(bot, 'training')}
-                          disabled={!phases.training}
+                          disabled={!Boolean(phases.training)}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Entrenamiento</span>
                         </Button>
@@ -557,15 +557,15 @@ function Overview() {
                         <Button
                           variant={phases.dataCapture ? 'contained' : 'outlined'}
                           color={phases.dataCapture ? 'info' : 'inherit'}
-                          startIcon={<StorageIcon sx={{ color: 'info.main' }} />}
+                          startIcon={<StorageIcon sx={{ color: 'info.main', fontSize: 18 }} />}
                           endIcon={!phases.finished && phases.dataCapture ? (
                             <Tooltip title="Configurar Datos">
-                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                              <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.dataCapture ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.dataCapture ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
                           onClick={() => phases.dataCapture && handlePhaseClick(bot, 'dataCapture')}
-                          disabled={!phases.dataCapture}
+                          disabled={!Boolean(phases.dataCapture)}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Datos</span>
                         </Button>
@@ -573,15 +573,15 @@ function Overview() {
                         <Button
                           variant={phases.styles ? 'contained' : 'outlined'}
                           color={phases.styles ? 'info' : 'inherit'}
-                          startIcon={<PaletteIcon sx={{ color: 'info.main' }} />}
+                          startIcon={<PaletteIcon sx={{ color: 'info.main', fontSize: 18 }} />}
                           endIcon={!phases.finished && phases.styles ? (
                             <Tooltip title="Configurar Estilos">
-                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                              <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.styles ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.styles ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
                           onClick={() => phases.styles && handlePhaseClick(bot, 'styles')}
-                          disabled={!phases.styles}
+                          disabled={!Boolean(phases.styles)}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Estilos</span>
                         </Button>
@@ -589,15 +589,15 @@ function Overview() {
                         <Button
                           variant={phases.integration ? 'contained' : 'outlined'}
                           color={phases.integration ? 'info' : 'inherit'}
-                          startIcon={<IntegrationInstructionsIcon sx={{ color: 'info.main' }} />}
+                          startIcon={<IntegrationInstructionsIcon sx={{ color: 'info.main', fontSize: 18 }} />}
                           endIcon={!phases.finished && phases.integration ? (
                             <Tooltip title="Configurar Integración">
-                              <SettingsIcon sx={{ fontSize: 18, color: 'info.main' }} />
+                              <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, mb: 1, opacity: phases.integration ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' } }}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.integration ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
                           onClick={() => phases.integration && handlePhaseClick(bot, 'integration')}
-                          disabled={!phases.integration}
+                          disabled={!Boolean(phases.integration)}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Integración</span>
                         </Button>

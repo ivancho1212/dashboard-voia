@@ -57,7 +57,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
   minWidth: singleImageOnly ? "0" : (hasOnlyFiles ? "0" : "80px"),
   width: singleImageOnly ? "auto" : (hasOnlyFiles ? "auto" : "fit-content"),
     wordBreak: "break-word",
-    fontSize: "14px",
+    fontSize: "13px",
     fontFamily,
     display: singleImageOnly ? "inline-block" : "inline-flex",
     flexDirection: "column",
@@ -388,7 +388,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
                     // 🔹 Usar buildUrl que agrega /inline para protegidos
                     const href = buildUrl(file.fileUrl);
                     return (
-                      <a key={i} href={href} download={file.fileName} target="_blank" rel="noopener noreferrer" title={file.fileName} style={{ padding: "6px 10px", backgroundColor: "#f8f8f8", borderRadius: "6px", textDecoration: "none", color: "#007bff", fontSize: "14px", fontWeight: "500", wordBreak: "break-word", display: "inline-block", maxWidth: "100%" }}>
+                      <a key={i} href={href} download={file.fileName} target="_blank" rel="noopener noreferrer" title={file.fileName} style={{ padding: "6px 10px", backgroundColor: "#f8f8f8", borderRadius: "6px", textDecoration: "none", color: "#007bff", fontSize: "14px", fontWeight: "500", wordBreak: "break-word", display: "inline-block", maxWidth: "220px" }}>
                           📎 {truncateName(file.fileName)}
                         </a>
                     );

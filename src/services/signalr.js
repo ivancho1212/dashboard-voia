@@ -35,8 +35,23 @@ export const createHubConnection = (conversationId, explicitToken) => {
   }
 
 
+  // 🔐 Obtener token CSRF si está disponible
+  let csrfToken = null;
+  let csrfHeaderName = 'X-CSRF-Token';
+  try {
+    csrfToken = sessionStorage.getItem('csrf_token') || localStorage.getItem('csrf_token');
+    const storedHeaderName = sessionStorage.getItem('csrf_header_name') || localStorage.getItem('csrf_header_name');
+    if (storedHeaderName) {
+      csrfHeaderName = storedHeaderName;
+    }
+  } catch (e) {
+    console.warn('⚠️ [SignalR] No se pudo obtener token CSRF:', e.message);
+  }
+
   return new signalR.HubConnectionBuilder()
     .withUrl(url, {
+      // ✅ Agregar headers CSRF si están disponibles
+      headers: csrfToken ? { [csrfHeaderName]: csrfToken } : {},
       accessTokenFactory: () => {
         // 🔄 Si el token está en la URL, también lo enviamos en accessTokenFactory
         // para máxima compatibilidad con diferentes versiones de SignalR
