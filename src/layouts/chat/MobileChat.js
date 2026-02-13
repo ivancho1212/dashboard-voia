@@ -3,7 +3,8 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import WidgetFrame from "layouts/widget/WidgetFrame";
 import "layouts/widget/WidgetStyles.css";
 import { getCsrfToken, getCsrfHeaderName } from "services/csrfService";
-import { getApiBaseUrl } from "config/environment";
+
+const API_URL = "http://localhost:5006/api";
 
 /**
  * 🆕 MobileChat Component
@@ -45,18 +46,14 @@ export default function MobileChat() {
   const closeTimerRef = useRef(null);
   const inactivityWarningShownRef = useRef(false);
   const [showInactivityMessage, setShowInactivityMessage] = useState(false); // false | true (alerta) | 'expired' (expirada)
-  const [inactivityCountdown, setInactivityCountdown] = useState(null); // 10, 9, 8... 0
   
   // 🆕 VALIDACIÓN: Estado para conversación expirada al cargar y error de unión móvil
-  // validationError: null | 'expired' | 'network' | 'missing_params'
   const [conversationStatus, setConversationStatus] = useState(null); // null | 'valid' | 'expired'
-  const [validationError, setValidationError] = useState(null); // null | 'expired' | 'network' | 'missing_params'
   const [isValidating, setIsValidating] = useState(true);
   const [mobileJoinError, setMobileJoinError] = useState(null); // null | string (mensaje de error)
   
-  // 🔴 INACTIVIDAD: Constante 3 minutos + 10 segundos de aviso
+  // 🔴 INACTIVIDAD: Constante 3 minutos
   const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutos
-  const INACTIVITY_COUNTDOWN_SEC = 10; // 10 segundos de aviso con conteo regresivo
 
   const botId = searchParams.get("bot");
   const conversationId = searchParams.get("conversation");
@@ -64,171 +61,47 @@ export default function MobileChat() {
   // Permitir userId o user como parámetro y forzar string
   let userId = searchParams.get("userId") || searchParams.get("user");
   if (userId !== undefined && userId !== null) userId = String(userId);
+  console.log('[MobileChat] userId propagado al iframe:', userId, typeof userId);
 
-  // 🆕 VALIDACIÓN: Verificar si conversación existe y no está expirada (con timeout para no colgar)
-  const VALIDATION_TIMEOUT_MS = 8000; // 8 s abort (respuesta más rápida si el backend no responde)
-  const SAFETY_MAX_MS = 15000; // 15 s máximo en pantalla "Validando..." (fallback absoluto)
-
+  // 🆕 VALIDACIÓN: Verificar si conversación existe y no está expirada
   useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), VALIDATION_TIMEOUT_MS);
-    const API_URL = getApiBaseUrl();
-
-    // Resetear estado al cambiar bot/conversation para que la UI muestre "Validando..." y no quede colgada
-    setIsValidating(true);
-    setValidationError(null);
-
     const validateConversation = async () => {
-      // ❌ MÓVIL: requiere bot y conversationId en la URL (solo desde QR válido)
-      if (!conversationId || !botId) {
-        setValidationError('missing_params');
+      // ❌ MÓVIL NO DEBE CREAR CONVERSACIONES - requiere conversationId
+      if (!conversationId) {
+        console.error('❌ [MobileChat] No se proporcionó conversationId - móvil NO puede crear conversaciones');
         setConversationStatus('expired');
         setIsValidating(false);
         return;
       }
 
-      // ❌ Rechazar IDs inválidos: solo números positivos (evitar 0, negativos, NaN)
-      const convIdNum = parseInt(conversationId, 10);
-      if (isNaN(convIdNum) || convIdNum <= 0) {
-        if (process.env.NODE_ENV === 'development') {
-          console.warn('[MobileChat] ⚠️ conversationId inválido:', conversationId);
-        }
-        setValidationError('expired');
-        setConversationStatus('expired');
-        setIsValidating(false);
-        return;
-      }
-
-      // ✅ Validar conversación vigente: /history devuelve 404 si no existe, 410 si cerrada/expirada
-      const url = `${API_URL}/Conversations/history/${conversationId}`;
-      if (process.env.NODE_ENV === 'development') {
-        console.info('[MobileChat] 🔄 Validando conversación vigente:', url);
-      }
+      // Si hay conversationId, validar que no esté expirada
       try {
-        const response = await fetch(url, {
+        const response = await fetch(`${API_URL}/Conversations/history/${conversationId}`, {
           method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-          },
-          signal: controller.signal,
-          credentials: 'include',
-          mode: 'cors',
-          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' }
         });
 
-        if (cancelled) return;
-
-        if (process.env.NODE_ENV === 'development') {
-          console.info('[MobileChat] ✅ Respuesta recibida:', response.status, response.ok);
-        }
-
-        try {
-          await response.text();
-        } catch (_) { /* ignorar si falla leer el cuerpo */ }
-
-        if (cancelled) return;
         if (response.ok) {
-          if (process.env.NODE_ENV === 'development') {
-            console.info('[MobileChat] ✅ Conversación vigente, mostrando chat');
-          }
-          setValidationError(null);
           setConversationStatus('valid');
-        } else if (response.status === 404) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[MobileChat] ⚠️ Conversación no existe (404)');
-          }
-          setValidationError('expired');
-          setConversationStatus('expired');
         } else if (response.status === 410) {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[MobileChat] ⚠️ Conversación cerrada o expirada (410)');
-          }
-          setValidationError('expired');
+          // 410 Gone = Conversación expirada
+          setConversationStatus('expired');
+        } else if (response.status === 404) {
+          // 404 = Conversación no existe
           setConversationStatus('expired');
         } else {
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('[MobileChat] ⚠️ Error inesperado:', response.status);
-          }
-          setValidationError('expired');
           setConversationStatus('expired');
         }
       } catch (error) {
-        if (cancelled) return;
-        if (process.env.NODE_ENV === 'development') {
-          console.error('[MobileChat] ❌ Validación fallida:', error?.message || error, 'URL:', url);
-        }
-        if (error.name === 'AbortError') {
-          setValidationError('network');
-        } else {
-          setValidationError('network');
-        }
+        console.error('❌ [MobileChat] Error validando conversación:', error);
         setConversationStatus('expired');
       } finally {
-        if (!cancelled) {
-          if (process.env.NODE_ENV === 'development') {
-            console.info('[MobileChat] 🏁 Finalizando validación, isValidating → false');
-          }
-          clearTimeout(timeoutId);
-          setIsValidating(false);
-        } else {
-          if (process.env.NODE_ENV === 'development') {
-            console.info('[MobileChat] 🚫 Validación cancelada (componente desmontado)');
-          }
-        }
+        setIsValidating(false);
       }
     };
 
     validateConversation();
-    return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-      controller.abort();
-    };
-  }, [conversationId, botId]);
-
-  // Revalidar cuando la pestaña vuelve a estar visible: si la conversación se cerró (ej. en otra pestaña o por inactividad), mostrar "No disponible" sin tener que recargar
-  useEffect(() => {
-    if (!conversationId || !botId || conversationStatus !== 'valid') return;
-    const handleVisibility = () => {
-      if (document.visibilityState !== 'visible') return;
-      const convIdNum = parseInt(conversationId, 10);
-      if (isNaN(convIdNum) || convIdNum <= 0) return;
-      const API_URL = getApiBaseUrl();
-      fetch(`${API_URL}/Conversations/history/${conversationId}`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
-        credentials: 'include',
-        cache: 'no-store',
-      })
-        .then((res) => {
-          if (res.status === 404 || res.status === 410) {
-            setValidationError('expired');
-            setConversationStatus('expired');
-          }
-        })
-        .catch(() => {});
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [conversationId, botId, conversationStatus]);
-
-  // 🆕 Timeout de seguridad: si tras SAFETY_MAX_MS seguimos en "Validando...", forzar salida (evita quedar colgado)
-  const validatingRef = useRef(true);
-  validatingRef.current = isValidating;
-  useEffect(() => {
-    if (!conversationId || !botId) return;
-    const safetyId = setTimeout(() => {
-      if (validatingRef.current) {
-        setValidationError('network');
-        setConversationStatus('expired');
-        setIsValidating(false);
-      }
-    }, SAFETY_MAX_MS);
-    return () => clearTimeout(safetyId);
-  }, [conversationId, botId]);
+  }, [conversationId]);
 
   // 🔴 INACTIVIDAD: Función para resetear timer
   const resetInactivityTimer = React.useCallback(() => {
@@ -241,16 +114,14 @@ export default function MobileChat() {
     }
     inactivityWarningShownRef.current = false;
     setShowInactivityMessage(false);
-    setInactivityCountdown(null);
 
     // 🔴 INACTIVIDAD: Iniciar timer de 3 minutos
     inactivityTimerRef.current = setTimeout(() => {
       console.log('⏱️  [MobileChat] 3 minutos sin interacción - mostrando alerta');
       setShowInactivityMessage(true);
-      setInactivityCountdown(INACTIVITY_COUNTDOWN_SEC);
       inactivityWarningShownRef.current = true;
 
-      // Después de 10 segundos (conteo regresivo), cerrar conversación y notificar widget
+      // Después de 30 segundos más, mostrar página expirada
       closeTimerRef.current = setTimeout(() => {
         console.log('🔴 [MobileChat] Inactividad expirada - mostrando página y notificando al widget');
         
@@ -271,8 +142,7 @@ export default function MobileChat() {
 
         // 🔴 PASO 3: Mostrar página expirada (NO cerrar)
         setShowInactivityMessage('expired');
-        setInactivityCountdown(null);
-      }, INACTIVITY_COUNTDOWN_SEC * 1000); // 10 segundos de aviso
+      }, 30 * 1000); // 30 segundos
     }, INACTIVITY_TIMEOUT); // 3 minutos
   }, [conversationId]);
 
@@ -304,31 +174,20 @@ export default function MobileChat() {
     };
   }, [resetInactivityTimer]);
 
-  // 🔴 Conteo regresivo: 10, 9, 8... cuando se muestra alerta de inactividad
-  React.useEffect(() => {
-    if (!showInactivityMessage || showInactivityMessage === 'expired') return;
-    const id = setInterval(() => {
-      setInactivityCountdown((prev) => {
-        if (prev === null || prev <= 1) return 0;
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [showInactivityMessage]);
 
-  // Solo redirigir si no hay ningún parámetro útil (evitar redirigir cuando mostramos "Enlace incompleto")
   useEffect(() => {
-    if (!botId && !conversationId) {
+    // Validar parámetros mínimos
+    if (!botId) {
       navigate("/", { replace: true });
     }
-  }, [botId, conversationId, navigate]);
+  }, [botId, navigate]);
 
   // 🔴 INACTIVIDAD: Función para notificar al backend que móvil se fue
   const notifyMobileLeft = React.useCallback(async () => {
     if (!conversationId) return;
-      try {
-        await fetch(
-          `${getApiBaseUrl()}/Conversations/${conversationId}/leave-mobile`,
+    try {
+      await fetch(
+        `${API_URL}/Conversations/${conversationId}/leave-mobile`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -361,7 +220,7 @@ export default function MobileChat() {
           headers[csrfHeaderName] = csrfToken;
         }
         const response = await fetch(
-          `${getApiBaseUrl()}/Conversations/${conversationId}/join-mobile`,
+          `${API_URL}/Conversations/${conversationId}/join-mobile`,
           {
             method: 'POST',
             headers,
@@ -382,7 +241,7 @@ export default function MobileChat() {
 
           // Mejora: Consultar estado real de la conversación
           try {
-            const statusResp = await fetch(`${getApiBaseUrl()}/Conversations/${conversationId}/status`, {
+            const statusResp = await fetch(`${API_URL}/Conversations/${conversationId}/status`, {
               method: 'GET',
               headers: { 'Content-Type': 'application/json' }
             });
@@ -415,7 +274,7 @@ export default function MobileChat() {
     const handleBeforeUnload = () => {
       // Usar sendBeacon para asegurar que se envía antes de cerrar
       navigator.sendBeacon(
-        `${getApiBaseUrl()}/Conversations/${conversationId}/leave-mobile`,
+        `${API_URL}/Conversations/${conversationId}/leave-mobile`,
         JSON.stringify({ reason: 'page-closed' })
       );
     };
@@ -442,7 +301,7 @@ export default function MobileChat() {
     isMobile: "true", // Parámetro especial para indicar modo móvil
   });
 
-  // 🔴 INACTIVIDAD: Componente de alerta visual (sin parpadeo; con mensaje explicativo)
+  // 🔴 INACTIVIDAD: Componente de alerta visual
   const InactivityAlert = () => (
     <div style={{
       position: 'fixed',
@@ -455,28 +314,33 @@ export default function MobileChat() {
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 9999,
+      animation: 'fadeIn 0.3s ease-in'
     }}>
       <div style={{
         backgroundColor: '#fff',
-        borderRadius: '16px',
-        padding: '24px 28px 28px',
+        borderRadius: '8px',
+        padding: '24px',
         maxWidth: '90%',
         textAlign: 'center',
         boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
       }}>
-        <div style={{ fontSize: '16px', fontWeight: '600', color: '#333', marginBottom: '12px' }}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏱️</div>
+        <div style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '8px', color: '#333' }}>
           Conversación por expirar
         </div>
-        <div style={{ fontSize: '13px', color: '#666', marginBottom: '16px', lineHeight: 1.4 }}>
-          Por inactividad la conversación se cerrará. Interactúa con el chat para continuar.
+        <div style={{ fontSize: '14px', color: '#666', marginBottom: '16px' }}>
+          Por inactividad, la conversación se cerrará en 30 segundos
         </div>
-        <div style={{ fontSize: '56px', fontWeight: '700', color: '#b71c1c', lineHeight: 1, marginBottom: '4px' }}>
-          {inactivityCountdown ?? INACTIVITY_COUNTDOWN_SEC}
-        </div>
-        <div style={{ fontSize: '14px', fontWeight: '500', color: '#c62828' }}>
-          segundos
+        <div style={{ fontSize: '12px', color: '#999' }}>
+          Interactúa con el chat para continuar
         </div>
       </div>
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+      `}</style>
     </div>
   );
 
@@ -538,7 +402,7 @@ export default function MobileChat() {
         </div>
       )}
 
-      {/* 🔴 VALIDACIÓN: Si conversación está expirada o error, mostrar mensaje claro */}
+      {/* 🔴 VALIDACIÓN: Si conversación está expirada, mostrar error */}
       {!isValidating && conversationStatus === 'expired' && (
         <div style={{
           width: '100%',
@@ -550,22 +414,12 @@ export default function MobileChat() {
           fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
         }}>
           <div style={{ textAlign: 'center', padding: '40px', maxWidth: '400px' }}>
-            <div style={{ fontSize: '64px', marginBottom: '20px' }}>
-              {validationError === 'missing_params' ? '🔗' : validationError === 'network' ? '📡' : '❌'}
-            </div>
+            <div style={{ fontSize: '64px', marginBottom: '20px' }}>❌</div>
             <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#d32f2f', marginBottom: '8px' }}>
-              {validationError === 'missing_params'
-                ? 'Enlace incompleto'
-                : validationError === 'network'
-                  ? 'No se pudo conectar'
-                  : 'Conversación No Disponible'}
+              Conversación No Disponible
             </h1>
             <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px', lineHeight: '1.6' }}>
-              {validationError === 'missing_params'
-                ? 'Faltan parámetros en la URL (bot o conversación). Usa el enlace completo: escanea de nuevo el código QR desde el widget.'
-                : validationError === 'network'
-                  ? 'No se pudo conectar al API. Comprueba que el backend esté en marcha (puerto correcto, ej. 5006) y que CORS permita este origen. En consola (F12) verás la URL que se intentó.'
-                  : 'Esta conversación ha expirado o no existe. Solicita un nuevo código QR para iniciar una nueva conversación.'}
+              Esta conversación ha expirado o no existe.<br /><br />Por favor, solicita un nuevo código QR para iniciar una nueva conversación.
             </p>
             <p style={{ fontSize: '12px', color: '#999' }}>Puedes cerrar esta ventana ahora.</p>
           </div>
