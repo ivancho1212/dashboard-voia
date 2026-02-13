@@ -1,3 +1,5 @@
+const MAX_GROUP_INTERVAL_MS = 60 * 1000; // Solo agrupar archivos enviados en la misma ventana de 60 segundos
+
 function groupConsecutiveFiles(items) {
   const result = [];
   let currentFileGroup = null;
@@ -43,7 +45,13 @@ function groupConsecutiveFiles(items) {
         };
       } else if (
         currentFileGroup.type === item.type &&
-        currentFileGroup.fromId === item.fromId
+        currentFileGroup.fromId === item.fromId &&
+        (() => {
+          const lastTs = currentFileGroup.timestamp;
+          const currTs = item.timestamp;
+          const diffMs = Math.abs(new Date(currTs) - new Date(lastTs));
+          return diffMs <= MAX_GROUP_INTERVAL_MS;
+        })()
       ) {
         currentFileGroup.files.push({
           id: item.id,
@@ -127,23 +135,27 @@ function normalizeMessage(msg) {
   let files = msg.multipleFiles ?? msg.files ?? [];
   let images = msg.images ?? msg.imageGroup ?? [];
   let file = msg.file ?? null;
-  if (msg.isGroupedFile) {
-    // DEBUG logs solo si se requiere
-  }
-  if (msg.isGroupedFile && msg.files && msg.files.length > 0) {
-    const fileArray = msg.files;
-    files = fileArray.map(f => ({
-      fileUrl: f.url,
-      fileName: f.name,
-      fileType: f.type,
-      id: f.id
-    }));
-  } else if ((msg.type === 'file' || msg.type === 'image') && (msg.fileUrl || msg.url)) {
-    file = {
-      fileUrl: msg.fileUrl ?? msg.url,
-      fileName: msg.fileName ?? msg.name,
-      fileType: msg.fileType ?? msg.type
+
+  const normFile = (f) => {
+    if (!f || typeof f !== "object") return null;
+    const fileUrl = f.fileUrl ?? f.filePath ?? f.url ?? f.path;
+    if (!fileUrl) return null;
+    return {
+      ...f,
+      fileUrl,
+      fileName: f.fileName ?? f.name ?? "archivo",
+      fileType: f.fileType ?? f.type ?? "application/octet-stream",
     };
+  };
+
+  if (msg.isGroupedFile && msg.files && msg.files.length > 0) {
+    files = msg.files.map((f) => normFile({ ...f, fileUrl: f.fileUrl ?? f.url, fileName: f.fileName ?? f.name, fileType: f.fileType ?? f.type })).filter(Boolean);
+  } else if (Array.isArray(files) && files.length > 0) {
+    files = files.map(normFile).filter(Boolean);
+  }
+  if ((msg.type === "file" || msg.type === "image") && (msg.fileUrl || msg.url || msg.filePath || msg.path)) {
+    const single = normFile({ fileUrl: msg.fileUrl, filePath: msg.filePath, url: msg.url, path: msg.path, fileName: msg.fileName, name: msg.name, fileType: msg.fileType, type: msg.type });
+    if (single) file = single;
   }
   return {
     fromName: msg.fromName,

@@ -85,6 +85,7 @@ function Conversations() {
 
   const [showScrollButtons, setShowScrollButtons] = useState(false);
   const [conversationList, setConversationList] = useState([]);
+  const [loadingList, setLoadingList] = useState(true);
   const [openTabs, setOpenTabs] = useState([]);
   const [activeTab, setActiveTab] = useState(null);
   const [messages, setMessages] = useState({});
@@ -98,8 +99,8 @@ function Conversations() {
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [loadingConversationId, setLoadingConversationId] = useState(null);
 
-  const { user } = useAuth();
-  const userId = user?.id;
+  const { user, isAuthenticated } = useAuth();
+  const userId = user?.id ?? user?.userId ?? user?.sub;
   const theme = useTheme();
 
   // TabsBar implemented with dnd-kit (sortable)
@@ -276,8 +277,8 @@ function Conversations() {
 
     const setupSignalR = async () => {
       try {
-        connection.on("InitialConversations", (data) => {
-          // data es un array de conversaciones iniciales
+        // SignalR JS recibe nombres en minúsculas; registrar en minúsculas para que los handlers se invoquen
+        connection.on("initialconversations", (data) => {
           if (Array.isArray(data)) {
             setConversationList(data.map(conv => ({
               ...conv,
@@ -286,15 +287,14 @@ function Conversations() {
             })));
           }
         });
-        connection.on("ReceiveTyping", (conversationId, sender) => {
+        connection.on("receivetyping", (conversationId, sender) => {
           const convId = String(conversationId);
           if (typingStopTimeout.current) {
             clearTimeout(typingStopTimeout.current);
           }
           setTypingState((prev) => ({ ...prev, [convId]: { isTyping: true, sender } }));
         });
-        // Suscripción al evento de nueva conversación
-        connection.on("NewConversation", (conv) => {
+        connection.on("newconversation", (conv) => {
           console.log("🆕 Nueva conversación recibida:", conv);
           // Convertir id a string para evitar errores de tipo
           const convStr = { ...conv, id: String(conv.id) };
@@ -316,7 +316,7 @@ function Conversations() {
           });
         });
 
-        connection.on("ReceiveStopTyping", (conversationId, sender) => {
+        connection.on("receivestoptyping", (conversationId, sender) => {
           const convId = String(conversationId);
           typingStopTimeout.current = setTimeout(() => {
             setTypingState((prev) => {
@@ -328,7 +328,7 @@ function Conversations() {
           }, 500);
         });
 
-        connection.on("Heartbeat", (conversationId) => {
+        connection.on("heartbeat", (conversationId) => {
           console.log(`❤️ Heartbeat recibido para conversación ${conversationId}`);
           const convId = String(conversationId);
           setConversationList(prevList =>
@@ -340,16 +340,15 @@ function Conversations() {
           );
         });
 
-        connection.on("NewConversationOrMessage", (msg) => {
-          // Loguear todos los mensajes recibidos para depuración
-          console.log("📨 [SignalR] Mensaje recibido:", msg);
-          // Procesar y agregar el mensaje al estado, sin filtrar por 'from'
+        connection.on("newconversationormessage", (msg) => {
           const convId = String(msg.conversationId);
-
           const newMsg = { ...msg };
+          // Normalizar fromRole: user=izquierda, bot+admin=derecha
+          const fromRaw = (newMsg.from ?? newMsg.fromRole ?? "user").toString().toLowerCase();
+          newMsg.fromRole = fromRaw === "admin" ? "admin" : fromRaw === "bot" ? "bot" : "user";
+          newMsg.from = newMsg.fromRole;
           const hasFiles = newMsg.files && newMsg.files.length > 0;
           const hasImages = newMsg.images && newMsg.images.length > 0;
-
           if (hasFiles || hasImages) {
             newMsg.text = null;
           }
@@ -389,8 +388,7 @@ function Conversations() {
           );
           });
 
-          // 🆕 Suscribimos al evento UpdateConversation para actualizar el último mensaje en tiempo real
-          connection.on("UpdateConversation", (conv) => {
+          connection.on("updateconversation", (conv) => {
             if (!conv || !conv.id) return;
             const convId = String(conv.id);
             console.log('[UpdateConversation] recibido:', conv);
@@ -448,30 +446,42 @@ function Conversations() {
     setupSignalR();
 
     return () => {
-      console.log("🧹 Limpiando y deteniendo la conexión de SignalR.");
-      connection.off("ReceiveTyping");
-      connection.off("ReceiveStopTyping");
-      connection.off("NewConversationOrMessage");
-      connection.off("Heartbeat");
-      if (connection.state === "Connected") {
-        connection.stop();
+      const conn = connectionRef.current;
+      if (!conn) return;
+      connectionRef.current = null;
+      try {
+        conn.off("initialconversations");
+        conn.off("receivetyping");
+        conn.off("receivestoptyping");
+        conn.off("newconversation");
+        conn.off("newconversationormessage");
+        conn.off("heartbeat");
+        conn.off("updateconversation");
+      } catch (e) { /* ignore */ }
+      if (conn.state === "Connected" || conn.state === "Connecting") {
+        conn.stop().catch(() => {});
       }
+      messageCache.current.clear();
+      messageCursor.current.clear();
+      visibleCounts.current.clear();
     };
   }, []);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!isAuthenticated) {
+      setLoadingList(false);
+      return;
+    }
+    setLoadingList(true);
     const fetchData = async () => {
       try {
-        const data = await getConversationsWithLastMessage(userId);
-        const fetchedConversations = data.map((conv) => ({ ...conv, id: String(conv.id), updatedAt: conv.lastMessage?.timestamp || conv.updatedAt, }));
+        const data = await getConversationsWithLastMessage();
+        const raw = Array.isArray(data) ? data : (data?.conversations || data?.data || []);
+        const fetchedConversations = (Array.isArray(raw) ? raw : []).map((conv) => ({ ...conv, id: String(conv.id), updatedAt: conv.lastMessage?.timestamp || conv.updatedAt }));
         setConversationList(prevList => {
-          // Fusiona las conversaciones nuevas (SignalR) con las del fetch, evitando duplicados
           const merged = [...fetchedConversations];
           prevList.forEach(conv => {
-            if (!merged.some(c => c.id === conv.id)) {
-              merged.push(conv);
-            }
+            if (!merged.some(c => c.id === conv.id)) merged.push(conv);
           });
           return merged;
         });
@@ -482,10 +492,12 @@ function Conversations() {
         setIaPausedMap(initialIaPausedMap);
       } catch (error) {
         console.error("Error al obtener conversaciones:", error);
+      } finally {
+        setLoadingList(false);
       }
     };
     fetchData();
-  }, [userId]);
+  }, [isAuthenticated]);
 
   const handleSelectConversation = async (conv) => {
     const idStr = `${conv.id}`;
@@ -525,7 +537,9 @@ function Conversations() {
         setMessages((prev) => ({ ...prev, [idStr]: [previewMsg] }));
       }
 
-      const cached = messageCache.current.get(idStr);
+      // Invalidar caché al abrir para forzar carga fresca con todas las respuestas (incl. predefinidas de IA)
+      messageCache.current.delete(idStr);
+      const cached = null; // Siempre recargar para obtener respuestas predefinidas de IA
     if (cached) {
       // When we have a cached full history, only render the most-recent slice
       const visible = Math.min(DEFAULT_VISIBLE_ON_OPEN, cached.length);
@@ -541,26 +555,60 @@ function Conversations() {
     } else {
       setLoadingConversationId(idStr);
       try {
-        // Cargamos solo los mensajes necesarios inicialmente para evitar descargar TODO el historial.
-        // Estrategia:
-        // - Si la conversación tiene mensajes no leídos (conv.unreadCount > 0), solicitamos sólo
-        //   esos mensajes + un pequeño contexto (mínimo 10, máximo 100).
-        // - Si no hay no leídos, solicitamos una ventana pequeña (por ejemplo 20) y permitimos
-        //   paginar hacia atrás al hacer scroll (loadMoreOlderMessages).
-        const unread = Number(conv.unreadCount || 0);
-  const MIN_INITIAL = 10;
-  const DEFAULT_INITIAL = 20;
-  const MAX_INITIAL = 25; // evita pedir cantidades enormes (ajustado a 25 por petición)
-        let initialLimit;
-        if (unread > 0) {
-          initialLimit = Math.min(Math.max(unread, MIN_INITIAL), MAX_INITIAL);
-        } else {
-          initialLimit = DEFAULT_INITIAL;
+        // Priorizar getMessagesByConversationId (Admin) para historial completo (bot, user, admin)
+        // Luego history (AllowAnonymous) y grouped como fallback
+        let historyArray = [];
+        const byConv = await getMessagesByConversationId(conv.id);
+        if (Array.isArray(byConv) && byConv.length > 0) {
+          historyArray = byConv.map((m) => {
+            let fr = (m.fromRole || m.sender || m.Sender || "user").toString().toLowerCase();
+            if (fr !== "admin" && fr !== "bot" && fr !== "user") fr = "user";
+            return {
+              ...m,
+              id: String(m.id ?? `${idStr}-${m.timestamp || Date.now()}`),
+              text: m.text ?? m.messageText ?? "",
+              timestamp: m.timestamp ?? m.createdAt,
+              fromRole: fr,
+              fromId: m.fromId ?? null,
+              fromName: m.fromName ?? null,
+            };
+          }).sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+        }
+        if (historyArray.length === 0) {
+          const historyResponse = await getConversationHistory(conv.id);
+          const raw = historyResponse?.history || historyResponse?.History
+            || historyResponse?.conversationDetails?.history || historyResponse?.conversationDetails?.History
+            || (Array.isArray(historyResponse) ? historyResponse : []);
+          historyArray = Array.isArray(raw) ? raw : [];
         }
 
-        // Prefer server-side grouped-by-day response when available. This returns a shape like:
-        // { conversationId, days: [{ date, label, messages: [...] }], hasMore, nextBefore }
-  const grouped = await getMessagesGrouped(conv.id, null, initialLimit);
+        if (Array.isArray(historyArray) && historyArray.length > 0) {
+          const historyNormalized = historyArray.map((msg) => {
+            const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+            const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+            let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? msg.sender ?? "user";
+            try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+            let fromRole = (fromRoleRaw || "").toLowerCase();
+            if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+            return { ...msg, id: String(id), text, fromRole, fromId: msg.fromId ?? msg.FromId, fromName: msg.fromName ?? msg.FromName };
+          });
+          const merged = historyNormalized.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+          messageCache.current.set(idStr, merged);
+          const visible = Math.min(DEFAULT_VISIBLE_ON_OPEN, merged.length);
+          visibleCounts.current.set(idStr, visible);
+          messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
+          setMessages((prev) => ({ ...prev, [idStr]: merged.slice(-visible) }));
+          if (conv.unreadCount > 0) {
+            try { await markMessagesAsRead(conv.id); } catch (e) { /* ignore */ }
+          }
+        } else {
+          // Si history viene vacío, usar grouped (paginado por día)
+          const unread = Number(conv.unreadCount || 0);
+          const MIN_INITIAL = 10;
+          const DEFAULT_INITIAL = 20;
+          const MAX_INITIAL = 25;
+          let initialLimit = unread > 0 ? Math.min(Math.max(unread, MIN_INITIAL), MAX_INITIAL) : DEFAULT_INITIAL;
+          const grouped = await getMessagesGrouped(conv.id, null, initialLimit);
   console.debug("🔎 [getMessagesGrouped] request:", { conversationId: conv.id, initialLimit });
   console.debug("🔎 [getMessagesGrouped] payload for conv", conv.id, grouped);
         // Server now provides days newest-first (orderedNewestFirst=true). Do not reverse on client.
@@ -710,21 +758,45 @@ function Conversations() {
               return { ...prev, [idStr]: fallbackSlice };
             });
           } else {
-            // If the grouped and paged endpoints returned empty, try older fallback
-            console.warn(`⚠️ [getConversationHistory] empty history for conv ${conv.id}, trying fallback /api/Messages/by-conversation`);
+            // Fallback: usar getConversationHistory (mismo endpoint que móvil) para obtener historial completo (bot, user, admin)
+            console.warn(`⚠️ [Conversations] grouped/paged vacío para conv ${conv.id}, intentando getConversationHistory (history)`);
             try {
-              const fb = await getMessagesByConversationId(conv.id);
-              if (Array.isArray(fb) && fb.length > 0) {
-                const fallbackNormalized = fb.map((msg) => ({ ...msg, id: msg.id ? String(msg.id) : `${idStr}-${Date.now()}`, text: msg.text || msg.messageText || "" }));
+              const historyResponse = await getConversationHistory(conv.id);
+              const historyArray = historyResponse?.history || historyResponse?.History || [];
+              if (Array.isArray(historyArray) && historyArray.length > 0) {
+                const historyNormalized = historyArray.map((msg) => {
+                  const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
+                  const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
+                  let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
+                  try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
+                  let fromRole = (fromRoleRaw || "").toLowerCase();
+                  if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
+                  return { ...msg, id: String(id), text, fromRole, fromId: msg.fromId ?? msg.FromId, fromName: msg.fromName ?? msg.FromName };
+                });
                 setMessages((prev) => {
                   const existing = prev[idStr] || [];
                   const map = new Map();
                   existing.forEach((m) => map.set(String(m.id), m));
-                  fallbackNormalized.forEach((m) => map.set(String(m.id), m));
+                  historyNormalized.forEach((m) => map.set(String(m.id), m));
                   const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
                   messageCache.current.set(idStr, merged);
                   return { ...prev, [idStr]: merged };
                 });
+              } else {
+                // Último recurso: /api/Messages/by-conversation
+                const fb = await getMessagesByConversationId(conv.id);
+                if (Array.isArray(fb) && fb.length > 0) {
+                  const fallbackNormalized = fb.map((msg) => ({ ...msg, id: msg.id ? String(msg.id) : `${idStr}-${Date.now()}`, text: msg.text || msg.messageText || "" }));
+                  setMessages((prev) => {
+                    const existing = prev[idStr] || [];
+                    const map = new Map();
+                    existing.forEach((m) => map.set(String(m.id), m));
+                    fallbackNormalized.forEach((m) => map.set(String(m.id), m));
+                    const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+                    messageCache.current.set(idStr, merged);
+                    return { ...prev, [idStr]: merged };
+                  });
+                }
               }
             } catch (fbErr) {
               console.error(`❌ [fallback] error loading messages for conv ${conv.id}`, fbErr);
@@ -732,6 +804,7 @@ function Conversations() {
               if (cachedNow) setMessages((prev) => ({ ...prev, [idStr]: cachedNow }));
             }
           }
+        }
         }
       } catch (err) {
         console.error("❌ Error cargando historial de la conversación:", err);
@@ -958,6 +1031,7 @@ function Conversations() {
                 <SoftBox p={2} sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
                   <ConversationList
                     conversations={conversationList}
+                    loading={loadingList}
                     messagesMap={messages}
                     highlightedIds={highlightedIds}
                     onClearHighlight={(id) => setHighlightedIds((prev) => prev.filter((cid) => cid !== id))}

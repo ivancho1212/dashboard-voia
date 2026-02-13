@@ -2,7 +2,7 @@ const path = require('path');
 const webpack = require('webpack');
 
 module.exports = {
-  entry: './src/widget/index.js',
+  entry: './src/widget/index.js', // Render directo (restaurado: iframe causaba problemas de render + memoria)
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'widget.js',

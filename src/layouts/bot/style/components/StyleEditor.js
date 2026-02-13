@@ -48,6 +48,8 @@ export default function StyleEditor({
       allowFileUpload:
         style.allowFileUpload ?? style.AllowFileUpload ?? style.allow_file_upload ?? true,
       position: style.position || style.Position || "bottom-right",
+      width: style.width ?? style.Width ?? 380,
+      height: style.height ?? style.Height ?? 600,
       theme: style.theme || style.Theme || "light",
       customCss: style.customCss || style.CustomCss || style.custom_css || "",
     };
@@ -337,18 +339,43 @@ export default function StyleEditor({
             fullWidth
           >
             {[
-              ["top-left", "Arriba a la izquierda"],
-              ["top-right", "Arriba a la derecha"],
+              ["top-left", "Arriba izquierda"],
+              ["top-right", "Arriba derecha"],
               ["center-left", "Centro izquierda"],
               ["center-right", "Centro derecha"],
-              ["bottom-left", "Abajo a la izquierda"],
-              ["bottom-right", "Abajo a la derecha"],
+              ["bottom-left", "Abajo izquierda"],
+              ["bottom-right", "Abajo derecha"],
             ].map(([value, label]) => (
               <MenuItem key={value} value={value} style={{ width: "100%" }}>
                 {label}
               </MenuItem>
             ))}
           </SoftSelect>
+        </SoftBox>
+      </SoftBox>
+
+      <SoftBox display="flex" gap={2} mb={2} flexWrap="wrap">
+        <SoftBox flex={1} minWidth={100}>
+          <SoftTypography variant="caption">Ancho (px)</SoftTypography>
+          <TextField
+            type="number"
+            fullWidth
+            size="small"
+            value={editorStyle.width ?? 380}
+            onChange={(e) => handleStyleChange((prev) => ({ ...prev, width: Math.min(600, Math.max(280, parseInt(e.target.value, 10) || 380)) }))}
+            inputProps={{ min: 280, max: 600 }}
+          />
+        </SoftBox>
+        <SoftBox flex={1} minWidth={100}>
+          <SoftTypography variant="caption">Alto (px)</SoftTypography>
+          <TextField
+            type="number"
+            fullWidth
+            size="small"
+            value={editorStyle.height ?? 600}
+            onChange={(e) => handleStyleChange((prev) => ({ ...prev, height: Math.min(800, Math.max(400, parseInt(e.target.value, 10) || 600)) }))}
+            inputProps={{ min: 400, max: 800 }}
+          />
         </SoftBox>
       </SoftBox>
 

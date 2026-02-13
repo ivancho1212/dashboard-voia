@@ -32,17 +32,8 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
   const hasFiles = Boolean(message.file || (message.multipleFiles && message.multipleFiles.length > 0) || (message.images && message.images.length > 0));
   const hasOnlyFiles = !message.text && hasFiles;
   
-  // DEBUG: Log file structure
-  if (message.multipleFiles?.length > 0) {
-    console.log(`[MessageBubble DEBUG] multipleFiles structure:`, {
-      length: message.multipleFiles.length,
-      first: message.multipleFiles[0],
-      firstKeys: Object.keys(message.multipleFiles[0] || {}),
-      fileType: message.multipleFiles[0]?.fileType,
-      isImage: message.multipleFiles[0]?.fileType?.startsWith?.("image/")
-    });
-  }
   const singleImageOnly = hasOnlyFiles && ( (message.file && message.file.fileType?.startsWith("image/")) || imageFiles.length === 1 );
+  const multipleImagesOnly = hasOnlyFiles && imageFiles.length > 1;
 
   const containerStyle = {
     alignSelf: isUser ? "flex-end" : "flex-start",
@@ -52,9 +43,9 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
   // Reduce padding when the message contains only an image so the bubble hugs the image
   padding: singleImageOnly ? "4px" : (hasOnlyFiles ? "4px" : hasImage ? "2px" : "2px 10px"),
   borderRadius: hasImage ? "12px" : "14px",
-  // When single image only, constrain the bubble itself to the same clamp so it doesn't expand wide
-  maxWidth: singleImageOnly ? "180px" : (hasOnlyFiles ? "none" : "80%"),
-  minWidth: singleImageOnly ? "0" : (hasOnlyFiles ? "0" : "80px"),
+  // Single image: 180px. Grupo: widget 220px. Móvil: mismo tamaño (min 180px, max 220px)
+  maxWidth: singleImageOnly ? "180px" : (multipleImagesOnly ? "220px" : (hasOnlyFiles ? "none" : "80%")),
+  minWidth: singleImageOnly ? "0" : (multipleImagesOnly && isMobileView ? "180px" : (hasOnlyFiles ? "0" : "80px")),
   width: singleImageOnly ? "auto" : (hasOnlyFiles ? "auto" : "fit-content"),
     wordBreak: "break-word",
     fontSize: "13px",
@@ -105,21 +96,25 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
   // State to store blob URLs for images
   const [imageBlobUrls, setImageBlobUrls] = useState({});
   const [blobsLoading, setBlobsLoading] = useState(false);
+  const blobUrlsRef = React.useRef({});
+
+  // Evitar doble/triple prefijo data:...;base64, (caché, payload legacy o backend)
+  const normalizeDataUrl = (url) => {
+    if (!url || typeof url !== "string") return url;
+    let s = url;
+    while (/^data:[^;]+;base64,data:/i.test(s)) {
+      s = s.replace(/^data:[^;]+;base64,/, "");
+    }
+    return s;
+  };
 
   // Helper function to get the backend API URL
-  // In development: construct from window.location by replacing port 3000 with 5006
-  // In production: would be configured via environment or passed as prop
   const getBackendUrl = () => {
-    // Check if there's a global config
-    if (window.__VOIA_BACKEND_URL__) {
-      return window.__VOIA_BACKEND_URL__;
-    }
-    
-    // Development: Replace frontend port (3000) with backend port (5006)
-    const { protocol, hostname } = window.location;
-    const backendUrl = `${protocol}//${hostname}:5006`;
-    console.log(`[getBackendUrl] Resolved backend URL:`, backendUrl);
-    return backendUrl;
+    if (window.__VOIA_BACKEND_URL__) return window.__VOIA_BACKEND_URL__;
+    const envUrl = typeof process !== "undefined" && process.env?.REACT_APP_API_URL;
+    if (envUrl) return envUrl.replace(/\/$/, "");
+    const { protocol, hostname } = typeof window !== "undefined" ? window.location : { protocol: "http:", hostname: "localhost" };
+    return `${protocol}//${hostname}:5006`;
   };
 
   // Fetch image as blob and convert to blob URL
@@ -133,7 +128,6 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
         fullUrl = `${getBackendUrl()}${fileUrl.includes("/api/files/chat/") && !fileUrl.includes("/inline") ? fileUrl + "/inline" : fileUrl}`;
       }
       
-      console.log(`[fetchImageAsBlob] Fetching: ${fullUrl}`);
       
       // 🔹 CORS FIX: No incluir credenciales para URLs públicas de archivos
       // Esto evita OpaqueResponseBlocking cuando el servidor tiene Access-Control-Allow-Credentials: *
@@ -155,7 +149,6 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
       
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
-      console.log(`[fetchImageAsBlob] Success: ${fileUrl} → ${blobUrl}`);
       return { fileUrl, blobUrl };
     } catch (error) {
       console.error(`[fetchImageAsBlob] Error fetching image: ${fileUrl}`, error);
@@ -164,86 +157,59 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
   };
 
   // Load images as blobs when multipleFiles change
+  // Para /uploads/ NO usamos fetch (CORS falla en widget embebido) - usamos URL directa en <img>
+  const isPublicUpload = (url) => url && (url.startsWith("/uploads/") || url.startsWith("http"));
   useEffect(() => {
     const loadImages = async () => {
       if (!message.multipleFiles || message.multipleFiles.length === 0) {
         setBlobsLoading(false);
         return;
       }
-      
+      const imageFiles = message.multipleFiles.filter((f) =>
+        f.fileType?.startsWith("image/") || ["jpg", "jpeg", "png", "gif", "webp"].some((ext) => (f.fileName || "").toLowerCase().endsWith(ext))
+      );
+      if (imageFiles.length === 0) {
+        setBlobsLoading(false);
+        return;
+      }
       setBlobsLoading(true);
       const newBlobUrls = {};
-      
-      for (const file of message.multipleFiles) {
-        if (file.fileUrl && !imageBlobUrls[file.fileUrl]) {
-          const result = await fetchImageAsBlob(file.fileUrl);
-          if (result && result.blobUrl) {
-            newBlobUrls[result.fileUrl] = result.blobUrl;
-            console.log(`[useEffect] Stored blob URL for ${result.fileUrl}:`, result.blobUrl);
-          }
-        }
+      for (const file of imageFiles) {
+        if (!file.fileUrl || imageBlobUrls[file.fileUrl]) continue;
+        if (isPublicUpload(file.fileUrl)) continue; // Usar buildUrl directo para /uploads/
+        const result = await fetchImageAsBlob(file.fileUrl);
+        if (result && result.blobUrl) newBlobUrls[result.fileUrl] = result.blobUrl;
       }
-      
-      if (Object.keys(newBlobUrls).length > 0) {
-        console.log(`[useEffect] Updating imageBlobUrls with:`, newBlobUrls);
-        setImageBlobUrls(prev => ({ ...prev, ...newBlobUrls }));
-      }
+      if (Object.keys(newBlobUrls).length > 0) setImageBlobUrls((prev) => ({ ...prev, ...newBlobUrls }));
       setBlobsLoading(false);
     };
-    
     loadImages();
-  }, [message.multipleFiles?.map(f => f.fileUrl).join(',')]);
+  }, [message.multipleFiles?.map((f) => f.fileUrl).join(",")]);
 
-  // Cleanup blob URLs on unmount
+  blobUrlsRef.current = imageBlobUrls;
+
+  // Cleanup blob URLs on unmount (usa ref para capturar el valor actual, evita fuga de memoria)
   useEffect(() => {
     return () => {
-      Object.values(imageBlobUrls).forEach(blobUrl => {
+      Object.values(blobUrlsRef.current).forEach(blobUrl => {
         try {
           URL.revokeObjectURL(blobUrl);
-        } catch (e) {
-          console.error('Error revoking blob URL:', e);
-        }
+        } catch (e) {}
       });
     };
   }, []);
 
   const buildUrl = (url) => {
-    if (!url) {
-      console.log(`[buildUrl] No URL provided`);
-      return null;
-    }
-    
-    // Check if we have a blob URL for this file
-    if (imageBlobUrls[url]) {
-      console.log(`[buildUrl] Using blob URL for: ${url}`);
-      return imageBlobUrls[url];
-    }
-    
-    console.log(`[buildUrl] Input URL:`, url);
-    
-    // If it's already a full URL, return as-is
-    if (url.startsWith("http")) {
-      console.log(`[buildUrl] Full URL, returning as-is:`, url);
-      return url;
-    }
-    
-    // If it starts with /api/ or /uploads/, prepend the backend URL
+    if (!url) return null;
+    if (imageBlobUrls[url]) return imageBlobUrls[url];
+    if (url.startsWith("http")) return url;
     if (url.startsWith("/api/") || url.startsWith("/uploads/")) {
-      // Add /inline suffix for protected files if not already there
       if (url.includes("/api/files/chat/") && !url.includes("/inline")) {
-        const result = `${getBackendUrl()}${url}/inline`;
-        console.log(`[buildUrl] Protected file with /inline added:`, result);
-        return result;
+        return `${getBackendUrl()}${url}/inline`;
       }
-      const result = `${getBackendUrl()}${url}`;
-      console.log(`[buildUrl] Backend URL:`, result);
-      return result;
+      return `${getBackendUrl()}${url}`;
     }
-    
-    // Default: prepend backend server
-    const result = `${getBackendUrl()}${url}`;
-    console.log(`[buildUrl] Default backend URL:`, result);
-    return result;
+    return `${getBackendUrl()}${url}`;
   };
 
   // Some servers return a presigned-upload URL (e.g. /api/ChatUploadedFiles/presigned-upload/{token})
@@ -267,21 +233,11 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
       {/* Multiple files (images grid + docs) */}
       {message.multipleFiles?.length > 0 && (() => {
         const files = message.multipleFiles || [];
-        console.log(`[MessageBubble] Processing multipleFiles - LENGTH:`, files.length, 'FILES:', files);
-        console.log(`[MessageBubble] First file details:`, {
-          file: files[0],
-          fileName: files[0]?.fileName,
-          fileType: files[0]?.fileType,
-          fileUrl: files[0]?.fileUrl,
-          isImage: files[0]?.fileType?.startsWith("image/"),
-          endsInExt: files[0]?.fileName?.toLowerCase()?.match(/\.(jpg|jpeg|png|gif|webp)$/)
-        });
-        
-        // If there's exactly one file in multipleFiles and it's an image, render it like the single-image case so bubble doesn't expand full-width
+        // If there's exactly one file in multipleFiles and it's an image, render it like the single-image case
         if (files.length === 1 && files[0]?.fileType?.startsWith("image/")) {
           const file = files[0];
-          const srcCandidate = file.fileContent || file.preview || imageBlobUrls[file.fileUrl] || localPreview || (file.fileUrl ? buildUrl(file.fileUrl) : null);
-          console.log(`[MessageBubble] ✅ Single image condition MET - rendering ONLY single image`);
+          const rawSrc = file.fileContent || file.preview || imageBlobUrls[file.fileUrl] || localPreview || (file.fileUrl ? buildUrl(file.fileUrl) : null);
+          const srcCandidate = normalizeDataUrl(rawSrc);
           return (
             <div style={{ marginTop: "4px", display: "inline-block", width: "auto", maxWidth: "180px" }}>
                 {srcCandidate ? (
@@ -292,7 +248,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
                       const blobMap = srcCandidate && srcCandidate.startsWith('blob:') ? { [file.fileUrl]: srcCandidate } : {};
                       openImageModal([file], srcCandidate, blobMap);
                     }}
-                    onLoad={() => console.log(`✅ [MessageBubble] Image loaded successfully: ${srcCandidate}`)}
+                    onLoad={() => {}}
                     onError={(e) => console.error(`❌ [MessageBubble] Image failed to load: ${srcCandidate}`, e.target.status)}
                     style={{ display: "block", width: "100%", height: "auto", maxHeight: "300px", borderRadius: "10px", margin: 0, cursor: "pointer", objectFit: "contain" }}
                   />
@@ -307,39 +263,39 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
               </div>
           );
         }
-        
-        console.log(`[MessageBubble] ❌ Single image condition NOT MET (files.length=${files.length}, isImage=${files[0]?.fileType?.startsWith("image/")}) - rendering GRID`);
 
+        // Si hay un solo archivo y es documento (no imagen), renderizar como enlace de descarga
+        if (files.length === 1 && !files[0]?.fileType?.startsWith("image/")) {
+          const file = files[0];
+          const href = buildUrl(file.fileUrl);
+          return (
+            <a href={href} download={file.fileName} target="_blank" rel="noopener noreferrer" title={file.fileName} style={{ padding: "8px 12px", backgroundColor: "#f5f9ff", borderRadius: "12px", textDecoration: "none", color: "#0b63d6", display: "inline-flex", alignItems: "center", gap: "8px", boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.02)", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              📎 {truncateName(file.fileName)}
+            </a>
+          );
+        }
+        
         return (
           <>
-            {/* Image thumbnails - dynamic 2-column grid */}
+            {/* Image thumbnails: widget compacto (200px). Móvil: mismo tamaño que widget (clamp 180–220px) */}
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: "6px",
-                marginBottom: "6px",
-                width: "clamp(160px, 45vw, 320px)",
+                gap: isMobileView ? "6px" : "4px",
+                marginBottom: "4px",
+                width: isMobileView ? "clamp(180px, 55vw, 220px)" : "clamp(120px, 28vw, 200px)",
                 boxSizing: "border-box",
               }}
             >
-              {(() => {
-                const imageFiltered = files.filter((file) => {
-                  const ext = ["jpg", "jpeg", "png", "gif", "webp"].some((ext) => file.fileName?.toLowerCase().endsWith(ext));
-                  console.log(`[MessageBubble] Image filter check:`, {
-                    fileName: file.fileName,
-                    isImage: ext,
-                    fileType: file.fileType
-                  });
-                  return ext;
-                });
-                console.log(`[MessageBubble] Image grid will render ${imageFiltered.length} images`);
-                return imageFiltered;
-              })()
+              {files.filter((file) =>
+                ["jpg", "jpeg", "png", "gif", "webp"].some((ext) => file.fileName?.toLowerCase().endsWith(ext))
+              )
                 .slice(0, 4)
                 .map((file, i, arr) => {
                   const isOverflowFourth = i === 3 && files.length > 4;
-                  const srcCandidate = file.fileContent || file.preview || imageBlobUrls[file.fileUrl] || (file.fileUrl ? buildUrl(file.fileUrl) : null);
+                  const rawSrc = file.fileContent || file.preview || imageBlobUrls[file.fileUrl] || (file.fileUrl ? buildUrl(file.fileUrl) : null);
+                  const srcCandidate = normalizeDataUrl(rawSrc);
 
                   return (
                     <div
@@ -360,7 +316,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
                       }}
                     >
                       {srcCandidate ? (
-                        <img src={srcCandidate} alt={file.fileName} onLoad={() => console.log(`✅ Image grid loaded: ${file.fileName}`)} onError={(e) => console.error(`❌ Image grid failed: ${file.fileName}`, e)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img src={srcCandidate} alt={file.fileName} onError={(e) => { if (process.env.NODE_ENV === 'development') console.error(`❌ Image failed: ${file.fileName}`, e); }} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       ) : (
                         <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5", color: "#666" }}>
                           ⏳
@@ -379,11 +335,7 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
             {/* Documents - NO MOSTRAR EN MÓVIL si solo hay imágenes */}
             {!(isMobileView && files.every(f => ["jpg", "jpeg", "png", "gif", "webp"].some((ext) => f.fileName?.toLowerCase().endsWith(ext)))) && (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              {(() => {
-                const docFiltered = files.filter((file) => !["jpg", "jpeg", "png", "gif", "webp"].some((ext) => file.fileName?.toLowerCase().endsWith(ext)));
-                console.log(`[MessageBubble] Documents section will render ${docFiltered.length} docs:`, docFiltered);
-                return docFiltered;
-              })()
+              {files.filter((file) => !["jpg", "jpeg", "png", "gif", "webp"].some((ext) => file.fileName?.toLowerCase().endsWith(ext)))
                   .map((file, i) => {
                     // 🔹 Usar buildUrl que agrega /inline para protegidos
                     const href = buildUrl(file.fileUrl);
@@ -404,14 +356,15 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
           message.file.fileType?.startsWith("image/") ? (
             <div style={{ marginTop: "4px", display: "inline-block", width: "auto", maxWidth: "180px" }}>
               {(() => {
-                const srcCandidate = localPreview || message.file.fileContent || message.file.preview || imageBlobUrls[message.file.fileUrl] || (message.file.fileUrl ? buildUrl(message.file.fileUrl) : null);
+                const rawSrc = localPreview || message.file.fileContent || message.file.preview || imageBlobUrls[message.file.fileUrl] || (message.file.fileUrl ? buildUrl(message.file.fileUrl) : null);
+                const srcCandidate = normalizeDataUrl(rawSrc);
                 return (
                   srcCandidate ? (
                     <img
                       src={srcCandidate}
                       alt={message.file.fileName}
                       onClick={() => openImageModal([message.file], srcCandidate)}
-                      onLoad={() => console.log(`✅ Single file image loaded: ${message.file.fileName}`)}
+                      onLoad={() => {}}
                       onError={(e) => console.error(`❌ Single file image failed: ${message.file.fileName}`, e)}
                       style={{ display: "block", width: "100%", height: "auto", maxHeight: "300px", borderRadius: "10px", margin: 0, cursor: "pointer", objectFit: "contain" }}
                     />
@@ -442,8 +395,8 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
         )
       )}
 
-      {/* Grouped images (message.images) - SOLO EN WIDGET, NO EN MÓVIL */}
-      {!isMobileView && message.images?.length > 0 && (() => {
+      {/* Grouped images (message.images) - widget y móvil (con vista previa al hacer click) */}
+      {message.images?.length > 0 && (() => {
         const imgs = message.images || [];
         const visible = imgs.slice(0, 4);
         const total = imgs.length;
@@ -472,16 +425,17 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
         const areaNames = ['a', 'b', 'c', 'd'];
 
         return (
-          <div style={{ display: 'grid', gridTemplateColumns, gridTemplateRows, gridTemplateAreas, gap: '6px', width: 'clamp(160px, 60vw, 420px)', marginBottom: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns, gridTemplateRows, gridTemplateAreas, gap: '4px', width: 'clamp(120px, 28vw, 200px)', marginBottom: '6px' }}>
             {visible.map((img, i) => {
               const area = areaNames[i] || areaNames[areaNames.length - 1];
               const isOverflowFourth = i === 3 && total > 4;
-              const fullUrl = imageBlobUrls[img.fileUrl] || img.fileContent || img.preview || (img.fileUrl ? buildUrl(img.fileUrl) : null);
+              const rawFull = imageBlobUrls[img.fileUrl] || img.fileContent || img.preview || (img.fileUrl ? buildUrl(img.fileUrl) : null);
+              const fullUrl = normalizeDataUrl(rawFull);
 
               return (
                 <div
                   key={i}
-                  style={{ gridArea: area, position: 'relative', width: '100%', height: visible.length === 1 ? 'auto' : '120px', borderRadius: '8px', overflow: 'hidden', cursor: 'pointer' }}
+                  style={{ gridArea: area, position: 'relative', width: '100%', height: visible.length === 1 ? 'auto' : '90px', borderRadius: '6px', overflow: 'hidden', cursor: 'pointer' }}
                   onClick={() => fullUrl && openImageModal(imgs, fullUrl)}
                 >
                   {fullUrl ? (

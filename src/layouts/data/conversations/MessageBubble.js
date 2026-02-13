@@ -6,8 +6,8 @@ import { buildFileUrl, downloadImagesAsZip } from "utils/fileHelpers";
 const MessageBubble = React.forwardRef(
   ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen, isAIActive }, ref) => {
     const { fromRole, fromName, text, timestamp, files = [], replyTo } = msg;
-    console.log('[MessageBubble] Renderizando mensaje:', msg);
-    const isRight = ["admin", "bot"].includes(fromRole);
+    // Derecha: saludo inicial, respuestas IA (bot) y admin. Izquierda: usuario público
+    const isRight = fromRole === "admin" || fromRole === "bot";
 
     const backgroundColor =
       fromRole === "admin"
@@ -27,6 +27,7 @@ const MessageBubble = React.forwardRef(
     // Blob URL state for CORS bypass
     const [imageBlobUrls, setImageBlobUrls] = useState({});
     const [blobsLoading, setBlobsLoading] = useState(false);
+    const blobUrlsRef = useRef({});
 
     // Get backend URL dynamically
     const getBackendUrl = () => {
@@ -85,6 +86,17 @@ const MessageBubble = React.forwardRef(
       loadBlobs();
     }, [imageFiles.map(f => f.fileUrl).join(',')]);
 
+    blobUrlsRef.current = imageBlobUrls;
+    useEffect(() => {
+      return () => {
+        Object.values(blobUrlsRef.current).forEach((blobUrl) => {
+          try {
+            URL.revokeObjectURL(blobUrl);
+          } catch (e) {}
+        });
+      };
+    }, []);
+
     // Build URL with blob URL priority
     const buildUrl = (fileUrl) => {
       if (imageBlobUrls[fileUrl]) {
@@ -94,17 +106,7 @@ const MessageBubble = React.forwardRef(
     };
 
   const hasImage = imageFiles.length > 0;
-  
-  // DEBUG
-  if ((files || msg.images || []).length > 0) {
-    console.log(`[Dashboard MessageBubble] Files received:`, {
-      filesArray: files,
-      imagesArray: msg.images,
-      firstFile: (files || [])[0],
-      imageFiles: imageFiles,
-      hasImage
-    });
-  }
+
   // Reduce padding: admin messages get less padding (2px top/bottom, 6px left/right), others get 4px top/bottom
   const contentPadding = hasImage ? (imageFiles.length === 1 ? "2px" : "4px") : (isRight ? "2px 6px" : "2px 6px");
 

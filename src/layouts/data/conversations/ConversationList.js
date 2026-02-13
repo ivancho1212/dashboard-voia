@@ -17,6 +17,7 @@ import { formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
 import ConversationActions from "./ConversationActions";
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
+import Loader from "components/Loader";
 
 function ConversationList({
   conversations,
@@ -28,7 +29,8 @@ function ConversationList({
   onClearHighlight = () => {},
   activeTab,
   onShowTrash,
-  onMovedToTrash
+  onMovedToTrash,
+  loading = false
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
@@ -40,10 +42,6 @@ function ConversationList({
     setFilter(value);
     handleCloseMenu();
   };
-
-  useEffect(() => {
-    console.log('[ConversationList] conversations prop:', conversations);
-  }, [conversations]);
 
   const filtered = useMemo(() => {
     const result = conversations
@@ -63,7 +61,6 @@ function ConversationList({
         return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
       })
       .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    console.log('[ConversationList] filtered conversations:', result);
     return result;
   }, [conversations, messagesMap, filter, search]);
 
@@ -146,6 +143,9 @@ function ConversationList({
       </Box>
 
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0, maxWidth: "100%" }}>
+        {loading ? (
+          <Loader message="Cargando conversaciones..." />
+        ) : (
         <List sx={{ width: "100%", padding: 0 }}>
           {filtered.map((conv) => {
             const hasUnread = conv.unreadCount > 0 && conv.id !== activeTab;
@@ -265,6 +265,7 @@ function ConversationList({
             )}
           )}
         </List>
+        )}
       </Box>
     </Box>
   );
@@ -301,8 +302,9 @@ ConversationList.propTypes = {
   highlightedIds: PropTypes.arrayOf(PropTypes.string),
   onClearHighlight: PropTypes.func,
   activeTab: PropTypes.string,
-    onShowTrash: PropTypes.func,
-    onMovedToTrash: PropTypes.func,
-  };
+  onShowTrash: PropTypes.func,
+  onMovedToTrash: PropTypes.func,
+  loading: PropTypes.bool,
+};
 
 export default ConversationList;

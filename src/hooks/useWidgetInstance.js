@@ -8,7 +8,8 @@ import { v4 as uuidv4 } from "uuid";
  */
 export default function useWidgetInstance(propBotId, propUserId) {
   const botId = propBotId ?? 2;
-  const userId = propUserId ?? null;
+  // Forzar userId como string, usar 'anon' si está vacío/null/undefined
+  const userId = (propUserId !== undefined && propUserId !== null && propUserId !== '') ? String(propUserId) : 'anon';
   const widgetInstanceId = useMemo(() => {
     let id = sessionStorage.getItem("widgetInstanceId");
     if (!id) {

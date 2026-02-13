@@ -90,6 +90,8 @@ export default function SaveApplyButtons({
         position: style.position,
         customCss: style.customCss ?? "",
         headerBackgroundColor: style.headerBackgroundColor,
+        width: style.width ?? 380,
+        height: style.height ?? 600,
       };
       saveStyle(updatedStyle, true);
     } else {
@@ -117,6 +119,8 @@ export default function SaveApplyButtons({
       position: style.position,
       customCss: style.customCss ?? "",
       headerBackgroundColor: style.headerBackgroundColor,
+      width: style.width ?? 380,
+      height: style.height ?? 600,
     };
     await saveStyle(newStyle, false);
     setOpenModal(false);

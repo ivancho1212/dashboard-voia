@@ -254,11 +254,6 @@ function Overview() {
       finished,
     };
 
-    // debug info
-    try {
-      console.debug('[profile] bot phase detection', bot.id, { phases, bot });
-    } catch (e) {}
-
     return phases;
   };
 
@@ -474,20 +469,6 @@ function Overview() {
               </Grid>
               {/* Si hay bots, mostrar las cards, si no, no mostrar nada más */}
               {user.bots && Array.isArray(user.bots) && user.bots.length > 0 && user.bots.map((bot) => {
-                // Debug: log style-related fields so we can detect what the API returns
-                try {
-                  console.debug('[profile] bot fields', bot.id, {
-                    styleId: bot.styleId,
-                    style_id: bot.style_id,
-                    botStyleId: bot.botStyleId,
-                    hasStyle: bot.hasStyle,
-                    styleObj: bot.style,
-                    stylesArr: bot.styles,
-                  });
-                } catch (err) {
-                  console.debug('[profile] bot debug error', err);
-                }
-
                 const phases = getBotPhases(bot);
                 return (
                   

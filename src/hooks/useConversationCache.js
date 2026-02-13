@@ -17,20 +17,35 @@ export default function useConversationCache(CACHE_KEY) {
     loadedConversationsRef,
   } = useChatCache(CACHE_KEY);
 
+  // Quitar fileContent/preview (base64) antes de guardar — provocan out of memory en localStorage
+  const stripHeavyFileData = (m) => {
+    const out = { ...m, color: m.color ?? getSenderColor(m.from) };
+    if (out.multipleFiles?.length) {
+      out.multipleFiles = out.multipleFiles.map(({ fileContent, preview, ...rest }) => rest);
+    }
+    if (out.file && (out.file.fileContent || out.file.preview)) {
+      const { fileContent, preview, ...rest } = out.file;
+      out.file = rest;
+    }
+    if (out.images?.length) {
+      out.images = out.images.map(({ fileContent, preview, ...rest }) => rest);
+    }
+    return out;
+  };
+
   const saveConversationCache = useCallback((convId, msgs) => {
     if (!convId || !msgs?.length) return;
     const cacheableMessages = msgs.filter(m =>
-      (m.id || m.tempId) && ["sent", "queued", "sending"].includes(m.status)
+      (m.id || m.tempId) && m.status !== "error"
     );
     if (!cacheableMessages.length) return;
-    // Deduplicar y colorear
     const map = new Map();
     cacheableMessages.forEach(m => {
       const key = m.id ?? m.tempId;
-      map.set(key, { ...m, color: m.color ?? getSenderColor(m.from) });
+      map.set(key, stripHeavyFileData(m));
     });
     const mergedMessages = Array.from(map.values());
-    saveCache(mergedMessages);
+    saveCache(convId, mergedMessages);
   }, [saveCache]);
 
   const loadConversationCache = useCallback(() => {

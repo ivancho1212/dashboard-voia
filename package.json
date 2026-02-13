@@ -79,6 +79,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "build:widget": "webpack --config webpack.widget.js && node -e \"const fs=require('fs'); fs.copyFileSync('dist/widget.js','public/widget.js'); console.log('✅ Widget copiado a public/widget.js')\"",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "install:clean": "rm -rf node_modules/ && rm -rf package-lock.json && npm install && npm start",

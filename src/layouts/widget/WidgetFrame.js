@@ -1,5 +1,5 @@
 // Mover estos useEffect dentro del componente WidgetFrame
-import React, { useEffect, useState, useMemo, useRef } from "react";
+import React, { useEffect, useState, useMemo, useRef, useCallback } from "react";
 import PropTypes from 'prop-types';
 import ChatWidget from "layouts/bot/style/components/ChatWidget";
 import { getBotDataWithToken } from "services/botService";
@@ -21,30 +21,33 @@ function isEmoji(str) {
   return emojiRegex.test(trimmed);
 }
 
+const CONFIG_LOAD_TIMEOUT_MS = 12000;
+
 function WidgetFrame(props) {
-  // Debug hooks will be declared after state hooks to avoid TDZ
-  if (!window.widgetFrameRenderCount) window.widgetFrameRenderCount = 0;
-  window.widgetFrameRenderCount++;
-  
+  const {
+    botId: propBotId = null,
+    userId: propUserId = null,
+    isMobile: propIsMobile = false,
+    clientSecret: propClientSecret = null
+  } = props;
+
   // ✅ Si no hay props, leer de query params (cuando se carga como iframe desde /widget-frame)
   const queryParams = new URLSearchParams(window.location.search);
   
   // ✅ Obtener parámetros desde props (pasados por widget/index.js) O desde URL
-  const botId = props.botId 
-    ? parseInt(props.botId, 10) 
+  const botId = propBotId 
+    ? parseInt(propBotId, 10) 
     : queryParams.get('bot') 
       ? parseInt(queryParams.get('bot'), 10) 
       : null;
+
+  // Forzar userId como string, usar 'anon' si está vacío/null
+  let userIdRaw = propUserId != null && propUserId !== '' ? propUserId : (queryParams.get('userId') || queryParams.get('user'));
+  const userId = userIdRaw !== undefined && userIdRaw !== null && userIdRaw !== '' ? String(userIdRaw) : 'anon';
       
-  const userId = props.userId 
-    ? parseInt(props.userId, 10) 
-    : queryParams.get('user') 
-      ? parseInt(queryParams.get('user'), 10) 
-      : null;
-      
-  const isMobileView = props.isMobile === true || queryParams.get('isMobile') === 'true';
+  const isMobileView = propIsMobile === true || queryParams.get('isMobile') === 'true';
   
-  const urlSecret = props.clientSecret || queryParams.get('secret') || null;
+  const urlSecret = propClientSecret || queryParams.get('secret') || null;
   
   // Parámetros adicionales para móvil
   // ✅ Mantener como string para evitar warnings de PropTypes
@@ -65,6 +68,8 @@ function WidgetFrame(props) {
   const [containerSize, setContainerSize] = useState(null);
   // ✅ NUEVO: clientSecret como STATE para que React lo rastree
   const [clientSecret, setClientSecret] = useState(urlSecret);
+  // Cancelación de carga anterior (Strict Mode / re-runs)
+  const loadCancelRef = useRef(0);
 
   // ✅ NUEVO: Effect para obtener JWT válido del backend cuando no hay secret en URL
   React.useEffect(() => {
@@ -149,10 +154,22 @@ function WidgetFrame(props) {
     return result;
   }, [styleConfig]);
 
-  // Función para cargar configuración del bot
-  const loadBotConfiguration = async () => {
+  // Función para cargar configuración del bot (siempre termina con setLoading(false))
+  const loadBotConfiguration = useCallback(async () => {
+    const runId = ++loadCancelRef.current;
+    const isCancelled = () => runId !== loadCancelRef.current;
+
+    const safeSetLoading = (v) => {
+      if (!isCancelled()) setLoading(v);
+    };
+    const safeSetStyleConfig = (c) => {
+      if (!isCancelled()) setStyleConfig(c);
+    };
+    const safeSetError = (e) => {
+      if (!isCancelled()) setError(e);
+    };
+
     try {
-      
       // Fallback: try to find a token in localStorage (e.g., when embedding from dashboard)
       let finalToken = tokenParam;
       if ((!finalToken || finalToken === 'undefined') && typeof window !== 'undefined') {
@@ -263,13 +280,13 @@ function WidgetFrame(props) {
         };
       }
       
-      setStyleConfig({
+      safeSetStyleConfig({
         ...botConfig,
         botId,
         tokenParam
       });
-      setLoading(false);
-      
+      safeSetLoading(false);
+
       // Notificar al padre que el widget está listo
       if (window.parent !== window) {
         window.parent.postMessage({
@@ -278,12 +295,15 @@ function WidgetFrame(props) {
           config: botConfig
         }, '*');
       }
-      
     } catch (error) {
-      setError(`Error de configuración: ${error.message}`);
-      setLoading(false);
+      if (!isCancelled()) {
+        console.error('[WidgetFrame] Error en loadBotConfiguration:', error?.message || error);
+        safeSetError(`Error de configuración: ${error?.message || String(error)}`);
+      }
+    } finally {
+      safeSetLoading(false);
     }
-  };
+  }, [botId, tokenParam]);
 
   // El ChatWidget con previewMode={true} maneja su propia posición fixed
   // No necesitamos aplicar estilos al contenedor #via-widget-root
@@ -327,15 +347,35 @@ function WidgetFrame(props) {
       return;
     }
 
-    // Solo recargar si botId o tokenParam cambian realmente (no por cambios en styleConfig)
     setLoading(true);
-    loadBotConfiguration();
-  }, [botId, tokenParam]);
+    const timeoutMs = CONFIG_LOAD_TIMEOUT_MS;
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Config load timeout')), timeoutMs);
+    });
+    Promise.race([loadBotConfiguration(), timeoutPromise]).catch((err) => {
+      if (err?.message === 'Config load timeout') {
+        loadCancelRef.current++;
+        setStyleConfig({
+          styles: {
+            Title: "Asistente Virtual",
+            LauncherBackground: "#a39700",
+            HeaderBackgroundColor: "#a39700",
+            Position: "bottom-right",
+            AllowImageUpload: true,
+            AllowFileUpload: true
+          },
+          botId,
+          tokenParam
+        });
+      }
+    }).finally(() => {
+      setLoading(false);
+    });
+  }, [botId, tokenParam, loadBotConfiguration]);
 
-  // After bot configuration is ready, measure preferred size and notify parent
+  // Medir y enviar preferred-size al padre (iframe) cuando cambie layout (abrir/cerrar chat)
   useEffect(() => {
     if (loading) return;
-    // Wait a tick so layout stabilizes
     const t = setTimeout(() => {
       try {
         const el = rootRef.current || document.getElementById('root');
@@ -343,17 +383,15 @@ function WidgetFrame(props) {
         const rect = el.getBoundingClientRect();
         const preferredWidth = Math.ceil(rect.width) || 300;
         let preferredHeight = Math.ceil(rect.height) || 200;
-        // Clamp preferred height to a sensible max so embeds/preview don't expand beyond widget design
-        const MAX_WIDGET_HEIGHT = 700; // must match ChatWidget maxHeight
+        const MAX_WIDGET_HEIGHT = 700;
         if (preferredHeight > MAX_WIDGET_HEIGHT) preferredHeight = MAX_WIDGET_HEIGHT;
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'preferred-size', width: preferredWidth, height: preferredHeight }, '*');
         }
-      } catch (e) {
-      }
-    }, 50);
+      } catch (e) {}
+    }, 80);
     return () => clearTimeout(t);
-  }, [loading, styleConfig]);
+  }, [loading, styleConfig, isOpen]); // isOpen: reenviar al abrir/cerrar
 
     // Eliminar auto-refresh para evitar remounts
     // const refreshInterval = setInterval(() => {
@@ -370,24 +408,11 @@ function WidgetFrame(props) {
 
   if (loading) {
     // During load we render a compact spinner positioned where the closed launcher will appear.
-    // This avoids a large, opaque placeholder that can cover host page content.
-    const pos = (styleConfig?.styles?.position || 'bottom-right');
-    const launcherPosition = {
-      'bottom-right': { right: 20, bottom: 20 },
-      'bottom-left': { left: 20, bottom: 20 },
-      'top-right': { right: 20, top: 20 },
-      'top-left': { left: 20, top: 20 },
-      'center-left': { left: 20, top: '50%', transform: 'translateY(-50%)' },
-      'center-right': { right: 20, top: '50%', transform: 'translateY(-50%)' },
-    }[pos] || { right: 20, bottom: 20 };
-
+    // Use fixed positioning so it's always visible regardless of parent container.
     return (
-      <div style={{ position: 'relative', width: '100%', height: '100%', background: 'transparent' }}>
-        {/* small spinner where closed launcher will render - only the ring, no background */}
-        <div style={{ position: 'absolute', pointerEvents: 'none', ...launcherPosition }}>
-          <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div style={{ width: 28, height: 28, border: '3px solid rgba(0,0,0,0.12)', borderTopColor: 'rgba(0,0,0,0.6)', borderRadius: '50%', animation: 'spin 1s linear infinite', background: 'transparent' }} />
-          </div>
+      <div style={{ position: 'fixed', right: 20, bottom: 20, zIndex: 999999, pointerEvents: 'auto' }}>
+        <div style={{ width: 72, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', borderRadius: '50%' }}>
+          <div style={{ width: 28, height: 28, border: '3px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }`}</style>
       </div>
@@ -452,6 +477,8 @@ function WidgetFrame(props) {
       fontFamily: styles.fontFamily || styles.FontFamily || "Arial",
       avatarUrl,
       position: styles.position || styles.Position || "bottom-right",
+      width: styles.width ?? styles.Width ?? 380,
+      height: styles.height ?? styles.Height ?? 600,
       allowImageUpload: styles.allowImageUpload ?? styles.AllowImageUpload ?? true,
       allowFileUpload: styles.allowFileUpload ?? styles.AllowFileUpload ?? true,
       customCss: styles.customCss || styles.CustomCss || ""
@@ -472,26 +499,26 @@ function WidgetFrame(props) {
     const widgetTokenToPass = (realToken && String(realToken) !== 'undefined') ? realToken : (tokenParam && String(tokenParam) !== 'undefined' ? tokenParam : null);
 
     return (
-    <ChatWidget
-      key={"main-widget"}
-      botId={botId}
-      userId={userId}
-      widgetClientSecret={clientSecret}  // ✅ NUEVO
-      style={styleToPass}
-      isDemo={false} // Siempre false para widgets - no usar modo demo
-      isWidget={true}
-      previewMode={true} // ✅ Usar estilos de preview para posición fixed y tamaño correcto
-      widgetToken={widgetTokenToPass}
-      isOpen={isOpen}
-      setIsOpen={setIsOpen}
-      // Pass ref and container size so child can be measured and adapt to parent-applied-size
-      rootRef={rootRef}
-      containerSize={containerSize}
-      // Parámetros para modo móvil
-      isMobileView={isMobileView}
-      conversationId={conversationId}
-    />
-  );
+      <ChatWidget
+        key={"main-widget"}
+        botId={botId}
+        userId={userId}
+        widgetClientSecret={clientSecret}  // ✅ NUEVO
+        style={styleToPass}
+        isDemo={false} // Siempre false para widgets - no usar modo demo
+        isWidget={true}
+        previewMode={true} // ✅ Usar estilos de preview para posición fixed y tamaño correcto
+        widgetToken={widgetTokenToPass}
+        isOpen={isOpen}
+        setIsOpen={setIsOpen}
+        // Pass ref and container size so child can be measured and adapt to parent-applied-size
+        rootRef={rootRef}
+        containerSize={containerSize}
+        // Parámetros para modo móvil
+        isMobileView={isMobileView}
+        conversationId={conversationId}
+      />
+    );
 }
 
 WidgetFrame.propTypes = {
@@ -499,13 +526,6 @@ WidgetFrame.propTypes = {
   userId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   isMobile: PropTypes.bool,
   clientSecret: PropTypes.string,
-};
-
-WidgetFrame.defaultProps = {
-  botId: null,
-  userId: null,
-  isMobile: false,
-  clientSecret: null,
 };
 
 export default WidgetFrame;

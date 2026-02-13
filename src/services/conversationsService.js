@@ -136,7 +136,8 @@ export async function getMessagesByConversationId(conversationId) {
       const id = msg.id ?? msg.Id;
       const text = msg.messageText ?? msg.MessageText ?? msg.text ?? msg.Text ?? "";
       const timestamp = msg.createdAt ?? msg.CreatedAt ?? null;
-      const fromRole = msg.sender ?? msg.Sender ?? (msg.UserId || msg.PublicUserId ? "user" : null);
+      let fromRole = msg.sender ?? msg.Sender ?? null;
+      if (!fromRole) fromRole = msg.BotId ? "bot" : (msg.UserId || msg.PublicUserId ? "user" : "user");
       const fromName = (msg.user && msg.user.name) || msg.UserName || msg.userName || null;
       const replyTo = msg.replyToMessageId ?? msg.ReplyToMessageId ?? null;
 

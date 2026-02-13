@@ -15,9 +15,11 @@ const InputArea = ({
   connectionRef,
   conversationId,
   isInputDisabled,
+  disabledPlaceholder,
   userId,
   allowImageUpload,
   allowFileUpload,
+  onFileSent, // Callback cuando se envía un archivo (para mostrar optimista)
 }) => {
   const typingTimeoutRef = useRef(null);
 
@@ -97,13 +99,19 @@ const InputArea = ({
       }
 
       if (images.length === 1) {
-        await sendChatFile({ connection, conversationId, file: images[0], userId });
+        const res = await sendChatFile({ connection, conversationId, file: images[0], userId });
+        if (onFileSent && res?.fileUrl) {
+          // res.base64 ya es data URL completa (fileToBase64 usa readAsDataURL)
+          const preview = res.base64 && res.base64.startsWith("data:") ? res.base64 : (res.base64 ? `data:${images[0].type};base64,${res.base64}` : null);
+          onFileSent({ fileUrl: res.fileUrl, fileName: res.data?.fileName || images[0].name, fileType: res.data?.fileType || images[0].type, fileContent: preview });
+        }
       } else {
         if (images.length > 10) {
           alert("❌ Máximo 10 imágenes.");
           return;
         }
-        await sendGroupedImages({ connection, conversationId, files: images, userId });
+        const res = await sendGroupedImages({ connection, conversationId, files: images, userId });
+        if (onFileSent && res?.multipleFiles?.length) onFileSent({ multipleFiles: res.multipleFiles });
       }
       return;
     }
@@ -120,7 +128,10 @@ const InputArea = ({
         return;
       }
 
-      await sendChatFile({ connection, conversationId, file, userId });
+      const res = await sendChatFile({ connection, conversationId, file, userId });
+      if (onFileSent && res?.fileUrl) {
+        onFileSent({ fileUrl: res.fileUrl, fileName: res.data?.fileName || file.name, fileType: res.data?.fileType || file.type });
+      }
     }
   };
 
@@ -179,7 +190,7 @@ const InputArea = ({
       <textarea
         ref={textareaRef}
         placeholder={
-          isInputDisabled ? "Modo demo activo: no puedes escribir." : "Escribe un mensaje..."
+          isInputDisabled ? (disabledPlaceholder || "Chat no disponible.") : "Escribe un mensaje..."
         }
         value={message}
         disabled={isInputDisabled}
@@ -205,7 +216,7 @@ const InputArea = ({
           borderRadius: "12px",
           border: `1.5px solid ${inputBorder}`,
           fontFamily,
-          fontSize: "14px",
+          fontSize: "13px",
           outline: "none",
           color: "#000",
           backgroundColor: inputBg,
@@ -250,8 +261,10 @@ InputArea.propTypes = {
   conversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   userId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
   isInputDisabled: PropTypes.bool,
+  disabledPlaceholder: PropTypes.string,
   allowImageUpload: PropTypes.bool,
   allowFileUpload: PropTypes.bool,
+  onFileSent: PropTypes.func,
   onUserActivity: PropTypes.func,
 };
 

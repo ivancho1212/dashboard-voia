@@ -10,7 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || "http://localhost:5006";
 
-// ✅ Helper: Convert File to base64 para preview local
+// ✅ Helper: Convert File to data URL (ya incluye "data:image/...;base64,")
 const fileToBase64 = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -18,6 +18,13 @@ const fileToBase64 = (file) => {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+};
+
+// ✅ Usar como src de imagen sin duplicar prefijo (fileToBase64 ya devuelve data URL completa)
+const asImageDataUrl = (value, mimeType) => {
+  if (!value) return null;
+  if (typeof value === "string" && value.startsWith("data:")) return value;
+  return mimeType ? `data:${mimeType};base64,${value}` : value;
 };
 
 /**
@@ -224,12 +231,18 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
   const fileUrl = data.fileUrl || data.filePath || null;
 
     if (invokeHub && connection?.invoke) {
+      // 🔴 Backend espera userId como int? (nullable int), no string
+      let numericUserId = null;
+      if (userId !== null && userId !== undefined && userId !== 'anon') {
+        const parsed = parseInt(userId, 10);
+        if (!isNaN(parsed) && parsed > 0) numericUserId = parsed;
+      }
       const payload = {
         fileName: data.fileName || file.name,
         fileType: data.fileType || file.type,
         fileUrl,
         fileContent: base64Str, // ← AGREGADO: base64 para preview local
-        userId,
+        userId: numericUserId,
       };
       try {
         await connection.invoke("SendFile", conversationId, payload);
@@ -272,13 +285,18 @@ export const sendChatFile = async ({ connection, conversationId, file, userId, i
       }
 
       if (invokeHub && connection?.invoke) {
+        let numericUserId = null;
+        if (userId !== null && userId !== undefined && userId !== 'anon') {
+          const parsed = parseInt(userId, 10);
+          if (!isNaN(parsed) && parsed > 0) numericUserId = parsed;
+        }
         try {
           await connection.invoke("SendFile", conversationId, {
             fileName: file.name,
             fileType: file.type,
             fileUrl: filePath || uploadUrl,
             fileContent: base64Str, // ← AGREGADO: base64 para preview local
-            userId,
+            userId: numericUserId,
           });
         } catch (hubErr) {
           console.error("❌ Hub invoke SendFile failed after presigned PUT:", hubErr);
@@ -301,17 +319,22 @@ export const sendGroupedImages = async ({ connection, conversationId, files, use
   if (!files || files.length === 0) return;
 
   try {
-    // Upload each file via sendChatFile but do NOT invoke the hub individually (invokeHub=false).
-    const uploads = await Promise.all(
+    // Subir cada archivo; si uno falla, seguir con los que sí subieron (allSettled)
+    const results = await Promise.allSettled(
       files.map((f) => sendChatFile({ connection, conversationId, file: f, userId, invokeHub: false }))
     );
+    const uploads = results.map((r, idx) => {
+      if (r.status === "fulfilled") return r.value;
+      console.warn(`⚠️ [sendGroupedImages] Falló subida ${idx + 1}/${files.length}:`, r.reason?.message || r.reason);
+      return null;
+    });
 
-    // Build payloads with fileUrl + base64 para preview local
+    // Build payloads con el mismo índice que files (los fallidos quedan fileUrl null y se filtran)
     const payload = uploads.map((u, idx) => ({
       fileName: files[idx].name,
       fileType: files[idx].type,
       fileUrl: u?.fileUrl || (u?.data && (u.data.filePath || u.data.fileUrl)) || null,
-      fileContent: u?.base64 || null, // ← AGREGADO: incluir base64 para preview local
+      fileContent: u ? asImageDataUrl(u.base64, files[idx].type) : null,
     }));
 
     // Only include uploaded items that actually have a fileUrl
@@ -320,19 +343,29 @@ export const sendGroupedImages = async ({ connection, conversationId, files, use
       console.warn("⚠️ Ningún archivo subido para enviar en grouped images.");
       return { uploaded: uploads };
     }
+    if (filtered.length < files.length) {
+      console.warn(`⚠️ [sendGroupedImages] Solo ${filtered.length}/${files.length} imágenes se subieron correctamente. Revisa la consola por errores de subida.`);
+    }
 
-    // Invoke grouped send on hub with array of file metadata
+    // Invoke grouped send on hub with array of file metadata (sin fileContent en payload SignalR)
+    // 🔴 Backend espera userId como int? (nullable int), no string
+    let numericUserId = null;
+    if (userId !== null && userId !== undefined && userId !== 'anon') {
+      const parsed = parseInt(userId, 10);
+      if (!isNaN(parsed) && parsed > 0) numericUserId = parsed;
+    }
     if (connection?.invoke) {
       try {
-        await connection.invoke("SendGroupedImages", conversationId, userId, filtered);
+        const hubPayload = filtered.map(({ fileName, fileType, fileUrl }) => ({ fileName, fileType, fileUrl }));
+        await connection.invoke("SendGroupedImages", conversationId, numericUserId, hubPayload);
       } catch (err) {
         console.error("❌ SendGroupedImages invoke failed:", err);
-        // Surface a user-friendly message with server detail if present
         const m = err?.message || String(err);
         alert(`Error al enviar imágenes agrupadas: ${m}`);
         throw err;
       }
     }
+    return { multipleFiles: filtered };
   } catch (err) {
     console.error("❌ Error al enviar imágenes agrupadas:", err);
     // Optional: rethrow or surface to caller

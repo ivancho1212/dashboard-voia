@@ -6,7 +6,6 @@ import authRoutes from "routes/auth";
 
 const Navbar = ({ isDarkBackground = false }) => {
   useEffect(() => {
-    console.log("Navbar montado");
   }, []);
 
   const navigate = useNavigate();

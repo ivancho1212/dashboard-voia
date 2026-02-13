@@ -77,7 +77,7 @@ export default function App() {
   const { pathname } = useLocation();
   const isWidgetFrame = pathname === "/widget-frame";
   const isMobileChat = pathname.startsWith("/chat/mobile"); // Nueva ruta móvil
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
 
   // Rutas públicas (deben coincidir con landingRoutes y authRoutes)
   const publicPaths = [
@@ -156,14 +156,19 @@ export default function App() {
         } else if (Component && typeof Component === "object") {
           element = Component;
         }
-        // Proteger solo rutas administrativas/dashboard
+        // Proteger todas las rutas de dashboard/administrativas (requieren sesión)
         const isProtectedRoute =
           route.route.startsWith("/admin") ||
           route.route.startsWith("/config") ||
           route.route.startsWith("/billing") ||
           route.route.startsWith("/data") ||
           route.route.startsWith("/profile") ||
-          route.route.startsWith("/dashboard");
+          route.route.startsWith("/dashboard") ||
+          route.route.startsWith("/bots") ||
+          route.route.startsWith("/plans") ||
+          route.route.startsWith("/support") ||
+          route.route.startsWith("/documentation") ||
+          route.route.startsWith("/notifications");
         if (element) {
           return (
             <Route
@@ -191,7 +196,12 @@ export default function App() {
                 child.path?.startsWith("billing") ||
                 child.path?.startsWith("data") ||
                 child.path?.startsWith("profile") ||
-                child.path?.startsWith("dashboard");
+                child.path?.startsWith("dashboard") ||
+                child.path?.startsWith("bots") ||
+                child.path?.startsWith("plans") ||
+                child.path?.startsWith("support") ||
+                child.path?.startsWith("documentation") ||
+                child.path?.startsWith("notifications");
               return (
                 <Route
                   key={idx}
@@ -207,14 +217,19 @@ export default function App() {
       // Simple modern route
       if (route.path) {
         const Elem = route.element && typeof route.element === "function" ? <route.element /> : null;
-        // Proteger solo si es admin/dashboard
+        // Proteger si es ruta de dashboard/administrativa
         const isProtected =
           route.path.startsWith("admin") ||
           route.path.startsWith("config") ||
           route.path.startsWith("billing") ||
           route.path.startsWith("data") ||
           route.path.startsWith("profile") ||
-          route.path.startsWith("dashboard");
+          route.path.startsWith("dashboard") ||
+          route.path.startsWith("bots") ||
+          route.path.startsWith("plans") ||
+          route.path.startsWith("support") ||
+          route.path.startsWith("documentation") ||
+          route.path.startsWith("notifications");
         return <Route key={index} path={route.path} element={isProtected ? <PrivateRoute>{Elem}</PrivateRoute> : Elem} />;
       }
       return null;
@@ -236,7 +251,7 @@ export default function App() {
           <ThemeProvider theme={themeRTL}>
             <CssBaseline />
             <ScrollToTop />
-            {!isWidgetFrame && !isMobileChat && layout === "dashboard" && !isLandingRoute && miniSidenav !== null && (
+            {!isWidgetFrame && !isMobileChat && layout === "dashboard" && !isLandingRoute && isAuthenticated && miniSidenav !== null && (
               <>
                 <Sidenav
                   color={sidenavColor}
@@ -267,7 +282,7 @@ export default function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <ScrollToTop />
-        {!isWidgetFrame && !isMobileChat && layout === "dashboard" && miniSidenav !== null && !isLandingRoute && (
+        {!isWidgetFrame && !isMobileChat && layout === "dashboard" && miniSidenav !== null && !isLandingRoute && isAuthenticated && (
           <>
             <Sidenav
               color={sidenavColor}

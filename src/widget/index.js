@@ -1,3 +1,6 @@
+// Marcar contexto widget para que axiosConfig no ejecute refresh/logout/alert (evita OOM y "sesión expirada" en landing)
+if (typeof window !== 'undefined') window.__VIA_WIDGET__ = true;
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import WidgetFrame from '../layouts/widget/WidgetFrame';
@@ -43,18 +46,22 @@ if (typeof window !== 'undefined' && typeof window.process === 'undefined') {
       // Crear contenedor para el widget
       const container = document.createElement('div');
       container.id = 'via-widget-root';
-      // Estilos base para posicionamiento flotante (las coordenadas exactas se configuran desde el dashboard)
+      // Contenedor transparente - el ChatWidget con previewMode maneja su propia posición
       container.style.cssText = `
         position: fixed;
         z-index: 999999;
-        pointer-events: auto;
+        pointer-events: none;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
       `;
       document.body.appendChild(container);
 
       // Pasar parámetros directamente como props al WidgetFrame
       const widgetProps = {
         botId: botId,
-        userId: userId || '',
+        userId: (userId && String(userId).trim()) ? userId : 'anon',
         clientSecret: clientSecret || '',
         isMobile: false
       };
@@ -67,7 +74,6 @@ if (typeof window !== 'undefined' && typeof window.process === 'undefined') {
         )
       );
 
-      console.log('✅ VIA Widget inicializado correctamente', { botId, userId });
     } catch (error) {
       console.error('❌ Error inicializando VIA Widget:', error);
     }

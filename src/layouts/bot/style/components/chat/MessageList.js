@@ -29,8 +29,8 @@ const MessageList = ({
                 ? msg.timestamp
                 : (msg.timestamp ? msg.timestamp.toISOString() : undefined)
           };
-          // Usa tempId || id || text como key para evitar duplicados visuales
-          const key = msg.tempId || msg.id || msg.text || index;
+          // Usa uniqueKey para archivos (id/tempId vacíos del servidor), o tempId/id/text/index
+          const key = msg.uniqueKey || msg.tempId || msg.id || (msg.multipleFiles?.[0]?.fileUrl ?? msg.file?.fileUrl) || msg.text || `msg-${index}`;
           return (
             <CSSTransition key={key} timeout={300} classNames="fade" nodeRef={nodeRef}>
               <MessageBubble

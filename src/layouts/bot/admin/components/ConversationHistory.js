@@ -33,6 +33,8 @@ const ConversationHistory = ({ conversationId, userName }) => {
         let msgs = [];
         if (Array.isArray(data)) {
           msgs = data;
+        } else if (data && Array.isArray(data.history)) {
+          msgs = data.history;
         } else if (data && Array.isArray(data.History)) {
           msgs = data.History;
         }
@@ -79,7 +81,11 @@ const ConversationHistory = ({ conversationId, userName }) => {
         await connection.invoke("JoinRoom", Number(conversationId));
         console.log('[ConversationHistory] SignalR conectado y unido a grupo (JoinRoom)', conversationId);
         connection.on("ReceiveMessage", (msg) => {
-          console.log('[ConversationHistory] Mensaje recibido por SignalR:', msg);
+          if (msg.origen) {
+            console.log(`[ConversationHistory] Mensaje recibido por SignalR. ORIGEN: ${msg.origen}`, msg);
+          } else {
+            console.log('[ConversationHistory] Mensaje recibido por SignalR (sin campo origen):', msg);
+          }
           setLastRealtimeMsg(msg);
           // Normalizar formato si es necesario
           const normalized = {
@@ -123,8 +129,13 @@ const ConversationHistory = ({ conversationId, userName }) => {
     <div style={{ width: "100%", minHeight: 300, background: "#f9f9f9", borderRadius: 8, padding: 16 }}>
       <h3 style={{ marginBottom: 16 }}>Historial de mensajes con {userName}</h3>
       {lastRealtimeMsg && (
-        <div style={{ color: "green", fontSize: 13, marginBottom: 8 }}>
+        <div style={{ color: "green", fontSize: 13, marginBottom: 8, whiteSpace: 'pre-wrap' }}>
           <strong>Mensaje en tiempo real recibido:</strong> {lastRealtimeMsg.text ?? lastRealtimeMsg.messageText ?? ""}
+          {lastRealtimeMsg.origen && (
+            <span style={{ marginLeft: 8, color: '#007bff' }}>[origen: {lastRealtimeMsg.origen}]</span>
+          )}
+          <br />
+          <span style={{ fontSize: 11, color: '#555' }}>Raw: {JSON.stringify(lastRealtimeMsg)}</span>
         </div>
       )}
       {messages.length === 0 ? (

@@ -230,14 +230,13 @@ const ChatPanel = forwardRef(
               console.warn("[SignalR] No se pudo unir al grupo admin:", e);
             }
             // Suscribirse a todos los eventos relevantes
-            connection.on("NewConversationOrMessage", (msg) => {
-              console.log("📨 [SignalR] Mensaje recibido:", msg);
+            connection.on("newconversationormessage", (msg) => {
               setLiveMessages((prev) => {
                 if (prev.some((m) => m.id === msg.id)) return prev;
                 return [...prev, msg];
               });
             });
-            connection.on("ReceiveMessage", (msg) => {
+            connection.on("receivemessage", (msg) => {
               // Mensajes directos de la conversación (por compatibilidad)
               console.log("📨 [SignalR] ReceiveMessage:", msg);
               setLiveMessages((prev) => {
@@ -249,10 +248,15 @@ const ChatPanel = forwardRef(
         }
         return () => {
           setHasMounted(false);
-          // Limpiar conexión SignalR
-          if (hubConnectionRef.current) {
-            hubConnectionRef.current.stop();
-            hubConnectionRef.current = null;
+          const conn = hubConnectionRef.current;
+          if (!conn) return;
+          hubConnectionRef.current = null;
+          try {
+            conn.off("newconversationormessage");
+            conn.off("receivemessage");
+          } catch (e) { /* ignore */ }
+          if (conn.state === "Connected" || conn.state === "Connecting") {
+            conn.stop().catch(() => {});
           }
         };
       }, [conversationId]);
@@ -476,14 +480,12 @@ const ChatPanel = forwardRef(
           msgMap.set(key, msg);
         }
       });
-      // Ordenar descendente por fecha (más nuevo arriba)
+      // Ordenar ascendente por fecha (más antiguo arriba, más reciente abajo - flujo cronológico)
       const allMessages = Array.from(msgMap.values()).sort((a, b) => {
         const ta = new Date(a.timestamp || a.createdAt || 0).getTime();
         const tb = new Date(b.timestamp || b.createdAt || 0).getTime();
-        return tb - ta;
+        return ta - tb;
       });
-      // Log para depuración
-      console.log('[ChatPanel] mensajes prop:', allMessages);
       // Normalize messages (same as antes) then insert day dividers.
       const normalized = allMessages.map((msg) => {
         // If the backend/client already inserted a day-divider object, pass it through unchanged.
@@ -559,6 +561,8 @@ const ChatPanel = forwardRef(
             ? `Usuario público ${publicUserId}`
             : normalizedFromRole === "admin"
             ? "Admin"
+            : normalizedFromRole === "bot"
+            ? "VIA"
             : `Sesión ${conversationId}`,
           text: normalizedText,
           fromRole: normalizedFromRole,
