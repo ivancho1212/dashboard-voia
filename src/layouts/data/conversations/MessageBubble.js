@@ -6,7 +6,7 @@ import { buildFileUrl, downloadImagesAsZip } from "utils/fileHelpers";
 const MessageBubble = React.forwardRef(
   ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen, isAIActive }, ref) => {
     const { fromRole, fromName, text, timestamp, files = [], replyTo } = msg;
-    // Derecha: saludo inicial, respuestas IA (bot) y admin. Izquierda: usuario público
+    // ✅ CORRECTO: Usuario público → IZQUIERDA, Bot/Admin → DERECHA (como en el widget)
     const isRight = fromRole === "admin" || fromRole === "bot";
 
     const backgroundColor =
@@ -14,7 +14,7 @@ const MessageBubble = React.forwardRef(
         ? "#dcfdf2ff" // verde más visible para admin
         : fromRole === "bot"
           ? "#dcf7fdff" // azul claro para bot
-          : "#faebf5ff"; // gris claro para user
+          : "#faebf5ff"; // rosa claro para user
 
     const formattedTime = timestamp
       ? new Date(timestamp).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit", hour12: true })

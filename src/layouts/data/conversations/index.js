@@ -5,6 +5,8 @@ import PropTypes from 'prop-types';
 
 import Grid from "@mui/material/Grid";
 import Card from "@mui/material/Card";
+import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import { createHubConnection } from "services/signalr";
 import DashboardLayout from "examples/LayoutContainers/DashboardLayout";
 import DashboardNavbar from "examples/Navbars/DashboardNavbar";
@@ -21,6 +23,8 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { getFilesByConversation } from "services/chatUploadedFilesService";
 // ✅ NUEVO: Protección contra inyección de prompts
 import { detectPromptInjection } from "services/promptInjectionService";
+// 🔄 NUEVO: Activity tracking para mantener sesión activa
+import { useActivityTracker } from 'hooks/useActivityTracker';
 import { DndContext, PointerSensor, useSensor, useSensors, DragOverlay } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -38,6 +42,36 @@ import {
   getConversationsWithLastMessage,
 } from "services/conversationsService";
 import { useAuth } from "contexts/AuthContext";
+
+// 🔧 Helper: Normalizar timestamp con todas las variantes del backend + fix de timezone
+function normalizeTimestamp(timestamp) {
+  if (!timestamp) return new Date().toISOString();
+  
+  try {
+    // Si ya tiene Z al final, está en formato UTC correcto
+    if (typeof timestamp === 'string' && timestamp.endsWith('Z')) {
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) throw new Error('Invalid date');
+      return timestamp;
+    }
+    
+    // Si no tiene Z, agregarla para que se interprete como UTC
+    if (typeof timestamp === 'string' && !timestamp.endsWith('Z')) {
+      const withZ = timestamp + 'Z';
+      const date = new Date(withZ);
+      if (isNaN(date.getTime())) throw new Error('Invalid date');
+      return withZ;
+    }
+    
+    // Fallback: convertir a ISO
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) throw new Error('Invalid date');
+    return date.toISOString();
+  } catch (e) {
+    console.warn('⚠️ Error normalizando timestamp:', timestamp, e);
+    return new Date().toISOString();
+  }
+}
 
 function Conversations() {
   // Mostrar papelera y actualizar lista tras eliminar
@@ -76,6 +110,9 @@ function Conversations() {
   const chatPanelRef = useRef(null);
   const connectionRef = useRef(null);
   const isDraggingRef = useRef(false);
+  
+  // 🔄 Activity tracking: mantiene la sesión activa mientras el usuario está usando la plataforma
+  useActivityTracker();
   const messageCache = useRef(new Map());
   const messageCursor = useRef(new Map()); // stores { hasMore, nextBefore } per conversationId
   // Tracks how many messages (tail) are currently visible per conversation.
@@ -84,8 +121,40 @@ function Conversations() {
   const typingStopTimeout = useRef(null);
 
   const [showScrollButtons, setShowScrollButtons] = useState(false);
+  
+  // Función helper para normalizar timestamps del backend a ISO UTC
+  const normalizeTimestamp = (timestamp) => {
+    if (!timestamp) return new Date().toISOString();
+    
+    try {
+      // Si ya tiene Z al final, está en formato UTC correcto
+      if (typeof timestamp === 'string' && timestamp.endsWith('Z')) {
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) throw new Error('Invalid date');
+        return timestamp;
+      }
+      
+      // Si no tiene Z, agregarla para que se interprete como UTC
+      if (typeof timestamp === 'string' && !timestamp.endsWith('Z')) {
+        const withZ = timestamp + 'Z';
+        const date = new Date(withZ);
+        if (isNaN(date.getTime())) throw new Error('Invalid date');
+        return withZ;
+      }
+      
+      // Fallback: convertir a ISO
+      const date = new Date(timestamp);
+      if (isNaN(date.getTime())) throw new Error('Invalid date');
+      return date.toISOString();
+    } catch (e) {
+      console.warn('⚠️ Error normalizando timestamp:', timestamp, e);
+      return new Date().toISOString();
+    }
+  };
+  
   const [conversationList, setConversationList] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [openTabs, setOpenTabs] = useState([]);
   const [activeTab, setActiveTab] = useState(null);
   const [messages, setMessages] = useState({});
@@ -279,12 +348,77 @@ function Conversations() {
       try {
         // SignalR JS recibe nombres en minúsculas; registrar en minúsculas para que los handlers se invoquen
         connection.on("initialconversations", (data) => {
+          console.log('📥 [InitialConversations] Recibido con', data?.length || 0, 'conversaciones');
           if (Array.isArray(data)) {
-            setConversationList(data.map(conv => ({
-              ...conv,
-              id: String(conv.id),
-              updatedAt: conv.lastMessage?.timestamp || conv.updatedAt,
-            })));
+            setConversationList((prevList) => {
+              console.log('📥 [InitialConversations] prevList tiene', prevList.length, 'conversaciones');
+              
+              // Crear mapa de conversaciones del backend
+              const backendMap = new Map();
+              data.forEach(conv => {
+                backendMap.set(String(conv.id), {
+                  ...conv,
+                  id: String(conv.id)
+                });
+              });
+              
+              // Merge: preservar updatedAt de prevList si es más reciente
+              const merged = prevList.map(prevConv => {
+                const backend = backendMap.get(prevConv.id);
+                if (backend) {
+                  // Conversación existe en ambos: comparar updatedAt (NORMALIZADOS)
+                  const backendUpdatedAt = normalizeTimestamp(backend.lastMessage?.timestamp || backend.updatedAt);
+                  const prevUpdatedAt = normalizeTimestamp(prevConv.updatedAt);
+                  const useExisting = new Date(prevUpdatedAt) > new Date(backendUpdatedAt);
+                  
+                  if (prevConv.id === '738') {
+                    console.log('📥 [InitialConversations] Procesando 738:');
+                    console.log('  - prevUpdatedAt (NORMALIZADO):', prevUpdatedAt);
+                    console.log('  - backendUpdatedAt (NORMALIZADO):', backendUpdatedAt);
+                    console.log('  - useExisting:', useExisting);
+                  }
+                  
+                  backendMap.delete(prevConv.id); // Marcar como procesado
+                  
+                  // ✅ CRÍTICO: Preservar unreadCount del frontend si es mayor (puede haber mensajes recibidos en tiempo real)
+                  const frontendUnread = prevConv.unreadCount || 0;
+                  const backendUnread = backend.unreadCount || backend.unreadAdminMessages || 0;
+                  const maxUnread = Math.max(frontendUnread, backendUnread);
+                  
+                  console.log(`🔄 [InitialConversations] Conv ${prevConv.id}: frontend=${frontendUnread}, backend=${backendUnread}, max=${maxUnread}`);
+                  
+                  if (useExisting) {
+                    return { ...prevConv, unreadCount: maxUnread };
+                  } else {
+                    return { ...backend, updatedAt: backendUpdatedAt, unreadCount: maxUnread };
+                  }
+                }
+                // Conversación solo en prevList: mantener
+                return prevConv;
+              });
+              
+              // Agregar conversaciones nuevas que vienen del backend pero no estaban en prevList
+              backendMap.forEach(conv => {
+                merged.push({
+                  ...conv,
+                  updatedAt: normalizeTimestamp(conv.lastMessage?.timestamp || conv.updatedAt)
+                });
+              });
+              
+              // Ordenar: más recientes primero
+              const sorted = merged.sort((a, b) => {
+                const timeA = new Date(a.updatedAt).getTime();
+                const timeB = new Date(b.updatedAt).getTime();
+                return timeB - timeA;
+              });
+              
+              console.log('📥 [InitialConversations] Top 5 después de merge:', sorted.slice(0, 5).map(c => ({ id: c.id, updatedAt: c.updatedAt })));
+              const pos738 = sorted.findIndex(c => c.id === '738');
+              if (pos738 !== -1) {
+                console.log(`📥 [InitialConversations] Conversación 738 quedó en posición: ${pos738 + 1}`);
+              }
+              return sorted;
+            });
           }
         });
         connection.on("receivetyping", (conversationId, sender) => {
@@ -297,7 +431,12 @@ function Conversations() {
         connection.on("newconversation", (conv) => {
           console.log("🆕 Nueva conversación recibida:", conv);
           // Convertir id a string para evitar errores de tipo
-          const convStr = { ...conv, id: String(conv.id) };
+          // ✅ CRÍTICO: Usar fecha actual como updatedAt para garantizar que aparezca primero
+          const convStr = { 
+            ...conv, 
+            id: String(conv.id),
+            updatedAt: new Date().toISOString() // Forzar fecha actual para nuevas conversaciones
+          };
           // Cargar mensajes de la conversación recién creada
           import("services/conversationsService").then(({ getMessagesByConversationId }) => {
             getMessagesByConversationId(convStr.id).then((msgs) => {
@@ -307,10 +446,18 @@ function Conversations() {
               const lastMsg = msgs && msgs.length > 0 ? msgs[msgs.length - 1].text : "";
               setConversationList((prevList) => {
                 // Evitar duplicados por id
-                if (prevList.some((c) => String(c.id) === String(convStr.id))) return prevList.map(c =>
-                  c.id === convStr.id ? { ...c, lastMessage: lastMsg } : c
-                );
-                return [{ ...convStr, lastMessage: lastMsg }, ...prevList];
+                let updated;
+                if (prevList.some((c) => String(c.id) === String(convStr.id))) {
+                  updated = prevList.map(c => c.id === convStr.id ? { ...c, lastMessage: lastMsg, updatedAt: new Date().toISOString() } : c);
+                } else {
+                  updated = [{ ...convStr, lastMessage: lastMsg }, ...prevList];
+                }
+                // ✅ Reordenar: conversaciones más recientes primero
+                return updated.sort((a, b) => {
+                  const timeA = new Date(a.updatedAt).getTime();
+                  const timeB = new Date(b.updatedAt).getTime();
+                  return timeB - timeA;
+                });
               });
             });
           });
@@ -341,8 +488,26 @@ function Conversations() {
         });
 
         connection.on("newconversationormessage", (msg) => {
+          console.log('📨 [NewConversationOrMessage] Evento recibido:', msg);
+          
           const convId = String(msg.conversationId);
           const newMsg = { ...msg };
+          
+          // ✅ Normalizar timestamp para ordenamiento consistente
+          const rawTimestamp = newMsg.timestamp || newMsg.Timestamp || newMsg.createdAt || newMsg.CreatedAt;
+          if (rawTimestamp) {
+            try {
+              const parsedDate = new Date(rawTimestamp);
+              newMsg.timestamp = parsedDate.toISOString();
+            } catch (e) {
+              console.error('❌ [DEBUG] Error parseando timestamp (NewConversation):', rawTimestamp, e);
+              newMsg.timestamp = new Date().toISOString();
+            }
+          } else {
+            newMsg.timestamp = new Date().toISOString();
+            console.warn('⚠️ [NewConversationOrMessage] Mensaje sin timestamp, usando hora actual:', newMsg.id);
+          }
+          
           // Normalizar fromRole: user=izquierda, bot+admin=derecha
           const fromRaw = (newMsg.from ?? newMsg.fromRole ?? "user").toString().toLowerCase();
           newMsg.fromRole = fromRaw === "admin" ? "admin" : fromRaw === "bot" ? "bot" : "user";
@@ -362,16 +527,54 @@ function Conversations() {
 
           setMessages((prev) => {
             const existing = prev[convId] || [];
-            // Fusionar por id y timestamp, priorizando mensajes únicos
+            // 📎 DEBUG: Log mensaje recibido
+            console.log('📨 [SignalR] Mensaje recibido para conversación', convId, ':', {
+              id: newMsg.id,
+              text: newMsg.text?.substring(0, 30),
+              hasFiles: newMsg.files?.length > 0,
+              hasImages: newMsg.images?.length > 0,
+              fromRole: newMsg.fromRole
+            });
+            
+            // Fusionar por id, priorizando mensajes únicos
             const allMessages = [...existing, newMsg];
             const uniqueMap = new Map();
             allMessages.forEach(m => {
-              // Clave única: id + timestamp
-              const key = `${String(m.id)}_${m.timestamp || ''}`;
-              uniqueMap.set(key, m);
+              // ✅ Normalizar timestamp antes de agregar al mapa
+              const msgTimestamp = m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt;
+              const normalizedMsg = {
+                ...m,
+                timestamp: normalizeTimestamp(msgTimestamp)
+              };
+              // ✅ UNIFICACIÓN: Solo usar ID como clave (igual que historial)
+              const key = String(normalizedMsg.id);
+              
+              // 💾 PRESERVAR ARCHIVOS: Si el mensaje existente no tiene archivos pero el nuevo sí
+              if (uniqueMap.has(key)) {
+                const existingMsg = uniqueMap.get(key);
+                const hasNewFiles = normalizedMsg.files?.length > 0 || normalizedMsg.images?.length > 0;
+                const hasExistingFiles = existingMsg.files?.length > 0 || existingMsg.images?.length > 0;
+                
+                if (hasNewFiles && !hasExistingFiles) {
+                  console.log('📎 [SignalR] Preservando archivos del mensaje nuevo:', {
+                    newFiles: normalizedMsg.files?.length || 0,
+                    newImages: normalizedMsg.images?.length || 0
+                  });
+                  // Priorizar mensaje con archivos
+                  uniqueMap.set(key, normalizedMsg);
+                } else {
+                  console.log('🔄 [SignalR] Manteniendo mensaje existente (ya tiene archivos o más completo)');
+                }
+              } else {
+                uniqueMap.set(key, normalizedMsg);
+              }
             });
-            // Ordenar por timestamp
-            const merged = Array.from(uniqueMap.values()).sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+            // ✅ Ordenar por timestamp (ascendente: más antiguos primero)
+            const merged = Array.from(uniqueMap.values()).sort((a, b) => {
+              const timeA = new Date(a.timestamp).getTime();
+              const timeB = new Date(b.timestamp).getTime();
+              return timeA - timeB;
+            });
             // Actualizar cache
             try {
               messageCache.current.set(convId, merged);
@@ -379,26 +582,216 @@ function Conversations() {
             return { ...prev, [convId]: merged };
           });
 
-          setConversationList((prevList) =>
-            prevList.map((conv) =>
-              `${conv.id}` === convId
-                ? { ...conv, unreadCount: (conv.unreadCount || 0) + 1, updatedAt: newMsg.timestamp, lastMessage: newMsg.text || (hasImages || hasFiles ? "📷 Imagen o Archivo" : "Nuevo Mensaje") }
-                : conv
-            )
-          );
+          setConversationList((prevList) => {
+            const currentTimestamp = new Date().toISOString();
+            console.log('📋 [NewConversationOrMessage] Actualizando lista para convId:', convId);
+            console.log('📋 Fecha actual para updatedAt:', currentTimestamp);
+            
+            // Buscar la conversación antes de actualizar
+            const targetConv = prevList.find(c => `${c.id}` === convId);
+            console.log('📋 Conversación ANTES de actualizar:', targetConv ? { id: targetConv.id, updatedAt: targetConv.updatedAt, unreadCount: targetConv.unreadCount } : 'NO ENCONTRADA');
+            
+            // ✅ Solo incrementar unreadCount si es mensaje del usuario público
+            const shouldIncrementUnread = newMsg.fromRole === "user";
+            console.log('🔵 [UnreadCount] fromRole:', newMsg.fromRole, '| shouldIncrement:', shouldIncrementUnread, '| current:', targetConv?.unreadCount || 0);
+            console.log('🔵 [UnreadCount] mensaje completo:', { id: newMsg.id, text: newMsg.text?.substring(0, 30), fromRole: newMsg.fromRole, from: newMsg.from });
+            
+            const updated = prevList.map((conv) => {
+              if (`${conv.id}` === convId) {
+                const newUnreadCount = shouldIncrementUnread ? (conv.unreadCount || 0) + 1 : conv.unreadCount;
+                console.log(`🔵 [UnreadCount UPDATE] Conv ${convId}: ${conv.unreadCount || 0} → ${newUnreadCount}`);
+                return { 
+                  ...conv, 
+                  unreadCount: newUnreadCount,
+                  updatedAt: currentTimestamp, 
+                  lastMessage: newMsg.text || (hasImages || hasFiles ? "📷 Imagen o Archivo" : "Nuevo Mensaje") 
+                };
+              }
+              return conv;
+            });
+            
+            // Verificar que se actualizó
+            const updatedTarget = updated.find(c => `${c.id}` === convId);
+            console.log('📋 Conversación DESPUÉS de actualizar:', updatedTarget ? { id: updatedTarget.id, updatedAt: updatedTarget.updatedAt, unreadCount: updatedTarget.unreadCount } : 'NO ENCONTRADA');
+            
+            // ✅ Reordenar: conversaciones más recientes primero
+            const sorted = updated.sort((a, b) => {
+              const timeA = new Date(a.updatedAt).getTime();
+              const timeB = new Date(b.updatedAt).getTime();
+              return timeB - timeA;
+            });
+            
+            // Mostrar top 5 después de ordenar
+            console.log('📋 TOP 5 después de ordenar:', sorted.slice(0, 5).map(c => ({ id: c.id, updatedAt: c.updatedAt })));
+            
+            // Encontrar posición de la conversación actualizada
+            const position = sorted.findIndex(c => `${c.id}` === convId);
+            console.log(`📋 Conversación ${convId} está en posición: ${position + 1}`);
+            
+            return sorted;
+          });
+        });
+
+        // ✅ CRÍTICO: Escuchar evento "ReceiveMessage" para mensajes en tiempo real
+        connection.on("receivemessage", (msg) => {
+            console.log('📨 [ReceiveMessage] Mensaje recibido en tiempo real:', msg);
+            
+            const convId = String(msg.conversationId);
+            const newMsg = { ...msg };
+            
+            // ✅ Normalizar timestamp para ordenamiento consistente
+            const rawTimestamp = newMsg.timestamp || newMsg.Timestamp || newMsg.createdAt || newMsg.CreatedAt;
+            if (rawTimestamp) {
+              try {
+                const parsedDate = new Date(rawTimestamp);
+                newMsg.timestamp = parsedDate.toISOString();
+              } catch (e) {
+                console.error('❌ [DEBUG] Error parseando timestamp:', rawTimestamp, e);
+                newMsg.timestamp = new Date().toISOString();
+              }
+            } else {
+              // Si no tiene timestamp, usar la hora actual
+              newMsg.timestamp = new Date().toISOString();
+              console.warn('⚠️ [ReceiveMessage] Mensaje sin timestamp, usando hora actual:', newMsg.id);
+            }
+            
+            // Normalizar fromRole: user=izquierda, bot+admin=derecha
+            const fromRaw = (newMsg.from ?? newMsg.fromRole ?? "user").toString().toLowerCase();
+            newMsg.fromRole = fromRaw === "admin" ? "admin" : fromRaw === "bot" ? "bot" : "user";
+            newMsg.from = newMsg.fromRole;
+            
+            const hasFiles = newMsg.files && newMsg.files.length > 0;
+            const hasImages = newMsg.images && newMsg.images.length > 0;
+            if (hasFiles || hasImages) {
+              newMsg.text = null;
+            }
+
+            // Detener indicador de escritura
+            setTypingState((prev) => {
+              if (prev[convId]?.sender === newMsg.from) {
+                return { ...prev, [convId]: { isTyping: false, sender: null } };
+              }
+              return prev;
+            });
+
+            // Agregar mensaje al estado (evitando duplicados)
+            setMessages((prev) => {
+              const existing = prev[convId] || [];
+              
+              // 🔧 FIX: Si el mensaje es del admin y existe un mensaje optimista con el mismo texto,
+              // reemplazar el optimista con el mensaje definitivo del servidor
+              if (newMsg.fromRole === "admin" && newMsg.text) {
+                const optimisticIndex = existing.findIndex(m => 
+                  m.__optimistic && 
+                  m.text === newMsg.text && 
+                  Math.abs(new Date(m.timestamp).getTime() - new Date(newMsg.timestamp).getTime()) < 5000 // Dentro de 5 segundos
+                );
+                
+                if (optimisticIndex !== -1) {
+                  console.log('🔄 [ReceiveMessage] Reemplazando mensaje optimista con mensaje definitivo del servidor', {
+                    optimisticId: existing[optimisticIndex].id,
+                    definitiveId: newMsg.id
+                  });
+                  // Reemplazar el mensaje optimista con el definitivo
+                  const updated = [...existing];
+                  updated[optimisticIndex] = { ...newMsg, __replaced: true };
+                  
+                  // Actualizar cache
+                  try {
+                    messageCache.current.set(convId, updated);
+                  } catch (e) {}
+                  
+                  return { ...prev, [convId]: updated };
+                }
+              }
+              
+              // Evitar duplicados por id
+              if (existing.some(m => String(m.id) === String(newMsg.id))) {
+                console.log('⚠️ [ReceiveMessage] Mensaje duplicado ignorado, id:', newMsg.id);
+                return prev;
+              }
+              
+              // ✅ Normalizar timestamps de mensajes existentes antes de ordenar
+              const normalizedExisting = existing.map(m => ({
+                ...m,
+                timestamp: normalizeTimestamp(m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt)
+              }));
+              
+              const allMessages = [...normalizedExisting, newMsg];
+              
+              // ✅ Ordenar por timestamp (ascendente: más antiguos primero)
+              const merged = allMessages.sort((a, b) => {
+                const timeA = new Date(a.timestamp).getTime();
+                const timeB = new Date(b.timestamp).getTime();
+                return timeA - timeB;
+              });
+              
+              // Log para debugging
+              console.log('📊 [ReceiveMessage] Orden de mensajes:', merged.map(m => ({
+                id: m.id,
+                from: m.fromRole,
+                text: m.text?.substring(0, 30) + '...',
+                timestamp: m.timestamp
+              })));
+              
+              // Actualizar cache
+              try {
+                messageCache.current.set(convId, merged);
+              } catch (e) {}
+              
+              console.log('✅ [ReceiveMessage] Mensaje agregado a conversación', convId, '- Total mensajes:', merged.length);
+              return { ...prev, [convId]: merged };
+            });
+
+            // Actualizar último mensaje en la lista de conversaciones (SIN incrementar unreadCount)
+            setConversationList((prevList) => {
+              const targetConv = prevList.find(c => `${c.id}` === convId);
+              console.log('📨 [ReceiveMessage] Actualizando lastMessage SIN tocar unreadCount:', targetConv ? { id: targetConv.id, unreadCount: targetConv.unreadCount } : 'NO ENCONTRADA');
+              
+              // ✅ IMPORTANTE: NO incrementamos unreadCount aquí - solo en newconversationormessage
+              // Esto evita el doble conteo cuando ambos eventos se disparan para el mismo mensaje
+              
+              const updated = prevList.map((conv) => {
+                if (`${conv.id}` === convId) {
+                  console.log(`📨 [ReceiveMessage] Conv ${convId}: Manteniendo unreadCount en ${conv.unreadCount || 0}`);
+                  return { 
+                    ...conv, 
+                    // ✅ Mantener unreadCount sin cambios - solo actualizar mensaje y timestamp
+                    updatedAt: new Date().toISOString(), 
+                    lastMessage: newMsg.text || (hasImages || hasFiles ? "📷 Imagen o Archivo" : "Nuevo Mensaje") 
+                  };
+                }
+                return conv;
+              });
+              
+              console.log('📨 [ReceiveMessage] lastMessage actualizado, unreadCount preservado');
+              
+              // ✅ Reordenar: conversaciones más recientes primero
+              return updated.sort((a, b) => {
+                const timeA = new Date(a.updatedAt).getTime();
+                const timeB = new Date(b.updatedAt).getTime();
+                return timeB - timeA;
+              });
+            });
           });
 
           connection.on("updateconversation", (conv) => {
             if (!conv || !conv.id) return;
             const convId = String(conv.id);
             console.log('[UpdateConversation] recibido:', conv);
-            setConversationList((prevList) =>
-              prevList.map((c) =>
+            setConversationList((prevList) => {
+              const updated = prevList.map((c) =>
                 c.id === convId
-                  ? { ...c, lastMessage: conv.lastMessage, updatedAt: conv.updatedAt, status: conv.status, blocked: conv.blocked, isWithAI: conv.isWithAI }
+                  ? { ...c, lastMessage: conv.lastMessage, updatedAt: new Date().toISOString(), status: conv.status, blocked: conv.blocked, isWithAI: conv.isWithAI }
                   : c
-              )
-            );
+              );
+              // ✅ Reordenar: conversaciones más recientes primero
+              return updated.sort((a, b) => {
+                const timeA = new Date(a.updatedAt).getTime();
+                const timeB = new Date(b.updatedAt).getTime();
+                return timeB - timeA;
+              });
+            });
             // Fusionar el mensaje recibido por socket con los del backend, evitando duplicados
             if (conv.lastMessage) {
               setMessages((prev) => {
@@ -418,16 +811,93 @@ function Conversations() {
                   id: `update-${convId}-${Date.now()}`,
                   text: conv.lastMessage,
                   from: 'user',
-                  timestamp: conv.updatedAt,
+                  timestamp: conv.updatedAt || new Date().toISOString(),
                   fromRole: 'user',
                   __fromUpdateConversation: true
                 };
                 console.log('[UpdateConversation] Fusionando mensaje al chat:', newMsg);
-                // Fusionar y ordenar por timestamp
-                const merged = [...existing, newMsg].sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+                // Normalizar timestamps y ordenar
+                const normalized = [...existing, newMsg].map(m => ({
+                  ...m,
+                  timestamp: normalizeTimestamp(m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt)
+                }));
+                const merged = normalized.sort((a, b) => {
+                  const timeA = new Date(a.timestamp).getTime();
+                  const timeB = new Date(b.timestamp).getTime();
+                  return timeA - timeB;
+                });
                 return { ...prev, [convId]: merged };
               });
             }
+        });
+
+        // ✅ CRÍTICO: Manejar eventos de reconexión de SignalR
+        connection.onreconnecting((error) => {
+          console.warn('🔄 [SignalR] Intentando reconectar...', error?.message || '');
+          setIsConnected(false);
+          
+          // Verificar si el token está expirado
+          const token = localStorage.getItem("token");
+          if (token) {
+            try {
+              const base64Payload = token.split('.')[1];
+              const payload = JSON.parse(atob(base64Payload));
+              const now = Math.floor(Date.now() / 1000);
+              
+              if (payload.exp && payload.exp < now) {
+                console.error('❌ [SignalR] Token expirado durante reconexión - deteniendo intentos');
+                connection.stop().catch(() => {});
+                setLoadError('Tu sesión ha expirado. Redirigiendo al login...');
+                setTimeout(() => {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('refreshToken');
+                  localStorage.removeItem('user');
+                  window.location.href = '/authentication/sign-in';
+                }, 2000);
+              }
+            } catch (e) {
+              console.error('❌ [SignalR] Error verificando token en reconexión:', e);
+            }
+          }
+        });
+        
+        connection.onreconnected((connectionId) => {
+          console.log('✅ [SignalR] Reconectado exitosamente. ConnectionId:', connectionId);
+          setIsConnected(true);
+          // Reiniciar la conexión admin
+          connection.invoke("JoinAdmin").catch((err) => {
+            console.error('❌ [SignalR] Error al rejoin admin:', err);
+          });
+        });
+        
+        connection.onclose((error) => {
+          console.warn('🔌 [SignalR] Conexión cerrada.', error?.message || '');
+          setIsConnected(false);
+          
+          // Si hay error, verificar si es por token expirado
+          if (error) {
+            const token = localStorage.getItem("token");
+            if (token) {
+              try {
+                const base64Payload = token.split('.')[1];
+                const payload = JSON.parse(atob(base64Payload));
+                const now = Math.floor(Date.now() / 1000);
+                
+                if (payload.exp && payload.exp < now) {
+                  console.error('❌ [SignalR] Conexión cerrada por token expirado');
+                  setLoadError('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+                  setTimeout(() => {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('refreshToken');
+                    localStorage.removeItem('user');
+                    window.location.href = '/authentication/sign-in';
+                  }, 2000);
+                }
+              } catch (e) {
+                console.error('❌ [SignalR] Error verificando token en close:', e);
+              }
+            }
+          }
         });
 
         if (connection.state === "Disconnected") {
@@ -440,12 +910,25 @@ function Conversations() {
         }
       } catch (error) {
         console.error("❌ Error al conectar con SignalR:", error);
+        
+        // Verificar si el error es por autenticación
+        if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
+          console.error('❌ [SignalR] Error de autenticación detectado');
+          setLoadError('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+          setTimeout(() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+            window.location.href = '/authentication/sign-in';
+          }, 2000);
+        }
       }
     };
 
     setupSignalR();
 
     return () => {
+      console.log('🧹 [Cleanup] Limpiando conexión SignalR y estados...');
       const conn = connectionRef.current;
       if (!conn) return;
       connectionRef.current = null;
@@ -457,50 +940,227 @@ function Conversations() {
         conn.off("newconversationormessage");
         conn.off("heartbeat");
         conn.off("updateconversation");
+        conn.off("receivemessage");
       } catch (e) { /* ignore */ }
-      if (conn.state === "Connected" || conn.state === "Connecting") {
-        conn.stop().catch(() => {});
+      
+      // ✅ CRÍTICO: Detener conexión sin importar el estado para evitar memory leaks
+      try {
+        if (conn.state !== "Disconnected") {
+          console.log('🔌 [Cleanup] Deteniendo conexión SignalR...');
+          conn.stop().catch((err) => {
+            console.warn('⚠️ [Cleanup] Error al detener SignalR:', err);
+          });
+        }
+      } catch (e) {
+        console.warn('⚠️ [Cleanup] Error en stop():', e);
       }
+      
       messageCache.current.clear();
       messageCursor.current.clear();
       visibleCounts.current.clear();
+      console.log('✅ [Cleanup] Limpieza completa');
     };
   }, []);
 
-  useEffect(() => {
+  const fetchConversations = async () => {
     if (!isAuthenticated) {
       setLoadingList(false);
       return;
     }
-    setLoadingList(true);
-    const fetchData = async () => {
-      try {
-        const data = await getConversationsWithLastMessage();
-        const raw = Array.isArray(data) ? data : (data?.conversations || data?.data || []);
-        const fetchedConversations = (Array.isArray(raw) ? raw : []).map((conv) => ({ ...conv, id: String(conv.id), updatedAt: conv.lastMessage?.timestamp || conv.updatedAt }));
-        setConversationList(prevList => {
-          const merged = [...fetchedConversations];
-          prevList.forEach(conv => {
-            if (!merged.some(c => c.id === conv.id)) merged.push(conv);
-          });
-          return merged;
-        });
-        const initialIaPausedMap = {};
-        fetchedConversations.forEach(conv => {
-          initialIaPausedMap[conv.id] = !conv.isWithAI;
-        });
-        setIaPausedMap(initialIaPausedMap);
-      } catch (error) {
-        console.error("Error al obtener conversaciones:", error);
-      } finally {
-        setLoadingList(false);
+    
+    // ✅ CRÍTICO: Verificar si el token está expirado ANTES de hacer peticiones
+    const token = localStorage.getItem("token");
+    if (!token) {
+      console.warn('⚠️ [FetchConversations] No hay token disponible');
+      setLoadError('Sesión no válida. Por favor, inicia sesión nuevamente.');
+      setLoadingList(false);
+      // Cerrar conexión SignalR si existe
+      const conn = connectionRef.current;
+      if (conn && (conn.state === "Connected" || conn.state === "Connecting")) {
+        console.log('🔌 [FetchConversations] Cerrando conexión SignalR por falta de token');
+        conn.stop().catch(() => {});
       }
+      return;
+    }
+    
+    // ✅ Decodificar y verificar expiración del token
+    try {
+      const base64Payload = token.split('.')[1];
+      const payload = JSON.parse(atob(base64Payload));
+      const now = Math.floor(Date.now() / 1000);
+      
+      if (payload.exp && payload.exp < now) {
+        console.warn('⚠️ [FetchConversations] Token expirado. exp:', payload.exp, 'now:', now);
+        setLoadError('Tu sesión ha expirado. Redirigiendo al login...');
+        setLoadingList(false);
+        
+        // Cerrar conexión SignalR
+        const conn = connectionRef.current;
+        if (conn && (conn.state === "Connected" || conn.state === "Connecting")) {
+          console.log('🔌 [FetchConversations] Cerrando conexión SignalR por token expirado');
+          conn.stop().catch(() => {});
+        }
+        
+        // Limpiar sesión y redirigir
+        setTimeout(() => {
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
+          localStorage.removeItem('user');
+          window.location.href = '/authentication/sign-in';
+        }, 2000);
+        return;
+      }
+    } catch (e) {
+      console.error('❌ [FetchConversations] Error decodificando token:', e);
+      // Continuar de todas formas, el interceptor de axios manejará el error
+    }
+    
+    setLoadingList(true);
+    setLoadError(null);
+    try {
+      console.log('📥 [FetchConversations] Iniciando...');
+      const data = await getConversationsWithLastMessage();
+      const raw = Array.isArray(data) ? data : (data?.conversations || data?.data || []);
+      const fetchedConversations = (Array.isArray(raw) ? raw : []).map((conv) => ({ 
+        ...conv, 
+        id: String(conv.id), 
+        updatedAt: normalizeTimestamp(conv.lastMessage?.timestamp || conv.updatedAt)
+      }));
+      
+      console.log('📥 [FetchConversations] Obtenidas', fetchedConversations.length, 'conversaciones del backend');
+      
+      setConversationList(prevList => {
+        console.log('📥 [FetchConversations] prevList tiene', prevList.length, 'conversaciones');
+        
+        const merged = fetchedConversations.map(conv => {
+          // No sobrescribir updatedAt si existe en prevList y es más reciente
+          const existing = prevList.find(c => String(c.id) === String(conv.id));
+          const existingNormalized = existing ? normalizeTimestamp(existing.updatedAt) : null;
+          const convNormalized = normalizeTimestamp(conv.updatedAt);
+          const useExisting = existingNormalized && new Date(existingNormalized) > new Date(convNormalized);
+          
+          // ✅ CRÍTICO: Preservar unreadCount del frontend si es mayor
+          const frontendUnread = existing?.unreadCount || 0;
+          const backendUnread = conv.unreadCount || conv.unreadAdminMessages || 0;
+          const maxUnread = Math.max(frontendUnread, backendUnread);
+          
+          console.log(`🔄 [FetchConversations] Conv ${conv.id}: frontend=${frontendUnread}, backend=${backendUnread}, max=${maxUnread}`);
+          
+          if (conv.id === '738') {
+            console.log('📥 [FetchConversations] Procesando 738:');
+            console.log('  - Backend updatedAt (NORMALIZADO):', convNormalized);
+            console.log('  - Existing updatedAt (NORMALIZADO):', existingNormalized);
+            console.log('  - useExisting:', useExisting);
+            console.log('  - Frontend unreadCount:', frontendUnread, '| Backend unreadCount:', backendUnread, '| Max:', maxUnread);
+          }
+          
+          if (useExisting) {
+            return { ...conv, updatedAt: existingNormalized, unreadCount: maxUnread };
+          } else {
+            return { ...conv, updatedAt: convNormalized, unreadCount: maxUnread };
+          }
+        });
+        
+        prevList.forEach(conv => {
+          if (!merged.some(c => c.id === conv.id)) merged.push(conv);
+        });
+        
+        // ✅ Ordenar conversaciones: más recientes primero
+        const sorted = merged.sort((a, b) => {
+          const timeA = new Date(a.updatedAt).getTime();
+          const timeB = new Date(b.updatedAt).getTime();
+          return timeB - timeA; // Descendente: más recientes primero
+        });
+        
+        console.log('📥 [FetchConversations] Top 5 después de merge:', sorted.slice(0, 5).map(c => ({ id: c.id, updatedAt: c.updatedAt })));
+        const pos738 = sorted.findIndex(c => c.id === '738');
+        if (pos738 !== -1) {
+          console.log(`📥 [FetchConversations] Conversación 738 quedó en posición: ${pos738 + 1}`);
+        }
+        
+        return sorted;
+      });
+      
+      const initialIaPausedMap = {};
+      fetchedConversations.forEach(conv => {
+        initialIaPausedMap[conv.id] = !conv.isWithAI;
+      });
+      setIaPausedMap(initialIaPausedMap);
+      setLoadError(null);
+    } catch (error) {
+      console.error("❌ [FetchConversations] Error:", error);
+      
+      // ✅ Manejar diferentes tipos de error
+      let errorMsg = 'Error al cargar las conversaciones. Intenta nuevamente.';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMsg = 'La solicitud tardó demasiado tiempo. El servidor podría estar ocupado o tu sesión expiró.';
+        console.warn('⚠️ [FetchConversations] Timeout - verificando token...');
+        
+        // Si hay timeout, verificar si el token está vencido
+        const token = localStorage.getItem("token");
+        if (token) {
+          try {
+            const base64Payload = token.split('.')[1];
+            const payload = JSON.parse(atob(base64Payload));
+            const now = Math.floor(Date.now() / 1000);
+            if (payload.exp && payload.exp < now) {
+              errorMsg = 'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.';
+              // Cerrar SignalR y limpiar sesión
+              const conn = connectionRef.current;
+              if (conn && (conn.state === "Connected" || conn.state === "Connecting")) {
+                conn.stop().catch(() => {});
+              }
+              setTimeout(() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('user');
+                window.location.href = '/authentication/sign-in';
+              }, 3000);
+            }
+          } catch (e) {
+            console.error('❌ Error verificando token:', e);
+          }
+        }
+      } else if (error.message === 'Network Error') {
+        errorMsg = 'No se pudo conectar al servidor. Verifica que el backend esté en ejecución.';
+      } else if (error.response?.status === 401 || error.response?.status === 403) {
+        errorMsg = 'Tu sesión ha expirado. Redirigiendo al login...';
+        // El interceptor de axios debería manejar esto, pero por si acaso:
+        setTimeout(() => {
+          window.location.href = '/authentication/sign-in';
+        }, 2000);
+      }
+      
+      setLoadError(errorMsg);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      await fetchConversations();
     };
     fetchData();
   }, [isAuthenticated]);
 
   const handleSelectConversation = async (conv) => {
     const idStr = `${conv.id}`;
+    
+    // ✅ CRÍTICO: Unirse al grupo de SignalR para recibir mensajes en tiempo real
+    if (connectionRef.current?.state === "Connected") {
+      try {
+        console.log(`🚪 [handleSelectConversation] Uniéndose al grupo de conversación ${idStr}`);
+        await connectionRef.current.invoke("JoinRoom", Number(idStr));
+        console.log(`✅ [handleSelectConversation] Unido exitosamente al grupo ${idStr}`);
+      } catch (error) {
+        console.error(`❌ [handleSelectConversation] Error al unirse al grupo ${idStr}:`, error);
+      }
+    } else {
+      console.warn(`⚠️ [handleSelectConversation] SignalR no conectado, no se puede unir al grupo ${idStr}`);
+    }
+    
     const exists = openTabs.find((t) => t.id === idStr);
     if (!exists) {
       setOpenTabs((prev) => [...prev, { ...conv, id: idStr, unreadCount: 0 }]);
@@ -514,10 +1174,22 @@ function Conversations() {
       setIaPausedMap((prev) => ({ ...prev, [conv.id]: !conv.isWithAI }));
     }
     setActiveTab(idStr);
+    
+    // ✅ CRÍTICO: Marcar conversación como leída en el frontend
     setConversationList((prevList) =>
       prevList.map((c) => (c.id === idStr ? { ...c, unreadCount: 0 } : c))
     );
     setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
+    
+    // ✅ CRÍTICO: Marcar mensajes como leídos en el backend
+    if (conv.unreadCount > 0) {
+      try {
+        await markMessagesAsRead(conv.id);
+        console.log(`✅ [handleSelectConversation] Mensajes marcados como leídos para conversación ${idStr}`);
+      } catch (error) {
+        console.warn(`⚠️ [handleSelectConversation] Error marcando mensajes como leídos:`, error);
+      }
+    }
 
       // If there is no cached or SignalR-loaded messages yet but the
       // conversation list shows a preview (conv.lastMessage), show a
@@ -563,6 +1235,17 @@ function Conversations() {
           historyArray = byConv.map((m) => {
             let fr = (m.fromRole || m.sender || m.Sender || "user").toString().toLowerCase();
             if (fr !== "admin" && fr !== "bot" && fr !== "user") fr = "user";
+            
+            // ✅ CRÍTICO: Procesar archivos/imágenes para mensajes históricos
+            let files = Array.isArray(m.files) ? m.files : [];
+            const images = Array.isArray(m.images) ? m.images : [];
+            // Fallback: si no hay files array pero hay campos directos de archivo, construir array
+            if (files.length === 0 && m.fileUrl && m.fileName) {
+              files = [{ fileName: m.fileName, fileType: m.fileType, fileUrl: m.fileUrl }];
+            }
+            const hasFiles = files.length > 0;
+            const hasImages = images.length > 0;
+            
             return {
               ...m,
               id: String(m.id ?? `${idStr}-${m.timestamp || Date.now()}`),
@@ -571,8 +1254,19 @@ function Conversations() {
               fromRole: fr,
               fromId: m.fromId ?? null,
               fromName: m.fromName ?? null,
+              files: files,  // ✅ Preservar archivos
+              images: images, // ✅ Preservar imágenes 
+              hasFiles: hasFiles,
+              hasImages: hasImages
             };
-          }).sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+          }).map(m => ({
+            ...m,
+            timestamp: normalizeTimestamp(m.timestamp ?? m.createdAt)
+          })).sort((a, b) => {
+            const timeA = new Date(a.timestamp).getTime();
+            const timeB = new Date(b.timestamp).getTime();
+            return timeA - timeB;
+          });
         }
         if (historyArray.length === 0) {
           const historyResponse = await getConversationHistory(conv.id);
@@ -590,9 +1284,44 @@ function Conversations() {
             try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
             let fromRole = (fromRoleRaw || "").toLowerCase();
             if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
-            return { ...msg, id: String(id), text, fromRole, fromId: msg.fromId ?? msg.FromId, fromName: msg.fromName ?? msg.FromName };
+            
+            // ✅ CRÍTICO: Procesar archivos/imágenes para mensajes históricos  
+            let files = Array.isArray(msg.files) ? msg.files : [];
+            const images = Array.isArray(msg.images) ? msg.images : [];
+            // Fallback: si no hay files array pero hay campos directos de archivo, construir array
+            if (files.length === 0 && (msg.fileUrl || msg.FileUrl) && (msg.fileName || msg.FileName)) {
+              files = [{ 
+                fileName: msg.fileName || msg.FileName, 
+                fileType: msg.fileType || msg.FileType, 
+                fileUrl: msg.fileUrl || msg.FileUrl 
+              }];
+            }
+            const hasFiles = files.length > 0;
+            const hasImages = images.length > 0;
+            
+            return { 
+              ...msg, 
+              id: String(id), 
+              text, 
+              fromRole, 
+              fromId: msg.fromId ?? msg.FromId, 
+              fromName: msg.fromName ?? msg.FromName,
+              files: files,  // ✅ Preservar archivos
+              images: images, // ✅ Preservar imágenes
+              hasFiles: hasFiles,
+              hasImages: hasImages
+            };
           });
-          const merged = historyNormalized.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+          // Normalizar timestamps para sorting consistente
+          const timestampNormalized = historyNormalized.map(m => ({
+            ...m,
+            timestamp: normalizeTimestamp(m.timestamp ?? m.createdAt)
+          }));
+          const merged = timestampNormalized.sort((a, b) => {
+            const timeA = new Date(a.timestamp).getTime();
+            const timeB = new Date(b.timestamp).getTime();
+            return timeA - timeB;
+          });
           messageCache.current.set(idStr, merged);
           const visible = Math.min(DEFAULT_VISIBLE_ON_OPEN, merged.length);
           visibleCounts.current.set(idStr, visible);
@@ -622,7 +1351,7 @@ function Conversations() {
           grouped.days.forEach((day) => {
             flattened.push({ id: `day-divider-${conv.id}-${day.date}`, __dayDivider: true, label: day.label, timestamp: day.date });
             const msgs = Array.isArray(day.messages) ? day.messages : [];
-            msgs.forEach((msg) => {
+            msgs.forEach((msg, msgIdx) => {
               const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
               const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
               let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
@@ -638,7 +1367,34 @@ function Conversations() {
               const from = msg.from ?? msg.From ?? null;
               const fromId = msg.fromId ?? msg.FromId ?? null;
               const fromName = msg.fromName ?? msg.FromName ?? null;
-              flattened.push({ ...msg, id: String(id), text, fromRole, from, fromId, fromName, publicUserId });
+              
+              // ✅ Procesar archivos/imágenes para SignalR (igual que historial)
+              let files = Array.isArray(msg.files) ? msg.files : [];
+              const images = Array.isArray(msg.images) ? msg.images : [];
+              // Fallback: si no hay files array pero hay campos directos de archivo, construir array
+              if (files.length === 0 && (msg.fileUrl || msg.FileUrl) && (msg.fileName || msg.FileName)) {
+                files = [{ 
+                  fileName: msg.fileName || msg.FileName, 
+                  fileType: msg.fileType || msg.FileType, 
+                  fileUrl: msg.fileUrl || msg.FileUrl 
+                }];
+              }
+              const hasFiles = files.length > 0;
+              const hasImages = images.length > 0;
+              flattened.push({ 
+                ...msg, 
+                id: String(id), 
+                text, 
+                fromRole, 
+                from, 
+                fromId, 
+                fromName, 
+                publicUserId,
+                files: files,    // ✅ Preservar archivos
+                images: images,  // ✅ Preservar imágenes
+                hasFiles: hasFiles,
+                hasImages: hasImages
+              });
             });
           });
 
@@ -655,9 +1411,74 @@ function Conversations() {
           setMessages((prev) => {
             const existing = prev[idStr] || [];
             const map = new Map();
-            flattened.forEach((m) => map.set(String(m.id), m));
-            existing.forEach((m) => map.set(String(m.id), m));
-            const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+            
+            // 📎 DEBUG: Log estado antes del merge
+            console.log(`🗺 [Historial] Merge para conv ${idStr}:`, {
+              historicos: flattened.length,
+              existentes: existing.length,
+              existentesConArchivos: existing.filter(m => m.files?.length > 0 || m.images?.length > 0).length
+            });
+            
+            // 📦 PRIORIDAD: Preservar archivos de mensajes SignalR si el historial no los tiene
+            flattened.forEach((histMsg) => {
+              const key = String(histMsg.id);
+              map.set(key, histMsg);
+            });
+            
+            existing.forEach((signalRMsg) => {
+              const key = String(signalRMsg.id);
+              const histMsg = map.get(key);
+              
+              if (histMsg) {
+                // Si el mensaje del historial NO tiene archivos pero SignalR sí
+                const histHasFiles = histMsg.files?.length > 0 || histMsg.images?.length > 0;
+                const signalRHasFiles = signalRMsg.files?.length > 0 || signalRMsg.images?.length > 0;
+                
+                if (!histHasFiles && signalRHasFiles) {
+                  console.log(`📦 [Merge] Preservando archivos de SignalR para mensaje ${key}:`, {
+                    signalRFiles: signalRMsg.files?.length || 0,
+                    signalRImages: signalRMsg.images?.length || 0
+                  });
+                  // Combinar datos del historial con archivos de SignalR
+                  map.set(key, {
+                    ...histMsg,
+                    files: signalRMsg.files || [],
+                    images: signalRMsg.images || [],
+                    hasFiles: signalRMsg.hasFiles,
+                    hasImages: signalRMsg.hasImages
+                  });
+                }
+              } else {
+                // Mensaje solo existe en SignalR (optimistic)
+                map.set(key, signalRMsg);
+              }
+            });
+            
+            // Normalize timestamps for consistent sorting
+            const normalized = Array.from(map.values()).map(m => {
+              const originalTimestamp = m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt;
+              return {
+                ...m,
+                timestamp: normalizeTimestamp(originalTimestamp)
+              };
+            });
+            
+            console.log(`🗺 [Historial] Mensajes finales para conv ${idStr}:`, {
+              total: normalized.length,
+              conArchivos: normalized.filter(m => m.files?.length > 0 || m.images?.length > 0).length,
+              archivosEjemplo: normalized.slice(0, 3).map(m => ({ 
+                id: m.id, 
+                files: m.files?.length || 0, 
+                images: m.images?.length || 0 
+              }))
+            });
+            
+            // Sort ascending (oldest first) by normalized timestamp
+            const merged = normalized.sort((a, b) => {
+              const timeA = new Date(a.timestamp).getTime();
+              const timeB = new Date(b.timestamp).getTime();
+              return timeA - timeB;
+            });
             // store full merged history in cache but only render the tail (recent messages)
             messageCache.current.set(idStr, merged);
             if (grouped.hasMore) {
@@ -681,38 +1502,8 @@ function Conversations() {
               });
             } catch (e) { /* ignore */ }
 
-            (async () => {
-              try {
-                const files = await getFilesByConversation(conv.id);
-                if (Array.isArray(files) && files.length > 0) {
-                  const fileItems = files.map((f) => ({
-                    id: `file-${f.id}`,
-                    text: null,
-                    fromRole: 'user',
-                    fromName: f.userName || `Sesión ${conv.id}`,
-                    timestamp: f.uploadedAt || f.UploadedAt || new Date().toISOString(),
-                    fileUrl: f.filePath || f.fileUrl || f.filePathServer || f.path || null,
-                    fileName: f.fileName || f.fileNameOriginal || f.name,
-                    fileType: f.fileType || f.fileType || 'application/octet-stream',
-                    _origin: 'uploaded_file',
-                    _fileId: f.id,
-                  }));
-
-                  const current = messageCache.current.get(idStr) || merged;
-                  const byId = new Map();
-                  current.forEach((m) => byId.set(String(m.id), m));
-                  fileItems.forEach((fi) => { if (!byId.has(String(fi.id))) byId.set(String(fi.id), fi); });
-                  const mergedWithFiles = Array.from(byId.values()).sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
-                  messageCache.current.set(idStr, mergedWithFiles);
-                  // update the visible slice according to the current visible count
-                  const currentVisible = visibleCounts.current.get(idStr) || desiredVisible || DEFAULT_VISIBLE_ON_OPEN;
-                  const visibleAfterFiles = mergedWithFiles.slice(-currentVisible);
-                  setMessages((prev2) => ({ ...prev2, [idStr]: visibleAfterFiles }));
-                }
-              } catch (fileErr) {
-                console.warn('[getFilesByConversation] failed to fetch/merge files for conv', conv.id, fileErr);
-              }
-            })();
+            // ✅ Ya NO es necesario buscar archivos por separado: el backend ahora incluye
+            // los datos de ChatUploadedFile directamente en cada mensaje vía Include().
 
             // return only the visible slice to render (recent messages)
             return { ...prev, [idStr]: visibleSlice };
@@ -736,14 +1527,28 @@ function Conversations() {
               }
               const fromId = msg.fromId ?? msg.FromId ?? null;
               const fromName = msg.fromName ?? msg.FromName ?? null;
-              return { ...msg, id: String(id), text, fromRole, fromId, fromName, publicUserId };
+              // ✅ Procesar archivos
+              let files = Array.isArray(msg.files) ? msg.files : [];
+              if (files.length === 0 && (msg.fileUrl || msg.FileUrl) && (msg.fileName || msg.FileName)) {
+                files = [{ fileName: msg.fileName || msg.FileName, fileType: msg.fileType || msg.FileType, fileUrl: msg.fileUrl || msg.FileUrl }];
+              }
+              return { ...msg, id: String(id), text, fromRole, fromId, fromName, publicUserId, files: files.length > 0 ? files : undefined };
             });
             setMessages((prev) => {
               const existing = prev[idStr] || [];
               const map = new Map();
               normalized.forEach((m) => map.set(String(m.id), m));
               existing.forEach((m) => map.set(String(m.id), m));
-              const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+              // Normalizar timestamps
+              const timestampNormalized = Array.from(map.values()).map(m => ({
+                ...m,
+                timestamp: normalizeTimestamp(m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt)
+              }));
+              const merged = timestampNormalized.sort((a, b) => {
+                const timeA = new Date(a.timestamp).getTime();
+                const timeB = new Date(b.timestamp).getTime();
+                return timeA - timeB;
+              });
               messageCache.current.set(idStr, merged);
               if (paged.hasMore) {
                 messageCursor.current.set(idStr, { hasMore: true, nextBefore: paged.nextBefore });
@@ -771,14 +1576,28 @@ function Conversations() {
                   try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
                   let fromRole = (fromRoleRaw || "").toLowerCase();
                   if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
-                  return { ...msg, id: String(id), text, fromRole, fromId: msg.fromId ?? msg.FromId, fromName: msg.fromName ?? msg.FromName };
+                  // ✅ Procesar archivos
+                  let files = Array.isArray(msg.files) ? msg.files : [];
+                  if (files.length === 0 && (msg.fileUrl || msg.FileUrl) && (msg.fileName || msg.FileName)) {
+                    files = [{ fileName: msg.fileName || msg.FileName, fileType: msg.fileType || msg.FileType, fileUrl: msg.fileUrl || msg.FileUrl }];
+                  }
+                  return { ...msg, id: String(id), text, fromRole, fromId: msg.fromId ?? msg.FromId, fromName: msg.fromName ?? msg.FromName, files: files.length > 0 ? files : undefined };
                 });
                 setMessages((prev) => {
                   const existing = prev[idStr] || [];
                   const map = new Map();
                   existing.forEach((m) => map.set(String(m.id), m));
                   historyNormalized.forEach((m) => map.set(String(m.id), m));
-                  const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+                  // Normalizar timestamps
+                  const timestampNormalized = Array.from(map.values()).map(m => ({
+                    ...m,
+                    timestamp: normalizeTimestamp(m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt)
+                  }));
+                  const merged = timestampNormalized.sort((a, b) => {
+                    const timeA = new Date(a.timestamp).getTime();
+                    const timeB = new Date(b.timestamp).getTime();
+                    return timeA - timeB;
+                  });
                   messageCache.current.set(idStr, merged);
                   return { ...prev, [idStr]: merged };
                 });
@@ -792,7 +1611,16 @@ function Conversations() {
                     const map = new Map();
                     existing.forEach((m) => map.set(String(m.id), m));
                     fallbackNormalized.forEach((m) => map.set(String(m.id), m));
-                    const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+                    // Normalizar timestamps
+                    const timestampNormalized = Array.from(map.values()).map(m => ({
+                      ...m,
+                      timestamp: normalizeTimestamp(m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt)
+                    }));
+                    const merged = timestampNormalized.sort((a, b) => {
+                      const timeA = new Date(a.timestamp).getTime();
+                      const timeB = new Date(b.timestamp).getTime();
+                      return timeA - timeB;
+                    });
                     messageCache.current.set(idStr, merged);
                     return { ...prev, [idStr]: merged };
                   });
@@ -850,7 +1678,16 @@ function Conversations() {
           if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
           const fromId = msg.fromId ?? msg.FromId ?? msg.fromId ?? null;
           const fromName = msg.fromName ?? msg.FromName ?? msg.alias ?? msg.fromName ?? null;
-          flattened.push({ ...msg, id: String(id), text, fromRole, fromId, fromName });
+          // ✅ Procesar archivos para mensajes paginados
+          let files = Array.isArray(msg.files) ? msg.files : [];
+          if (files.length === 0 && (msg.fileUrl || msg.FileUrl) && (msg.fileName || msg.FileName)) {
+            files = [{ 
+              fileName: msg.fileName || msg.FileName, 
+              fileType: msg.fileType || msg.FileType, 
+              fileUrl: msg.fileUrl || msg.FileUrl 
+            }];
+          }
+          flattened.push({ ...msg, id: String(id), text, fromRole, fromId, fromName, files: files.length > 0 ? files : undefined });
         });
       });
 
@@ -868,7 +1705,20 @@ function Conversations() {
         flattened.forEach((m) => map.set(String(m.id || `day-${Math.random().toString(36).slice(2,6)}`), m));
         // then existing messages
         existing.forEach((m) => map.set(String(m.id), m));
-        const merged = Array.from(map.values()).sort((a, b) => new Date(a.timestamp || a.Timestamp || 0) - new Date(b.timestamp || b.Timestamp || 0));
+        
+        // Normalize timestamps for consistent sorting
+        const normalized = Array.from(map.values()).map(m => ({
+          ...m,
+          timestamp: normalizeTimestamp(m.timestamp || m.Timestamp || m.createdAt || m.CreatedAt)
+        }));
+        
+        // Sort ascending (oldest first) by normalized timestamp
+        const merged = normalized.sort((a, b) => {
+          const timeA = new Date(a.timestamp).getTime();
+          const timeB = new Date(b.timestamp).getTime();
+          return timeA - timeB;
+        });
+        
         messageCache.current.set(idStr, merged);
         // Debug: after prepend, show sizes and visible window (compute newVisible first)
         try {
@@ -970,6 +1820,8 @@ function Conversations() {
       replyToMessageId: replyToMessageId,
       replyToText: replyToText,
       replyTo: replyToMessageId ? (messages[convId] || []).find((m) => m.id === replyToMessageId) : null,
+      __optimistic: true, // Marcar como optimista para identificarlo después
+      __tempId: messageId, // Guardar ID temporal para reemplazar
     };
 
     setMessages((prev) => {
@@ -1012,7 +1864,25 @@ function Conversations() {
   return (
     <DashboardLayout>
       <DashboardNavbar />
-      <SoftBox px={2} pt={2}>
+      
+      {/* ✅ Alerta visible cuando hay error de sesión o conectividad */}
+      {loadError && (
+        <SoftBox px={2} pt={2}>
+          <Alert 
+            severity={loadError.includes('sesión') || loadError.includes('Sesión') ? "error" : "warning"}
+            sx={{ mb: 2 }}
+          >
+            <AlertTitle>
+              {loadError.includes('sesión') || loadError.includes('Sesión') ? 
+                "⏱️ Sesión Expirada" : 
+                "⚠️ Error de Conexión"}
+            </AlertTitle>
+            {loadError}
+          </Alert>
+        </SoftBox>
+      )}
+      
+      <SoftBox px={2} pt={loadError ? 0 : 2}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={4} lg={4}>
             {showTrash && userId === '1' ? (
@@ -1032,6 +1902,8 @@ function Conversations() {
                   <ConversationList
                     conversations={conversationList}
                     loading={loadingList}
+                    error={loadError}
+                    onRetry={fetchConversations}
                     messagesMap={messages}
                     highlightedIds={highlightedIds}
                     onClearHighlight={(id) => setHighlightedIds((prev) => prev.filter((cid) => cid !== id))}
@@ -1046,35 +1918,7 @@ function Conversations() {
                             );
                           });
                         }
-                        // Si no hay mensajes en el estado, cargar historial
-                        const idStr = String(conv.id);
-                        if (!messages[idStr] || messages[idStr].length === 0) {
-                          setLoadingConversationId(idStr);
-                          getMessagesGrouped(conv.id, null, 20).then((grouped) => {
-                            if (grouped && Array.isArray(grouped.days) && grouped.days.length > 0) {
-                              const flattened = [];
-                              grouped.days.forEach((day) => {
-                                flattened.push({ id: `day-divider-${conv.id}-${day.date}`, __dayDivider: true, label: day.label, timestamp: day.date });
-                                const msgs = Array.isArray(day.messages) ? day.messages : [];
-                                msgs.forEach((msg) => {
-                                  const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
-                                  const text = msg.text ?? msg.Text ?? msg.messageText ?? "";
-                                  let fromRoleRaw = msg.fromRole ?? msg.FromRole ?? msg.from ?? msg.From ?? "user";
-                                  try { fromRoleRaw = String(fromRoleRaw); } catch (e) { fromRoleRaw = "user"; }
-                                  let fromRole = (fromRoleRaw || "").toLowerCase();
-                                  if (fromRole !== "admin" && fromRole !== "bot" && fromRole !== "user") fromRole = "user";
-                                  const fromId = msg.fromId ?? msg.FromId ?? null;
-                                  const fromName = msg.fromName ?? msg.FromName ?? null;
-                                  flattened.push({ ...msg, id: String(id), text, fromRole, fromId, fromName });
-                                });
-                              });
-                              // Mostrar solo los más recientes
-                              const visible = Math.min(20, flattened.length);
-                              setMessages((prev) => ({ ...prev, [idStr]: flattened.slice(-visible) }));
-                            }
-                            setLoadingConversationId(null);
-                          });
-                        }
+                        // ✅ handleSelectConversation ya carga el historial completo con archivos incluidos
                         handleSelectConversation(conv);
                       }
                       setHighlightedIds((prev) => prev.filter((cid) => cid !== id));

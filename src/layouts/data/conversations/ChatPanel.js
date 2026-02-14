@@ -1,58 +1,3 @@
-// --- JWT DIAGNOSTIC PANEL ---
-function parseJwt(token) {
-  if (!token) return null;
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
-    return JSON.parse(jsonPayload);
-  } catch (e) { return null; }
-}
-
-function JwtDiagnosticPanel() {
-  const [token, setToken] = React.useState(null);
-  const [claims, setClaims] = React.useState(null);
-  const [expired, setExpired] = React.useState(false);
-
-  React.useEffect(() => {
-    const t = localStorage.getItem('token');
-    setToken(t);
-    if (t) {
-      const c = parseJwt(t);
-      setClaims(c);
-      if (c && c.exp) {
-        const now = Math.floor(Date.now() / 1000);
-        setExpired(c.exp < now);
-      }
-    }
-  }, []);
-
-  if (!token) return (
-    <div style={{background:'#fee',color:'#900',padding:8,marginBottom:8,border:'1px solid #f99',borderRadius:4}}>
-      <b>JWT:</b> No hay token en localStorage
-    </div>
-  );
-  // Buscar role y sub en claims alternativos
-  const role = claims?.role || claims?.roles || claims?.["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"] || 'N/A';
-  const sub = claims?.sub || claims?.["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] || 'N/A';
-
-  return (
-    <div style={{background:'#eef',color:'#003',padding:8,marginBottom:8,border:'1px solid #99f',borderRadius:4,fontSize:13}}>
-      <b>JWT:</b> {expired ? <span style={{color:'#c00'}}>Expirado</span> : <span style={{color:'#090'}}>Vigente</span>}<br/>
-      <b>exp:</b> {claims?.exp ? new Date(claims.exp*1000).toLocaleString() : 'N/A'}<br/>
-      <b>role:</b> {role}<br/>
-      <b>sub:</b> {sub}<br/>
-      <b>aud:</b> {claims?.aud || 'N/A'}<br/>
-      <b>iss:</b> {claims?.iss || 'N/A'}<br/>
-      <details>
-        <summary>Ver claims completos</summary>
-        <pre style={{fontSize:11,whiteSpace:'pre-wrap'}}>{JSON.stringify(claims, null, 2)}</pre>
-      </details>
-    </div>
-  );
-}
 import React, {
   useState,
   useEffect,
@@ -133,8 +78,7 @@ const ChatPanel = forwardRef(
     const [isUserAtBottom, setIsUserAtBottom] = useState(true);
     const lastMessageIdRef = useRef(null);
     const [hasNewMessageBelow, setHasNewMessageBelow] = useState(false);
-    // Mensajes en tiempo real
-    const [liveMessages, setLiveMessages] = useState([]);
+    // ✅ Mensajes ahora solo desde estado global (sin duplicación)  
     const hubConnectionRef = useRef(null);
     // Importar SignalR
     const { createHubConnection } = require("services/signalr");
@@ -229,21 +173,9 @@ const ChatPanel = forwardRef(
             } catch (e) {
               console.warn("[SignalR] No se pudo unir al grupo admin:", e);
             }
-            // Suscribirse a todos los eventos relevantes
-            connection.on("newconversationormessage", (msg) => {
-              setLiveMessages((prev) => {
-                if (prev.some((m) => m.id === msg.id)) return prev;
-                return [...prev, msg];
-              });
-            });
-            connection.on("receivemessage", (msg) => {
-              // Mensajes directos de la conversación (por compatibilidad)
-              console.log("📨 [SignalR] ReceiveMessage:", msg);
-              setLiveMessages((prev) => {
-                if (prev.some((m) => m.id === msg.id)) return prev;
-                return [...prev, msg];
-              });
-            });
+            // ✅ NO suscribirse a eventos de mensajes aquí - ya se manejan en index.js
+            // Esto evita la duplicación de imágenes y problemas de scroll
+            console.log("📡 [ChatPanel] SignalR conectado, usando mensajes del estado global");
           });
         }
         return () => {
@@ -251,10 +183,7 @@ const ChatPanel = forwardRef(
           const conn = hubConnectionRef.current;
           if (!conn) return;
           hubConnectionRef.current = null;
-          try {
-            conn.off("newconversationormessage");
-            conn.off("receivemessage");
-          } catch (e) { /* ignore */ }
+          // ✅ No hay eventos SignalR que desconectar aquí
           if (conn.state === "Connected" || conn.state === "Connecting") {
             conn.stop().catch(() => {});
           }
@@ -469,28 +398,152 @@ const ChatPanel = forwardRef(
 
     const getBlockedIcon = () => <BlockIcon />;
     const processedMessages = useMemo(() => {
-      // LOG: mensajes recibidos y normalizados
-      // Unificar historial y mensajes en tiempo real, deduplicando por id
+      // 🔍 DEBUG: Log mensajes recibidos en ChatPanel
+      console.log(`🎯 [ChatPanel] Procesando ${messages.length} mensajes para conversación ${conversationId}`);
+      
+      // ✅ Deduplicación inteligente para evitar imágenes duplicadas
       const msgMap = new Map();
-      [...messages, ...liveMessages].forEach((msg) => {
+      const duplicateTracker = new Map(); // Para trackear duplicados por contenido
+      
+      messages.forEach((msg, idx) => {
         if (!msg) return;
-        const key = msg.id?.toString() || msg.tempId?.toString() || JSON.stringify(msg);
-        // Si ya existe, priorizar el de SignalR (liveMessages)
-        if (!msgMap.has(key) || liveMessages.some((m) => (m.id?.toString() || m.tempId?.toString()) === key)) {
-          msgMap.set(key, msg);
+        
+        const messageId = String(msg.id || msg.tempId || `temp-${idx}`);
+        const hasFiles = (Array.isArray(msg.files) && msg.files.length > 0) || 
+                         (Array.isArray(msg.images) && msg.images.length > 0) ||
+                         (!!(msg.file?.fileUrl || msg.fileUrl));
+        
+        // 🔍 DEBUG: Log mensajes con archivos
+        if (hasFiles) {
+          console.log(`📎 [ChatPanel] Mensaje ${messageId} tiene archivos:`, {
+            files: msg.files?.length || 0,
+            images: msg.images?.length || 0,
+            file: !!msg.file,
+            fileUrl: !!msg.fileUrl
+          });
         }
+        
+        // 🚫 FIX: Detectar si este mensaje con archivos ya está representado en el mapa
+        // Caso especial: SignalR envía 1 evento con files:[{img1},{img2}] pero el historial
+        // devuelve 2 mensajes separados cada uno con 1 archivo. Deduplicar por fileUrl.
+        if (hasFiles) {
+          // Extraer fileUrls de este mensaje
+          const currentFileUrls = new Set();
+          if (Array.isArray(msg.files)) msg.files.forEach(f => { if (f.fileUrl || f.url) currentFileUrls.add(f.fileUrl || f.url); });
+          if (Array.isArray(msg.images)) msg.images.forEach(f => { if (f.fileUrl || f.url) currentFileUrls.add(f.fileUrl || f.url); });
+          if (msg.fileUrl) currentFileUrls.add(msg.fileUrl);
+          if (msg.file?.fileUrl) currentFileUrls.add(msg.file.fileUrl);
+          
+          if (currentFileUrls.size > 0) {
+            // Buscar si algún mensaje existente ya contiene estos fileUrls
+            let isDuplicate = false;
+            for (const [existingId, existingMsg] of msgMap.entries()) {
+              const existingFileUrls = new Set();
+              if (Array.isArray(existingMsg.files)) existingMsg.files.forEach(f => { if (f.fileUrl || f.url) existingFileUrls.add(f.fileUrl || f.url); });
+              if (Array.isArray(existingMsg.images)) existingMsg.images.forEach(f => { if (f.fileUrl || f.url) existingFileUrls.add(f.fileUrl || f.url); });
+              if (existingMsg.fileUrl) existingFileUrls.add(existingMsg.fileUrl);
+              if (existingMsg.file?.fileUrl) existingFileUrls.add(existingMsg.file.fileUrl);
+              
+              // Si hay intersección de fileUrls, es un duplicado
+              for (const url of currentFileUrls) {
+                if (existingFileUrls.has(url)) {
+                  isDuplicate = true;
+                  // Preferir el mensaje con ID numérico (viene de DB) sobre el temporal/SignalR
+                  const currentIdIsNumeric = /^\d+$/.test(messageId);
+                  const existingIdIsNumeric = /^\d+$/.test(existingId);
+                  if (currentIdIsNumeric && !existingIdIsNumeric) {
+                    // Reemplazar el mensaje SignalR con el del historial (tiene ID real)
+                    msgMap.delete(existingId);
+                    msgMap.set(messageId, msg);
+                  }
+                  break;
+                }
+              }
+              if (isDuplicate) break;
+            }
+            if (isDuplicate) return;
+          }
+        }
+        
+        // ✅ Agregar mensaje nuevo
+        msgMap.set(messageId, msg);
       });
-      // Ordenar ascendente por fecha (más antiguo arriba, más reciente abajo - flujo cronológico)
-      const allMessages = Array.from(msgMap.values()).sort((a, b) => {
-        const ta = new Date(a.timestamp || a.createdAt || 0).getTime();
-        const tb = new Date(b.timestamp || b.createdAt || 0).getTime();
+      
+      // 📊 LOG: Resumen de deduplicación 
+      console.log(`🎯 [ChatPanel] Deduplicación completada:`, {
+        original: messages.length,
+        deduplicados: msgMap.size,
+        eliminados: messages.length - msgMap.size,
+        conArchivos: Array.from(msgMap.values()).filter(m => 
+          (m.files?.length > 0) || (m.images?.length > 0) || m.file?.fileUrl || m.fileUrl
+        ).length
+      });
+      
+      // Normalizar timestamps ANTES de ordenar (soporta todas las variantes del backend)
+      const messagesWithNormalizedTimestamps = Array.from(msgMap.values()).map((msg, idx) => {
+        const originalTimestamp = msg.timestamp || msg.Timestamp || msg.createdAt || msg.CreatedAt;
+        let normalized = originalTimestamp || new Date(0).toISOString();
+        
+        // 🔧 FIX: Agregar "Z" si el timestamp es ISO pero no tiene timezone
+        if (typeof normalized === 'string' && normalized.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+          if (!normalized.endsWith('Z') && !normalized.includes('+') && !normalized.includes('-', 10)) {
+            normalized = normalized + 'Z';
+          }
+        }
+        
+        // 🔍 DEBUG: Log primeros 5 mensajes con timestamps RAW
+        if (idx < 5 && (DEBUG || (typeof window !== 'undefined' && window.__VOIA_DEBUG_SORT === true))) {
+          console.log(`🔍 [ChatPanel] Mensaje ${idx} timestamps RAW:`, {
+            id: msg.id,
+            text: (msg.text || '').substring(0, 30),
+            timestamp: msg.timestamp,
+            Timestamp: msg.Timestamp,
+            createdAt: msg.createdAt,
+            CreatedAt: msg.CreatedAt,
+            normalized,
+            fromRole: msg.fromRole
+          });
+        }
+        
+        return {
+          ...msg,
+          timestamp: normalized
+        };
+      });
+      
+      // Ordenar ascendente por fecha normalizada (más antiguo arriba, más reciente abajo - flujo cronológico)
+      const allMessages = messagesWithNormalizedTimestamps.sort((a, b) => {
+        const ta = new Date(a.timestamp).getTime();
+        const tb = new Date(b.timestamp).getTime();
         return ta - tb;
       });
+      
+      // Debug: mostrar orden de mensajes para diagnóstico
+      if (DEBUG || (typeof window !== 'undefined' && window.__VOIA_DEBUG_SORT === true)) {
+        console.debug("📋 [ChatPanel] Orden cronológico de mensajes:", 
+          allMessages.slice(0, 10).map((m, idx) => `${idx + 1}. [${m.fromRole || 'unknown'}] ${(m.text || '').substring(0, 30)}... (${m.timestamp})`).join("\n")
+        );
+      }
       // Normalize messages (same as antes) then insert day dividers.
       const normalized = allMessages.map((msg) => {
         // If the backend/client already inserted a day-divider object, pass it through unchanged.
         if (msg && msg.__dayDivider) return msg;
-        const normalizedText = msg.text || msg.question || msg.content || "";
+        let normalizedText = msg.text || msg.question || msg.content || "";
+        
+        // ✅ FIX: Limpiar texto placeholder de archivos ("📎 archivo.jpg") cuando el mensaje tiene archivos
+        // El backend guarda MessageText="📎 filename" en SendGroupedImages/SendFile pero no debe mostrarse
+        const hasAnyFiles = (Array.isArray(msg.files) && msg.files.length > 0) || 
+                           (Array.isArray(msg.images) && msg.images.length > 0) || 
+                           msg.fileUrl || msg.file?.fileUrl;
+        if (hasAnyFiles && normalizedText) {
+          // Si el texto es solo un placeholder de archivo, limpiarlo
+          const isFilePlaceholder = /^📎\s/.test(normalizedText) || 
+                                   /^Se enviaron múltiples imágenes/.test(normalizedText) ||
+                                   normalizedText === "Imagen o Archivo";
+          if (isFilePlaceholder) {
+            normalizedText = "";
+          }
+        }
 
         // Prioritize msg.files if it exists (for real-time messages)
         let files = Array.isArray(msg.files) ? [...msg.files] : [];
@@ -956,7 +1009,6 @@ const ChatPanel = forwardRef(
 
     return (
       <Box sx={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0, position: "relative" }}>
-        <JwtDiagnosticPanel />
         {/* HEADER */}
         <Box
           sx={{

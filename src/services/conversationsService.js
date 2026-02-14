@@ -141,10 +141,25 @@ export async function getMessagesByConversationId(conversationId) {
       const fromName = (msg.user && msg.user.name) || msg.UserName || msg.userName || null;
       const replyTo = msg.replyToMessageId ?? msg.ReplyToMessageId ?? null;
 
+      // ✅ Extraer datos de archivo desde el backend (ChatUploadedFile incluido)
+      const fileUrl = msg.fileUrl ?? msg.FileUrl ?? null;
+      const fileName = msg.fileName ?? msg.FileName ?? null;
+      const fileType = msg.fileType ?? msg.FileType ?? null;
+      const hasFile = fileUrl && fileName;
+
+      // ✅ FIX: Limpiar texto placeholder cuando el mensaje tiene archivo adjunto
+      // El backend guarda MessageText="📎 filename" pero no debe mostrarse en el chat
+      let cleanText = text;
+      if (hasFile && cleanText) {
+        if (/^📎\s/.test(cleanText) || /^Se enviaron múltiples imágenes/.test(cleanText)) {
+          cleanText = "";
+        }
+      }
+
       return {
         id,
         from: fromRole,
-        text,
+        text: cleanText,
         timestamp,
         fromRole,
         fromName,
@@ -154,10 +169,13 @@ export async function getMessagesByConversationId(conversationId) {
               text: "mensaje anterior",
             }
           : null,
+        // ✅ Mapear archivos del backend al formato del frontend
+        files: hasFile ? [{ fileName, fileType, fileUrl }] : null,
+        fileUrl: fileUrl,
+        fileType: fileType,
+        fileName: fileName,
         multipleFiles: null,
         fileContent: null,
-        fileType: null,
-        fileName: null,
       };
     });
   } catch (error) {

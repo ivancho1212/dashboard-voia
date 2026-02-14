@@ -1,3 +1,4 @@
+// v2.1.0 - Date filter with colored calendar icons
 import React, { useEffect, useMemo } from "react";
 import PropTypes from "prop-types";
 import SoftTypography from "components/SoftTypography";
@@ -13,11 +14,63 @@ import Tooltip from "@mui/material/Tooltip";
 import InputAdornment from "@mui/material/InputAdornment";
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FilterListIcon from "@mui/icons-material/FilterList";
-import { formatDistanceToNow } from "date-fns";
+import { format, startOfDay, differenceInDays, isSameDay, parseISO, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
+import ClearIcon from '@mui/icons-material/Clear';
 import ConversationActions from "./ConversationActions";
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import Loader from "components/Loader";
+import Button from "@mui/material/Button";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import Badge from "@mui/material/Badge";
+
+// Helper para formato de tiempo estilo WhatsApp
+// Maneja correctamente timezones mixtos comparando en zona horaria local
+function getCompactTimeAgo(date) {
+  if (!date) return "";
+  
+  const now = new Date();
+  const targetDate = new Date(date);
+  
+  // Validar que la fecha sea válida
+  if (isNaN(targetDate.getTime())) return "";
+  
+  // 🔧 Comparar año/mes/día directamente en zona horaria local para evitar problemas de timezone
+  const nowYear = now.getFullYear();
+  const nowMonth = now.getMonth();
+  const nowDay = now.getDate();
+  
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = targetDate.getMonth();
+  const targetDay = targetDate.getDate();
+  
+  // Calcular diferencia de días de forma manual (más robusto con timezones mixtos)
+  const isSameDay = nowYear === targetYear && nowMonth === targetMonth && nowDay === targetDay;
+  
+  // Si es hoy: mostrar hora en formato 12h AM/PM (ej: "2:30 PM")
+  if (isSameDay) {
+    return format(targetDate, "h:mm a", { locale: es }).toUpperCase();
+  }
+  
+  // Calcular diferencia de días calendarios
+  const nowDayStart = new Date(nowYear, nowMonth, nowDay);
+  const targetDayStart = new Date(targetYear, targetMonth, targetDay);
+  const daysDiff = Math.floor((nowDayStart - targetDayStart) / (1000 * 60 * 60 * 24));
+  
+  // Si fue ayer: mostrar "Ayer"
+  if (daysDiff === 1) {
+    return "Ayer";
+  }
+  
+  // Si es de esta semana (2-6 días atrás): mostrar día de la semana
+  if (daysDiff > 1 && daysDiff < 7) {
+    return format(targetDate, "EEEE", { locale: es }); // "lunes", "martes", etc.
+  }
+  
+  // Si es más antiguo o fecha futura: mostrar fecha (ej: "13/02/26")
+  return format(targetDate, "dd/MM/yy");
+}
 
 function ConversationList({
   conversations,
@@ -30,11 +83,15 @@ function ConversationList({
   activeTab,
   onShowTrash,
   onMovedToTrash,
-  loading = false
+  loading = false,
+  error = null,
+  onRetry = () => {}
 }) {
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
   const [search, setSearch] = React.useState("");
+  const [dateFrom, setDateFrom] = React.useState("");
+  const [dateTo, setDateTo] = React.useState("");
 
   const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseMenu = () => setAnchorEl(null);
@@ -60,9 +117,31 @@ function ConversationList({
         const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
         return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
       })
-      .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+      // Filtrar por rango de fechas
+      .filter((conv) => {
+        if (!dateFrom && !dateTo) return true; // Sin filtro de fecha
+        
+        const convDate = new Date(conv.updatedAt);
+        const from = dateFrom ? startOfDay(parseISO(dateFrom)) : null;
+        const to = dateTo ? new Date(new Date(dateTo).setHours(23, 59, 59, 999)) : null;
+        
+        if (from && to) {
+          return isWithinInterval(convDate, { start: from, end: to });
+        } else if (from) {
+          return convDate >= from;
+        } else if (to) {
+          return convDate <= to;
+        }
+        return true;
+      })
+      // ✅ Orden garantizado: conversaciones más recientes primero (ordenar por updatedAt descendente)
+      .sort((a, b) => {
+        const timeA = new Date(a.updatedAt).getTime();
+        const timeB = new Date(b.updatedAt).getTime();
+        return timeB - timeA; // Descendente: más recientes primero
+      });
     return result;
-  }, [conversations, messagesMap, filter, search]);
+  }, [conversations, messagesMap, filter, search, dateFrom, dateTo]);
 
   useEffect(() => {
     const styleTag = document.createElement("style");
@@ -127,7 +206,7 @@ function ConversationList({
         </Menu>
       </Box>
 
-      <Box mb={2} display="flex" alignItems="center" gap={1}>
+      <Box mb={2} display="flex" flexDirection="column" gap={1}>
         <TextField
           variant="outlined"
           fullWidth
@@ -140,11 +219,160 @@ function ConversationList({
             startAdornment: <InputAdornment position="start">🔍</InputAdornment>,
           }}
         />
+        
+        {/* Filtro por fechas - sin contenedor para máximo ancho */}
+        <Box display="flex" alignItems="center" gap={0.8}>
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              fontSize: "10.5px", 
+              fontWeight: 600, 
+              color: "#666",
+              minWidth: "40px",
+              flexShrink: 0
+            }}
+          >
+            Desde:
+          </Typography>
+          <TextField
+            type="date"
+            size="small"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            sx={{ 
+              flex: 1,
+              minWidth: 0,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: "#f8f9fa !important",
+                fontSize: "12px !important",
+                height: "40px !important",
+                minHeight: "40px !important",
+                borderRadius: "8px !important"
+              },
+              '& .MuiOutlinedInput-input': {
+                padding: "6px 10px !important",
+                height: "40px !important",
+                boxSizing: "border-box !important"
+              },
+              '& input[type="date"]::-webkit-calendar-picker-indicator': {
+                filter: 'invert(58%) sepia(89%) saturate(1200%) hue-rotate(160deg) brightness(95%) contrast(101%) !important',
+                cursor: 'pointer !important',
+                width: '20px !important',
+                height: '20px !important',
+                marginTop: '0 !important',
+                padding: '0 !important',
+                opacity: '1 !important'
+              },
+              '& input[type="date"]::-webkit-calendar-picker-indicator:hover': {
+                filter: 'invert(48%) sepia(99%) saturate(1500%) hue-rotate(160deg) brightness(100%) contrast(105%) !important',
+                transform: 'scale(1.1) !important'
+              }
+            }}
+          />
+        </Box>
+        
+        <Box display="flex" alignItems="center" gap={0.8}>
+          <Typography 
+            variant="caption" 
+            sx={{ 
+              fontSize: "10.5px", 
+              fontWeight: 600, 
+              color: "#666",
+              minWidth: "40px",
+              flexShrink: 0
+            }}
+          >
+            Hasta:
+          </Typography>
+          <TextField
+            type="date"
+            size="small"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            sx={{ 
+              flex: 1,
+              minWidth: 0,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: "#f8f9fa !important",
+                fontSize: "12px !important",
+                height: "40px !important",
+                minHeight: "40px !important",
+                borderRadius: "8px !important"
+              },
+              '& .MuiOutlinedInput-input': {
+                padding: "6px 10px !important",
+                height: "40px !important",
+                boxSizing: "border-box !important"
+              },
+              '& input[type="date"]::-webkit-calendar-picker-indicator': {
+                filter: 'invert(58%) sepia(89%) saturate(1200%) hue-rotate(160deg) brightness(95%) contrast(101%) !important',
+                cursor: 'pointer !important',
+                width: '20px !important',
+                height: '20px !important',
+                marginTop: '0 !important',
+                padding: '0 !important',
+                opacity: '1 !important'
+              },
+              '& input[type="date"]::-webkit-calendar-picker-indicator:hover': {
+                filter: 'invert(48%) sepia(99%) saturate(1500%) hue-rotate(160deg) brightness(100%) contrast(105%) !important',
+                transform: 'scale(1.1) !important'
+              }
+            }}
+          />
+          {(dateFrom || dateTo) && (
+            <Tooltip title="Limpiar">
+              <IconButton 
+                size="small" 
+                onClick={() => { setDateFrom(""); setDateTo(""); }}
+                color="info"
+                sx={{ 
+                  width: "40px !important",
+                  height: "40px !important",
+                  minWidth: "40px !important",
+                  minHeight: "40px !important",
+                  flexShrink: 0,
+                  backgroundColor: "#e3f2fd !important",
+                  '&:hover': { 
+                    backgroundColor: "#bbdefb !important"
+                  }
+                }}
+              >
+                <ClearIcon sx={{ fontSize: "18px" }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       </Box>
 
       <Box sx={{ flex: 1, overflowY: "auto", overflowX: "hidden", minHeight: 0, maxWidth: "100%" }}>
         {loading ? (
           <Loader message="Cargando conversaciones..." />
+        ) : error ? (
+          <Box 
+            display="flex" 
+            flexDirection="column" 
+            alignItems="center" 
+            justifyContent="center" 
+            p={4}
+            sx={{ height: "100%", textAlign: "center" }}
+          >
+            <ErrorOutlineIcon sx={{ fontSize: 60, color: "#ff9800", mb: 2 }} />
+            <SoftTypography variant="h6" color="error" mb={1}>
+              Error al cargar
+            </SoftTypography>
+            <SoftTypography variant="body2" color="text" mb={3} sx={{ maxWidth: 300 }}>
+              {error}
+            </SoftTypography>
+            <Button 
+              variant="contained" 
+              color="info" 
+              startIcon={<RefreshIcon />}
+              onClick={onRetry}
+              sx={{ textTransform: "none" }}
+            >
+              Reintentar
+            </Button>
+          </Box>
         ) : (
         <List sx={{ width: "100%", padding: 0 }}>
           {filtered.map((conv) => {
@@ -170,16 +398,42 @@ function ConversationList({
                   whiteSpace: "nowrap",
                 }}
               >
-                <Box sx={{ flex: 1, pr: 1, minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ flex: 1, minWidth: 0, maxWidth: "calc(100% - 90px)", overflow: "hidden", pr: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3 }}>
+                    {/* 🔵 Badge simple con contador de mensajes no leídos */}
                     {hasUnread && (
-                      <Box sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ff7dabff', flexShrink: 0 }} />
+                      <Box
+                        sx={{
+                          minWidth: '22px',
+                          height: '22px',
+                          borderRadius: '50%',
+                          backgroundColor: '#17a2b8',
+                          color: '#ffffff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          boxShadow: '0 2px 6px rgba(23, 162, 184, 0.4)',
+                          flexShrink: 0,
+                          padding: '0 4px'
+                        }}
+                      >
+                        {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
+                      </Box>
                     )}
-                    {/* Badge para conversaciones creadas desde el widget (visitantes públicos) */}
-                    <Typography variant="subtitle2" fontWeight={hasUnread ? "bold" : "600"} color={conv.blocked ? "error" : "text.primary"} noWrap>
-                      {conv.alias || `Usuario ${conv.id.slice(-4)}`}
+                    {/* Nombre de sesión más pequeño y compacto */}
+                    <Typography 
+                      variant="body2" 
+                      fontWeight={hasUnread ? "bold" : "600"} 
+                      color={conv.blocked ? "error" : "text.primary"} 
+                      noWrap
+                      sx={{ fontSize: "12px" }}
+                    >
+                      Sesión {conv.id}
                     </Typography>
                   </Box>
+                  {/* Último mensaje con 2 líneas máximo */}
                   <Tooltip
                     title={conv.lastMessage || "Sin mensajes aún"}
                     arrow
@@ -189,14 +443,14 @@ function ConversationList({
                       color={hasUnread ? "text.primary" : "secondary"}
                       fontWeight={hasUnread ? "500" : "normal"}
                       sx={{
-                        fontSize: "13px",
+                        fontSize: "12.5px",
                         overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        minWidth: 0,
-                        textOverflow: "ellipsis",
-                        maxWidth: "100%",
-                        display: "block",
-                        paddingLeft: hasUnread ? '14px' : '0px'
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
+                        lineHeight: 1.4,
+                        width: "100%",
+                        wordBreak: "break-word"
                       }}
                     >
                       {conv.lastMessage || "Sin mensajes aún"}
@@ -204,7 +458,8 @@ function ConversationList({
                   </Tooltip>
                 </Box>
 
-                <Box display="flex" flexDirection="column" alignItems="flex-end" justifyContent="center" sx={{ flexShrink: 0, maxWidth: "30%" }}>
+                {/* Contenedor de acciones y fecha - ancho fijo para evitar overlap */}
+                <Box display="flex" flexDirection="column" alignItems="flex-end" justifyContent="flex-start" sx={{ flexShrink: 0, width: "85px", pl: 1 }}>
                   <Box display="flex" alignItems="center" gap={0.5}>
                     <Tooltip title={`Estado: ${conv.status}`}>
                       <Box
@@ -257,8 +512,18 @@ function ConversationList({
                       onMovedToTrash={onMovedToTrash ? () => onMovedToTrash(conv.id) : undefined}
                     />
                   </Box>
-                  <Typography variant="caption" color="secondary" sx={{ fontSize: "9.5px", mt: 0.2 }}>
-                    {formatDistanceToNow(new Date(conv.updatedAt), { addSuffix: true, locale: es })}
+                  {/* Fecha/hora compacta */}
+                  <Typography 
+                    variant="caption" 
+                    color="secondary" 
+                    sx={{ 
+                      fontSize: "10px", 
+                      mt: 0.3,
+                      whiteSpace: "nowrap",
+                      fontWeight: 500
+                    }}
+                  >
+                    {getCompactTimeAgo(conv.updatedAt)}
                   </Typography>
                 </Box>
               </ListItemButton>
@@ -305,6 +570,8 @@ ConversationList.propTypes = {
   onShowTrash: PropTypes.func,
   onMovedToTrash: PropTypes.func,
   loading: PropTypes.bool,
+  error: PropTypes.string,
+  onRetry: PropTypes.func,
 };
 
 export default ConversationList;

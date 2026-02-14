@@ -75,19 +75,32 @@ const ConversationHistory = ({ conversationId, userName }) => {
     let connection;
     (async () => {
       try {
+        console.log('[ConversationHistory] 🔄 Iniciando conexión SignalR...');
         connection = await createHubConnection();
         signalRConnection.current = connection;
+        
+        console.log('[ConversationHistory] 🔌 Conectando a SignalR...');
         await connection.start();
+        console.log('[ConversationHistory] ✅ SignalR conectado');
+        
+        console.log('[ConversationHistory] 🚪 Intentando unirse al grupo (JoinRoom)...', conversationId);
         await connection.invoke("JoinRoom", Number(conversationId));
-        console.log('[ConversationHistory] SignalR conectado y unido a grupo (JoinRoom)', conversationId);
+        console.log('[ConversationHistory] ✅ Unido exitosamente al grupo de conversación', conversationId);
+        
+        // Registrar listener para ReceiveMessage
         connection.on("ReceiveMessage", (msg) => {
-          if (msg.origen) {
-            console.log(`[ConversationHistory] Mensaje recibido por SignalR. ORIGEN: ${msg.origen}`, msg);
-          } else {
-            console.log('[ConversationHistory] Mensaje recibido por SignalR (sin campo origen):', msg);
+          console.log('[ConversationHistory] 📨 ReceiveMessage recibido:', msg);
+          console.log('[ConversationHistory] 📨 conversationId del mensaje:', msg.conversationId, '| conversationId actual:', conversationId);
+          
+          // ✅ Verificar que el mensaje es para esta conversación
+          if (msg.conversationId && msg.conversationId !== Number(conversationId)) {
+            console.warn('[ConversationHistory] ⚠️ Mensaje ignorado - no pertenece a esta conversación');
+            return;
           }
+          
           setLastRealtimeMsg(msg);
-          // Normalizar formato si es necesario
+          
+          // Normalizar formato
           const normalized = {
             id: msg.id ?? msg.Id,
             from: msg.from ?? msg.From ?? msg.sender ?? msg.Sender ?? (msg.UserId || msg.PublicUserId ? "user" : null),
@@ -101,14 +114,45 @@ const ConversationHistory = ({ conversationId, userName }) => {
             file: msg.file ?? null,
             images: msg.images ?? null,
           };
+          
+          console.log('[ConversationHistory] 📨 Mensaje normalizado:', normalized);
+          
           // Evitar duplicados por id
           setMessages((prev) => {
-            if (prev.some((m) => m.id === normalized.id)) return prev;
+            if (prev.some((m) => m.id === normalized.id)) {
+              console.log('[ConversationHistory] ⚠️ Mensaje duplicado ignorado, id:', normalized.id);
+              return prev;
+            }
+            console.log('[ConversationHistory] ✅ Mensaje agregado a la lista');
             return [...prev, normalized];
           });
         });
+        
+        // Registrar listeners para otros eventos (para evitar warnings en consola)
+        connection.on("InitialConversations", (data) => {
+          console.log('[ConversationHistory] InitialConversations recibido:', data);
+        });
+        
+        connection.on("ReceiveTyping", (convId, userId) => {
+          console.log('[ConversationHistory] ReceiveTyping:', convId, userId);
+        });
+        
+        connection.on("ReceiveStopTyping", (convId, userId) => {
+          console.log('[ConversationHistory] ReceiveStopTyping:', convId, userId);
+        });
+        
+        connection.on("NewConversationOrMessage", (data) => {
+          console.log('[ConversationHistory] NewConversationOrMessage recibido:', data);
+        });
+        
+        connection.on("Heartbeat", (convId) => {
+          // No loggeamos heartbeats para no saturar la consola
+        });
+        
+        console.log('[ConversationHistory] ✅ Todos los event listeners registrados');
+        
       } catch (e) {
-        console.error('[ConversationHistory] Error conectando a SignalR', e);
+        console.error('[ConversationHistory] ❌ Error conectando a SignalR:', e);
         setError("Error conectando a mensajes en tiempo real");
       }
     })();
@@ -116,6 +160,7 @@ const ConversationHistory = ({ conversationId, userName }) => {
     return () => {
       isMounted = false;
       if (signalRConnection.current) {
+        console.log('[ConversationHistory] 🔌 Desconectando SignalR...');
         signalRConnection.current.stop();
         signalRConnection.current = null;
       }

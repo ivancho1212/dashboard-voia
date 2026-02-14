@@ -27,7 +27,9 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
   }
 
   const files = message.multipleFiles || (message.file ? [message.file] : []) || [];
-  const imageFiles = (message.images || files).filter((f) => f?.fileType?.startsWith("image/"));
+  // ✅ FIX: Usar files si message.images es array vacío ([] es truthy en JS, causaba que no se detecten imágenes)
+  const imageSource = (message.images && message.images.length > 0) ? message.images : files;
+  const imageFiles = imageSource.filter((f) => f?.fileType?.startsWith("image/"));
   const hasImage = imageFiles.length > 0 || message.file?.fileType?.startsWith("image/");
   const hasFiles = Boolean(message.file || (message.multipleFiles && message.multipleFiles.length > 0) || (message.images && message.images.length > 0));
   const hasOnlyFiles = !message.text && hasFiles;
