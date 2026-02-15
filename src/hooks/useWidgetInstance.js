@@ -18,6 +18,7 @@ export default function useWidgetInstance(propBotId, propUserId) {
     }
     return id;
   }, []);
-  const CACHE_KEY = `chat_cache_${botId}_${userId ?? "anon"}_${widgetInstanceId}`;
+  // CACHE_KEY SIN widgetInstanceId para persistir al recargar
+  const CACHE_KEY = `chat_cache_${botId}_${userId ?? "anon"}`;
   return { botId, userId, widgetInstanceId, CACHE_KEY };
 }

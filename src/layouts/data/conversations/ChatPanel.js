@@ -608,6 +608,13 @@ const ChatPanel = forwardRef(
           fileType: f.fileType || f.FileType || f.type || "application/octet-stream",
         }));
 
+        // ✅ DEBUG: Log file messages to help diagnose visibility issues
+        if (normalizedFiles.length > 0) {
+          console.log(`📎 [ChatPanel RENDER] Mensaje ${msg.id} tiene ${normalizedFiles.length} archivo(s):`, 
+            normalizedFiles.map(f => ({ fileName: f.fileName, fileType: f.fileType, fileUrl: f.fileUrl }))
+          );
+        }
+
         return {
           ...msg,
           fromName: publicUserId

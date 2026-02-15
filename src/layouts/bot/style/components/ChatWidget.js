@@ -113,6 +113,10 @@ function ChatWidget({
   const welcomeShownRef = useRef(false); // 🆕 Ref para rastrear si ya mostró bienvenida en esta conversación
   const welcomeTimeoutRef = useRef(null); // 🆕 Ref para rastrear el timeout del mensaje de bienvenida
   const lastWelcomeTextRef = useRef(null); // 🆕 Ref para guardar el texto del welcome enviado, evitar duplicados del broadcast
+  const pendingFileMessageRef = useRef(null); // Ref para mensaje de archivo pendiente
+  const pendingReceiveQueueRef = useRef([]); // Cola de mensajes recibidos para batching
+  const flushScheduledRef = useRef(false); // Control de flush programado
+  const [fileInputKey, setFileInputKey] = useState(0); // Key para forzar reset del input file
   // Hook para caché y sesión modularizado
   const {
     saveConversationCache,
@@ -1131,6 +1135,12 @@ function ChatWidget({
         }
         return currentTypingSender;
       });
+      const flushPending = () => {
+        if (pendingReceiveQueueRef.current.length === 0) return;
+        const toAdd = pendingReceiveQueueRef.current.splice(0);
+        flushScheduledRef.current = false;
+        setMessages(prev => [...prev, ...toAdd]);
+      };
       setMessages(prev => {
         // 1. Si llega con tempId, actualiza el mensaje local
         if (newMessage.tempId) {
@@ -1163,14 +1173,52 @@ function ChatWidget({
             return updatedMessages;
           }
         }
-        // 3. Si ya existe por id, no agregar
-        const messageExists = prev.some(m => m.id === newMessage.id);
-        if (messageExists) {
-          // (Eliminado log de mensaje duplicado)
+        // 3. Si ya existe por id (solo cuando id es válido; id vacío viene del servidor para archivos)
+        if (newMessage.id && prev.some(m => m.id === newMessage.id)) return prev;
+
+        // 4. Mensaje de archivo del usuario: manejar deduplicación con optimista
+        const files = newMessage.multipleFiles || newMessage.files || [];
+        const firstFileUrl = files[0]?.fileUrl ?? files[0]?.filePath ?? files[0]?.url;
+        const urlForKey = (url) => {
+          if (!url || typeof url !== "string") return "";
+          try {
+            if (url.startsWith("http")) return new URL(url).pathname;
+            return (url.split("?")[0] || "").trim();
+          } catch (e) {
+            return (url || "").trim();
+          }
+        };
+        const newKey = urlForKey(firstFileUrl);
+        const isUserFileOnly = newMessage.from === "user" && (firstFileUrl || files.length > 0 && !newMessage.text?.trim());
+        if (isUserFileOnly) {
+          pendingFileMessageRef.current = null;
+          const newFiles = newMessage.multipleFiles || [];
+          const mergedFiles = newFiles.length ? newFiles.map((nf, i) => ({
+            ...nf,
+            fileContent: nf.fileContent ?? prev[prev.length - 1]?.multipleFiles?.[i]?.fileContent ?? nf.fileContent,
+            preview: nf.preview ?? prev[prev.length - 1]?.multipleFiles?.[i]?.preview ?? nf.preview
+          })) : newFiles;
+          const toAdd = {
+            ...newMessage,
+            status: "sent",
+            multipleFiles: mergedFiles,
+            uniqueKey: newMessage.uniqueKey || `file-${uuidv4()}`
+          };
+          pendingReceiveQueueRef.current.push(toAdd);
+          if (!flushScheduledRef.current) {
+            flushScheduledRef.current = true;
+            queueMicrotask(flushPending);
+          }
           return prev;
         }
-        console.log('💬 [SignalR] Mensaje nuevo agregado:', newMessage);
-        return [...prev, newMessage];
+
+        // 5. Mensaje normal nuevo: encolar para batching
+        pendingReceiveQueueRef.current.push(newMessage);
+        if (!flushScheduledRef.current) {
+          flushScheduledRef.current = true;
+          queueMicrotask(flushPending);
+        }
+        return prev;
       });
     };
 
@@ -1209,23 +1257,9 @@ function ChatWidget({
 
     const initConnection = async () => {
       try {
-        // Usar el valor correcto de widgetToken
+        // Usar el valor correcto de token (widget o admin)
         const widgetToken = propWidgetToken;
-        // Log JWT y payload antes de conectar (solo en móvil/widget)
-        if (widgetToken && typeof widgetToken === 'string' && widgetToken.split('.').length === 3) {
-          try {
-            const [headerB64, payloadB64] = widgetToken.split('.');
-            const header = JSON.parse(atob(headerB64.replace(/-/g, '+').replace(/_/g, '/')));
-            const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/')));
-            console.log('[DEBUG][SignalR][JWT] Token usado para SignalR:', widgetToken);
-            console.log('[DEBUG][SignalR][JWT] Header:', header);
-            console.log('[DEBUG][SignalR][JWT] Payload:', payload);
-          } catch (e) {
-            console.warn('[DEBUG][SignalR][JWT] No se pudo decodificar el JWT:', e);
-          }
-        }
-        connection = createHubConnection(widgetToken, widgetClientSecret);
-        connectionRef.current = connection;
+        const explicitToken = propWidgetClientSecret || widgetToken;
 
         // ✅ Prioridades para determinar qué conversationId usar:
         // 1️⃣ Si viene desde QR (propConversationId) → USAR ESE EXACTAMENTE
@@ -1240,7 +1274,11 @@ function ChatWidget({
         }
 
         if (!convId) {
-          // ✅ Si no hay conversación desde QR ni en ref, intentar cargar del caché
+          // 🔴 MÓVIL: NUNCA crear conversación. Solo unirse a conversaciones vigentes desde QR
+          if (isMobileView) {
+            throw new Error("En modo móvil no se pueden crear conversaciones. Solo se permite acceder a conversaciones vigentes desde el QR.");
+          }
+          // ═══ HISTORIAL: Cargar desde caché (al recargar) ═══
           const cached = loadConversationCache();
 
           if (cached && cached.conversationId) {
@@ -1250,13 +1288,31 @@ function ChatWidget({
             
             // Cargar mensajes del caché si existen
             if (cached.messages && Array.isArray(cached.messages) && cached.messages.length > 0) {
-              setMessages(cached.messages);
+              // Dedupe solo DENTRO del caché: mismo archivo guardado 2 veces por bug. No afecta tiempo real.
+              const fileUrlKey = m => {
+                const url = m?.multipleFiles?.[0]?.fileUrl ?? m?.file?.fileUrl ?? m?.multipleFiles?.[0]?.filePath ?? m?.file?.filePath;
+                if (!url || typeof url !== "string") return "";
+                try {
+                  return url.startsWith("http") ? new URL(url).pathname : (url.split("?")[0] || "").trim();
+                } catch (e) {
+                  return (url || "").trim();
+                }
+              };
+              const seenFileKeys = new Set();
+              const deduped = cached.messages.filter(m => {
+                if (m.from !== "user" || !m.multipleFiles?.length && !m.file) return true;
+                const key = fileUrlKey(m.multipleFiles?.[0] || m.file);
+                if (seenFileKeys.has(key)) return false;
+                seenFileKeys.add(key);
+                return true;
+              });
+              setMessages(deduped);
               setPromptSent(true);
               promptSentRef.current = true;
               
               // ✅ DETECTAR SI HAY UN MENSAJE DEL USUARIO SIN RESPUESTA
-              const lastMessage = cached.messages[cached.messages.length - 1];
-              const secondLastMessage = cached.messages.length > 1 ? cached.messages[cached.messages.length - 2] : null;
+              const lastMessage = deduped[deduped.length - 1];
+              const secondLastMessage = deduped.length > 1 ? deduped[deduped.length - 2] : null;
               
               // Verificar si el último mensaje es del usuario Y no hay respuesta del bot después
               const isLastMessageFromUser = lastMessage && lastMessage.from === 'user';
@@ -1302,6 +1358,9 @@ function ChatWidget({
         conversationIdRef.current = convIdNum;
         setConversationId(convIdNum);
 
+        // ✅ Crear conexión SignalR con (conversationId, token) para que la URL y JoinRoom sean correctos
+        connection = createHubConnection(convIdNum, explicitToken);
+        connectionRef.current = connection;
 
         // 🆕 EN MÓVIL: Cargar historial AQUÍ para evitar race conditions
         if (isMobileView && propConversationId && !qrHistoryLoadedRef.current) {
@@ -1421,8 +1480,16 @@ function ChatWidget({
             // 👉 SignalR JavaScript convierte los nombres de métodos a minúsculas
             connection.on("receivemessage", handleReceiveMessage);
             connection.on("messagequeued", handleMessageQueued);
-            connection.on("receivetyping", () => setIsTyping(true));
-            connection.on("receivestoptyping", () => setIsTyping(false));
+            connection.on("receivetyping", (convId, sender) => {
+              if (sender && sender !== "user") {
+                setTypingSender(sender);
+                setIsTyping(true);
+              }
+            });
+            connection.on("receivestoptyping", () => {
+              setIsTyping(false);
+              setTypingSender(null);
+            });
             
             // 📱 Listeners para sesión móvil
             connection.on("mobilesessionstarted", (data) => {
@@ -1431,6 +1498,12 @@ function ChatWidget({
             connection.on("mobilesessionended", handleMobileSessionEnded);
             
             connection.on("widgetsessionended", (data) => {
+            });
+
+            // 🔴 Listener para conversación cerrada desde el backend
+            connection.on("conversationclosed", (convId, status) => {
+              console.log(`[SignalR] Conversación ${convId} cerrada con status: ${status}`);
+              setIsConnected(false);
             });
 
             // Iniciar conexión y ESPERAR a que esté Connected
@@ -1488,9 +1561,15 @@ function ChatWidget({
               }
                             
               try {
+                // 🔴 CRÍTICO: El backend espera userId como int? (nullable int)
+                let retryUserId = null;
+                if (userId !== null && userId !== undefined && userId !== 'anon') {
+                  const parsed = parseInt(userId, 10);
+                  if (!isNaN(parsed) && parsed > 0) retryUserId = parsed;
+                }
                 const payload = {
                   botId,
-                  userId,
+                  userId: retryUserId,
                   question: pendingMsg.message,
                   tempId: pendingMsg.tempId,
                   modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
@@ -1535,13 +1614,14 @@ function ChatWidget({
         connectionRef.current.off("receivestoptyping");
         connectionRef.current.off("mobilesessionstarted");
         connectionRef.current.off("mobilesessionended");
+        connectionRef.current.off("conversationclosed");
         connectionRef.current.stop();
         connectionRef.current = null;
       }
     };
     // Se eliminan dependencias que causaban re-conexiones innecesarias.
     // La lógica de `handleReceiveMessage` ahora es más robusta con callbacks de estado.
-  }, [isOpen, isDemo, userId, botId, propWidgetToken]);
+  }, [isOpen, isDemo, userId, botId, propWidgetToken, propWidgetClientSecret]);
   useEffect(() => {
     if (window.parent && window.parent !== window) {
       let width, height;
@@ -1701,10 +1781,12 @@ function ChatWidget({
   // 🔴 LÓGICA DE INACTIVIDAD - CONFIGURACIÓN TEMPORAL PARA TESTING
   // Backend cierra a los 15min, widget debe avisar ANTES (usamos 3 min para testing rápido)
   const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutos
+  const INACTIVITY_COUNTDOWN_SEC = 10; // 10 segundos de aviso con conteo regresivo
   const inactivityTimerRef = useRef(null);
   const closeTimerRef = useRef(null);
   const inactivityWarningShownRef = useRef(false);
   const [showInactivityMessage, setShowInactivityMessage] = useState(false);
+  const [inactivityCountdown, setInactivityCountdown] = useState(null); // 10, 9, 8... 0
   const cleanupInProgressRef = useRef(false);
 
   // 🐛 DEBUG: Log de estado en cada render
@@ -1727,6 +1809,7 @@ function ChatWidget({
     }
     inactivityWarningShownRef.current = false;
     setShowInactivityMessage(false);
+    setInactivityCountdown(null);
 
     if (!isOpen) {
       return; // No contar inactividad si widget está cerrado
@@ -1735,12 +1818,11 @@ function ChatWidget({
     const startTime = new Date();
     
     inactivityTimerRef.current = setTimeout(() => {
-      const now = new Date();
-      const elapsed = (now - startTime) / 1000;
       setShowInactivityMessage(true);
+      setInactivityCountdown(INACTIVITY_COUNTDOWN_SEC);
       inactivityWarningShownRef.current = true;
 
-      // Después de 30 segundos más, cerrar el widget automáticamente
+      // Después de 10 segundos (conteo regresivo), cerrar el widget automáticamente
       closeTimerRef.current = setTimeout(async () => {
         if (cleanupInProgressRef.current) {
           return;
@@ -1780,9 +1862,10 @@ function ChatWidget({
 
         setIsOpen(false);
         setShowInactivityMessage(false);
+        setInactivityCountdown(null);
         inactivityWarningShownRef.current = false;
         setTimeout(() => { cleanupInProgressRef.current = false; }, 1000);
-      }, 30 * 1000); // 30 segundos adicionales
+      }, INACTIVITY_COUNTDOWN_SEC * 1000); // 10 segundos de aviso
     }, INACTIVITY_TIMEOUT);
   }, [isOpen, isMobileSessionActive, isBlockedByOtherDevice, botId, userId]);
 
@@ -1850,6 +1933,18 @@ function ChatWidget({
     // Eliminado log de inactividad
   }, [showInactivityMessage]);
 
+  // 🔴 Conteo regresivo: 10, 9, 8... cuando se muestra alerta de inactividad
+  useEffect(() => {
+    if (!showInactivityMessage) return;
+    const id = setInterval(() => {
+      setInactivityCountdown(prev => {
+        if (prev === null || prev <= 1) return 0;
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [showInactivityMessage]);
+
   // 🔴 LÓGICA DE INACTIVIDAD CON WIDGET CERRADO
   // Si el widget está cerrado por más de 3 minutos, limpiar caché y cerrar conversación
   const inactivityClosedTimerRef = useRef(null);
@@ -1873,6 +1968,55 @@ function ChatWidget({
   // LOGS de creación de conversación y mensajes
   // Variable para guardar el mensaje pendiente
   let pendingUserMessage = null;
+
+  // Helper para normalizar file URLs como key de deduplicación
+  const fileUrlForKey = useCallback((url) => {
+    if (!url || typeof url !== "string") return "";
+    try {
+      if (url.startsWith("http")) return new URL(url).pathname;
+      return (url.split("?")[0] || "").trim();
+    } catch (e) {
+      return (url || "").trim();
+    }
+  }, []);
+
+  // Callback cuando InputArea confirma que un archivo fue enviado
+  const handleFileSent = useCallback((data) => {
+    if (!data) return;
+    pendingFileMessageRef.current = null;
+    const newFileUrl = data.fileUrl || data.multipleFiles?.[0]?.fileUrl || data.multipleFiles?.[0]?.filePath;
+    const newKey = fileUrlForKey(newFileUrl);
+    setMessages(prev => {
+      // Si el servidor ya envió ReceiveMessage con este fileUrl, no añadir optimista (evita duplicado)
+      if (newKey) {
+        const alreadyFromServer = prev.some(m => {
+          if (m.from !== "user" || !m.multipleFiles?.length) return false;
+          const url = m.multipleFiles[0]?.fileUrl ?? m.multipleFiles[0]?.filePath ?? m.multipleFiles[0]?.url;
+          return fileUrlForKey(url) === newKey;
+        });
+        if (alreadyFromServer) return prev;
+      }
+      const tempId = uuidv4();
+      const fileMsg = normalizeMessage({
+        tempId,
+        id: tempId,
+        from: "user",
+        status: "sent",
+        timestamp: new Date().toISOString(),
+        multipleFiles: data.multipleFiles || (data.fileUrl ? [{
+          fileUrl: data.fileUrl,
+          fileName: data.fileName,
+          fileType: data.fileType,
+          fileContent: data.fileContent
+        }] : [])
+      });
+      pendingFileMessageRef.current = fileMsg;
+      return [...prev, fileMsg];
+    });
+    setFileInputKey(k => k + 1); // 🔄 Forzar input file fresco
+    handleResetInactivityOnMessage();
+    handleUserActivity?.();
+  }, [fileUrlForKey, handleResetInactivityOnMessage, handleUserActivity]);
 
   const sendMessage = async () => {
 
@@ -1906,21 +2050,41 @@ function ChatWidget({
     handleUserActivity(); // Extiende el periodo de limpieza por inactividad
 
     // Enviar al backend si la conexión está lista
-    const connection = connectionRef.current;
-    const convId = conversationIdRef.current;
+    let connection = connectionRef.current;
+    let convId = conversationIdRef.current;
     let retries = 0;
-    while ((!isConnected || !convId || !connection || connection.state !== "Connected") && retries < 10) {
+
+    // 🔄 Esperar hasta que la conexión esté realmente lista
+    while (retries < 20) { // 20 retries * 200ms = 4 segundos máximo
+      connection = connectionRef.current;
+      convId = conversationIdRef.current;
+      if (connection && connection.state === "Connected" && convId) {
+        break;
+      }
+      if (retries > 0 && retries % 5 === 0) {
+        console.log(`[LOG][MESSAGE] ⏳ Esperando conexión... intento ${retries}/20`);
+      }
       await new Promise(res => setTimeout(res, 200));
       retries++;
     }
-    if (!isConnected || !convId || !connection || connection.state !== "Connected") {
+    if (!connection || connection.state !== "Connected" || !convId) {
+      console.error('[LOG][MESSAGE] ❌ No se pudo enviar: conexión no lista después de esperar');
       setMessages(prev => prev.map(m => m.tempId === tempId ? { ...m, status: "error" } : m));
       return;
     }
     try {
+      // 🔴 CRÍTICO: El backend espera userId como int? (nullable int)
+      // Si userId es "anon" o no es un número válido, enviar null
+      let numericUserId = null;
+      if (userId !== null && userId !== undefined && userId !== 'anon') {
+        const parsed = parseInt(userId, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+          numericUserId = parsed;
+        }
+      }
       const payload = {
         botId,
-        userId,
+        userId: numericUserId, // null si es anon, o número si es válido
         question: trimmedMessage,
         tempId,
         modelName: botContext?.settings?.modelName || "gpt-3.5-turbo",
@@ -1930,9 +2094,11 @@ function ChatWidget({
         origen: isMobileView ? 'movil' : 'widget'
       };
       // LOG: Payload enviado al backend con origen y userId
-      console.log('[LOG][MESSAGE] Payload enviado al backend:', payload);
-      console.log('[LOG][USERID] userId en payload:', payload.userId, typeof payload.userId);
+      console.log('[LOG][MESSAGE] 📤 Payload enviado al backend:', payload);
+      console.log('[LOG][MESSAGE] 📌 Estado conexión antes de invoke:', connection.state);
+      console.log('[LOG][MESSAGE] userId:', userId, '→ numericUserId:', numericUserId);
       await connection.invoke("SendMessage", convId, payload);
+      console.log('[LOG][MESSAGE] ✅ invoke("SendMessage") completado para:', trimmedMessage);
     } catch (err) {
       // Si el error es por token expirado, guardar el mensaje pendiente y renovar el token
       if (err?.response?.status === 401) {
@@ -2599,7 +2765,7 @@ function ChatWidget({
             <div ref={messagesEndRef} />
           </div>
 
-          {/* � MENSAJE DE INACTIVIDAD (Centrado en overlay) */}
+          {/* 🔴 MENSAJE DE INACTIVIDAD (Centrado en overlay con countdown) */}
           {showInactivityMessage && (
             <div
               style={{
@@ -2608,42 +2774,53 @@ function ChatWidget({
                 left: "50%",
                 transform: "translate(-50%, -50%)",
                 zIndex: 1000,
-                backgroundColor: "#ffebee",
+                backgroundColor: "rgba(255, 255, 255, 0.97)",
                 border: "2px solid #ef5350",
-                borderRadius: "12px",
-                padding: "24px",
-                maxWidth: "80%",
+                borderRadius: "16px",
+                padding: "24px 28px 28px",
                 textAlign: "center",
                 boxShadow: "0 8px 32px rgba(0, 0, 0, 0.2)",
-                animation: "pulse 1s infinite",
               }}
             >
               <div
                 style={{
-                  fontSize: "32px",
+                  color: "#333",
+                  fontSize: "16px",
+                  fontWeight: "600",
                   marginBottom: "12px",
                 }}
               >
-                ⚠️
+                Conversación por expirar
               </div>
               <div
                 style={{
-                  color: "#d32f2f",
-                  fontSize: "16px",
-                  fontWeight: "600",
-                  marginBottom: "8px",
+                  color: "#666",
+                  fontSize: "13px",
+                  marginBottom: "16px",
+                  lineHeight: 1.4,
                 }}
               >
-                Parece que no has respondido
+                Por inactividad la conversación se cerrará. Interactúa con el chat para continuar.
+              </div>
+              <div
+                style={{
+                  color: "#b71c1c",
+                  fontSize: "56px",
+                  fontWeight: "700",
+                  lineHeight: 1,
+                  marginBottom: "4px",
+                }}
+              >
+                {inactivityCountdown ?? INACTIVITY_COUNTDOWN_SEC}
               </div>
               <div
                 style={{
                   color: "#c62828",
-                  fontSize: "13px",
+                  fontSize: "14px",
                   fontWeight: "500",
                 }}
               >
-                El chat se cerrará en 30 segundos...
+                segundos
               </div>
             </div>
           )}
@@ -2665,6 +2842,7 @@ function ChatWidget({
             isInputDisabled={isInputDisabled || (isBlockedByOtherDevice && !isMobileView)} // 🔹 Deshabilitar si demo, sin conexión o sesión móvil o bloqueado por móvil
             allowImageUpload={effectiveStyle.allowImageUpload}
             allowFileUpload={effectiveStyle.allowFileUpload}
+            onFileSent={handleFileSent}
             onUserActivity={handleUserActivity}
           />
 
@@ -2692,15 +2870,6 @@ function ChatWidget({
             </b>
             . Todos los derechos reservados.
           </div>
-
-          {/* QR con fingerprint solo en versión web */}
-          {qrUrl && conversationId && !isMobileView && (
-            <div style={{ textAlign: "center", margin: "16px 0" }}>
-              <div style={{ fontSize: "12px", marginBottom: 4 }}>Escanea para continuar en tu móvil:</div>
-              <QRCodeCanvas value={qrUrl} size={128} />
-              <div style={{ fontSize: "10px", marginTop: 4, wordBreak: "break-all", color: "#888" }}>{qrUrl}</div>
-            </div>
-          )}
 
           {/* Overlay de bloqueo por sesión móvil activa */}
           {isBlockedByOtherDevice && !isMobileView && (

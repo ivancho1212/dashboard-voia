@@ -27,6 +27,7 @@ const MessageBubble = React.forwardRef(
     // Blob URL state for CORS bypass
     const [imageBlobUrls, setImageBlobUrls] = useState({});
     const [blobsLoading, setBlobsLoading] = useState(false);
+    const [imageLoadErrors, setImageLoadErrors] = useState({});
     const blobUrlsRef = useRef({});
 
     // Get backend URL dynamically
@@ -67,6 +68,7 @@ const MessageBubble = React.forwardRef(
 
       const loadBlobs = async () => {
         setBlobsLoading(true);
+        console.log(`🖼️ [MessageBubble] Loading blobs for ${imageFiles.length} images:`, imageFiles.map(f => f.fileUrl));
         const newBlobUrls = { ...imageBlobUrls };
         
         for (const file of imageFiles) {
@@ -75,7 +77,10 @@ const MessageBubble = React.forwardRef(
           
           const result = await fetchImageAsBlob(file.fileUrl);
           if (result) {
+            console.log(`🖼️ [MessageBubble] Blob loaded for ${file.fileUrl}:`, result.blobUrl);
             newBlobUrls[result.fileUrl] = result.blobUrl;
+          } else {
+            console.warn(`🖼️ [MessageBubble] Blob FAILED for ${file.fileUrl}, will use fallback URL`);
           }
         }
         
@@ -105,6 +110,27 @@ const MessageBubble = React.forwardRef(
       return buildFileUrl(fileUrl);
     };
 
+    // Handle image load error - fallback to direct URL
+    const handleImageError = (fileUrl, e) => {
+      console.error(`🖼️ [MessageBubble] Image load error for ${fileUrl}`, e.target.src);
+      const directUrl = buildFileUrl(fileUrl);
+      if (e.target.src !== directUrl) {
+        console.log(`🖼️ [MessageBubble] Retrying with direct URL: ${directUrl}`);
+        e.target.src = directUrl;
+      } else {
+        setImageLoadErrors(prev => ({ ...prev, [fileUrl]: true }));
+      }
+    };
+
+    // 🔍 DEBUG: Log file data on render
+    if (files.length > 0) {
+      console.log(`🖼️ [MessageBubble] msg.id=${msg.id} files:`, files.map(f => ({
+        fileName: f.fileName, fileType: f.fileType, fileUrl: f.fileUrl
+      })));
+      console.log(`🖼️ [MessageBubble] imageFiles:`, imageFiles.length, 
+        `nonImageFiles:`, files.filter(f => !f.fileType?.startsWith("image/")).length);
+    }
+
   const hasImage = imageFiles.length > 0;
 
   // Reduce padding: admin messages get less padding (2px top/bottom, 6px left/right), others get 4px top/bottom
@@ -122,7 +148,7 @@ const MessageBubble = React.forwardRef(
     minWidth: "0",
       fontSize: "14px",
       fontFamily: "Arial",
-      marginBottom: "4px",
+      marginBottom: "12px",
       marginLeft: isRight ? "8px" : "0px",
       marginRight: isRight ? "0px" : "8px",
       boxShadow: isHighlighted ? "0 0 10px 4px rgba(33,150,243,0.06)" : "0 1px 4px rgba(0, 0, 0, 0.06)",
@@ -259,16 +285,17 @@ const MessageBubble = React.forwardRef(
             style={{
               background: "#f5f5f5",
               borderLeft: "3px solid #21f3adff",
-              padding: "4px 8px",
+              padding: "4px 10px",
               marginBottom: "4px",
               borderRadius: "6px",
-              fontSize: "13px",
+              fontSize: "12px",
               color: "#333",
-              maxWidth: "95%",
+              width: "100%",
+              boxSizing: "border-box",
               cursor: "pointer",
             }}
           >
-            <div style={{ fontWeight: "bold", color: "#0d6ba1ff", marginBottom: "4px" }}>
+            <div style={{ fontSize: "10px", fontWeight: "600", color: "#0d6ba1ff", marginBottom: "1px" }}>
               {replyTo.fromName || "Usuario"}:
             </div>
 
@@ -418,10 +445,20 @@ const MessageBubble = React.forwardRef(
             // Single image: respect natural size but constrain proportionally
             // Use inline-block so the bubble adapts to the image width instead of forcing full width
             <div style={{ marginTop: "4px", display: "block", width: "auto", maxWidth: "clamp(160px, 50vw, 400px)" }}>
+              {imageLoadErrors[imageFiles[0].fileUrl] ? (
+                <div style={{ padding: "12px", backgroundColor: "#f5f5f5", borderRadius: "10px", textAlign: "center", color: "#666" }}>
+                  🖼️ Error al cargar imagen
+                  <br />
+                  <a href={buildFileUrl(imageFiles[0].fileUrl)} target="_blank" rel="noopener noreferrer" style={{ color: "#0b63d6", fontSize: "12px" }}>
+                    Abrir directamente
+                  </a>
+                </div>
+              ) : (
               <img
                 src={buildUrl(imageFiles[0].fileUrl)}
                 alt={imageFiles[0].fileName}
                 onClick={() => setPreviewIndex(0)}
+                onError={(e) => handleImageError(imageFiles[0].fileUrl, e)}
                 style={{
                   display: "block",
                   width: "100%",
@@ -432,6 +469,7 @@ const MessageBubble = React.forwardRef(
                   objectFit: "contain",
                 }}
               />
+              )}
             </div>
           ) : (
             <div
@@ -463,6 +501,7 @@ const MessageBubble = React.forwardRef(
                     <img
                       src={source}
                       alt={file.fileName}
+                      onError={(e) => handleImageError(file.fileUrl, e)}
                       style={{
                         width: "100%",
                         height: "100%",
@@ -501,17 +540,18 @@ const MessageBubble = React.forwardRef(
 
         {/* Archivos no imagen */}
         {files
-          .filter((file) => !file.fileType.startsWith("image/"))
+          .filter((file) => !file.fileType?.startsWith("image/"))
           .map((file, idx) => {
             const source = buildFileUrl(file.fileUrl);
             if (!source) return null;
             return (
-              <div key={idx} style={{ marginTop: "6px" }}>
+              <div key={idx} style={{ marginTop: "6px", maxWidth: "100%" }}>
                 <a
                   href={source}
                   download={file.fileName}
                   target="_blank"
                   rel="noopener noreferrer"
+                  title={file.fileName}
                   style={{
                     padding: "8px 12px",
                     backgroundColor: "#f5f5f5",
@@ -522,9 +562,17 @@ const MessageBubble = React.forwardRef(
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "8px",
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    boxSizing: "border-box",
                   }}
                 >
-                  📎 {file.fileName}
+                  <span style={{ flexShrink: 0 }}>📎</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {file.fileName}
+                  </span>
                 </a>
               </div>
             );

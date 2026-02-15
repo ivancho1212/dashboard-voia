@@ -465,7 +465,9 @@ function ConversationList({
                       <Box
                         sx={(() => {
                             const HEARTBEAT_INACTIVITY_THRESHOLD = 45 * 1000;
-                            const isHeartbeatActive = conv.lastHeartbeatTime && (Date.now() - new Date(conv.lastHeartbeatTime) < HEARTBEAT_INACTIVITY_THRESHOLD);
+                            const isHeartbeatActive = conv.lastHeartbeatTime 
+                              && (Date.now() - new Date(conv.lastHeartbeatTime) < HEARTBEAT_INACTIVITY_THRESHOLD)
+                              && conv.status !== "inactiva" && conv.status !== "cerrada" && conv.status !== "resuelta";
                             const isPending = conv.status === "pendiente";
 
                             const baseLedStyle = {

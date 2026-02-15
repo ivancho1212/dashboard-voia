@@ -782,7 +782,16 @@ function Conversations() {
             setConversationList((prevList) => {
               const updated = prevList.map((c) =>
                 c.id === convId
-                  ? { ...c, lastMessage: conv.lastMessage, updatedAt: new Date().toISOString(), status: conv.status, blocked: conv.blocked, isWithAI: conv.isWithAI }
+                  ? { 
+                      ...c, 
+                      lastMessage: conv.lastMessage, 
+                      updatedAt: new Date().toISOString(), 
+                      status: conv.status, 
+                      blocked: conv.blocked, 
+                      isWithAI: conv.isWithAI,
+                      // Limpiar heartbeat si la conversación ya no está activa
+                      lastHeartbeatTime: (conv.status === "inactiva" || conv.status === "cerrada" || conv.status === "resuelta") ? null : c.lastHeartbeatTime
+                    }
                   : c
               );
               // ✅ Reordenar: conversaciones más recientes primero

@@ -1,6 +1,13 @@
 import axios from "axios";
 import { decodeToken, refreshAccessToken, logout } from "./authService";
-import { runAuthLogout } from "contexts/AuthContext";
+
+// runAuthLogout se registra como global desde AuthContext cuando se carga en el dashboard
+// Evita importar AuthContext directamente para no incluirlo en el bundle del widget
+const runAuthLogout = () => {
+  if (typeof window !== 'undefined' && typeof window.__runAuthLogout === 'function') {
+    window.__runAuthLogout();
+  }
+};
 
 const isWidgetContext = () => typeof window !== "undefined" && !!window.__VIA_WIDGET__;
 

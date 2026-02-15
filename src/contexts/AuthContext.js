@@ -16,6 +16,11 @@ export function runAuthLogout() {
   if (typeof authLogoutCallback === "function") authLogoutCallback();
 }
 
+// Registrar en window para que axiosConfig pueda llamarlo sin importar AuthContext directamente
+if (typeof window !== 'undefined') {
+  window.__runAuthLogout = runAuthLogout;
+}
+
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(null);
