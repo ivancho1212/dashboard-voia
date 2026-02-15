@@ -17,8 +17,8 @@ axios.defaults.timeout = 15000;
 // 🔄 DEDUPLICACIÓN: Evitar múltiples refresh simultáneos
 let refreshTokenPromise = null;
 let lastRefreshTime = 0;
-const REFRESH_COOLDOWN = 10000; // 10 segundos entre refresh
-const TOKEN_REFRESH_THRESHOLD = 180; // 3 minutos antes de expirar (era 60s)
+const REFRESH_COOLDOWN = 30000; // 30 segundos entre refresh
+const TOKEN_REFRESH_THRESHOLD = 30 * 60; // 30 minutos antes de expirar (token dura 8h)
 
 // Interceptor para agregar el token JWT a todas las peticiones si existe
 axios.interceptors.request.use(
@@ -34,10 +34,10 @@ axios.interceptors.request.use(
 
     const decoded = decodeToken(token);
     const now = Math.floor(Date.now() / 1000);
-    const timeUntilExpiry = decoded?.exp ? decoded.exp - now : 0;
+    const timeUntilExpiry = decoded?.exp ? decoded.exp - now : Infinity;
     
-    // 🔄 Solo refresh si faltan menos de 3 minutos Y no se hizo refresh recientemente
-    if (decoded && decoded.exp && timeUntilExpiry < TOKEN_REFRESH_THRESHOLD) {
+    // 🔄 Solo refresh si faltan menos de 30 minutos Y no se hizo refresh recientemente
+    if (decoded && decoded.exp && timeUntilExpiry < TOKEN_REFRESH_THRESHOLD && timeUntilExpiry > 0) {
       const timeSinceLastRefresh = now * 1000 - lastRefreshTime;
       
       // ✅ DEDUPLICACIÓN: Evitar refresh múltiples
@@ -48,23 +48,21 @@ axios.interceptors.request.use(
           config.headers["Authorization"] = `Bearer ${newToken}`;
           return config;
         } catch (e) {
-          // Si falla el refresh en progreso, intentar logout
-          console.error('❌ [axios] Error en refresh compartido:', e);
+          // Si falla el refresh en progreso, usar el token actual (aún puede ser válido)
+          console.warn('⚠️ [axios] Error en refresh compartido, usando token actual:', e?.message);
           refreshTokenPromise = null;
-          throw e;
+          config.headers["Authorization"] = `Bearer ${token}`;
+          return config;
         }
       }
       
       // ✅ RATE LIMITING: Evitar refresh muy seguidos
       if (timeSinceLastRefresh < REFRESH_COOLDOWN) {
-        console.log('⏳ [axios] Refresh en cooldown, usando token actual');
         config.headers["Authorization"] = `Bearer ${token}`;
         return config;
       }
       
-      console.warn(`⚠️ [axios] Token expira en ${Math.floor(timeUntilExpiry/60)}min ${timeUntilExpiry%60}s, refrescando...`);
-      
-      // 💬 Usuario activo = extender sesión para mejor UX
+      console.log(`🔄 [axios] Token expira en ${Math.floor(timeUntilExpiry/60)}min, refrescando...`);
       
       try {
         lastRefreshTime = Date.now();
@@ -76,64 +74,84 @@ axios.interceptors.request.use(
         console.log('✅ [axios] Token refrescado exitosamente');
         return config;
       } catch (e) {
-        console.error('❌ [axios] Error al refrescar token:', e);
+        console.warn('⚠️ [axios] Error al refrescar token, usando token actual:', e?.message);
         refreshTokenPromise = null;
-        logout();
-        if (window && window.showSessionExpiredModal) {
-          window.showSessionExpiredModal();
-        } else {
-          alert("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.");
-        }
-        return Promise.reject(new Error("Sesión expirada. Debe iniciar sesión nuevamente."));
+        // NO cerrar sesión aquí — el token actual aún puede ser válido
+        // Solo si realmente expiró y el backend devuelve 401 se cerrará la sesión
+        config.headers["Authorization"] = `Bearer ${token}`;
+        return config;
       }
     }
+    
+    // Si el token ya expiró, intentar refresh antes de enviar
+    if (decoded && decoded.exp && timeUntilExpiry <= 0) {
+      console.warn('⚠️ [axios] Token expirado, intentando refresh...');
+      try {
+        if (!refreshTokenPromise) {
+          lastRefreshTime = Date.now();
+          refreshTokenPromise = refreshAccessToken();
+        }
+        const newToken = await refreshTokenPromise;
+        refreshTokenPromise = null;
+        config.headers["Authorization"] = `Bearer ${newToken}`;
+        console.log('✅ [axios] Token renovado después de expiración');
+        return config;
+      } catch (e) {
+        refreshTokenPromise = null;
+        console.error('❌ [axios] No se pudo renovar token expirado');
+        // Continuar con token expirado — el 401 response handler limpiará la sesión
+        config.headers["Authorization"] = `Bearer ${token}`;
+        return config;
+      }
+    }
+    
     config.headers["Authorization"] = `Bearer ${token}`;
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Interceptor de respuesta: 401/403 → cerrar sesión en React y redirigir a login (dashboard)
+// Interceptor de respuesta: 401/403 → intentar refresh antes de cerrar sesión
+// Track de reintentos para evitar loops infinitos
+let retryCount = 0;
+const MAX_RETRIES = 1;
+
 axios.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // ✅ Manejar timeout específicamente
+  (response) => {
+    retryCount = 0; // Reset en respuesta exitosa
+    return response;
+  },
+  async (error) => {
+    // ✅ Manejar timeout — NO cerrar sesión por timeout
     if (error.code === 'ECONNABORTED') {
-      console.error('⏱️ [axios] Timeout en petición:', error.config?.url);
-      // Verificar si el token está expirado
-      const token = localStorage.getItem("token");
-      if (token && !isWidgetContext()) {
+      console.warn('⏱️ [axios] Timeout en petición:', error.config?.url);
+      return Promise.reject(error);
+    }
+    
+    // ✅ Manejar errores de autenticación (401/403) — intentar refresh primero
+    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+      console.warn('🔒 [axios] Error de autenticación:', error.response.status, error.config?.url);
+      
+      if (!isWidgetContext() && retryCount < MAX_RETRIES) {
+        retryCount++;
         try {
-          const decoded = decodeToken(token);
-          const now = Math.floor(Date.now() / 1000);
-          if (decoded && decoded.exp && decoded.exp < now) {
-            console.warn('⚠️ [axios] Token expirado detectado en timeout');
+          console.log('🔄 [axios] Intentando refresh por 401...');
+          const newToken = await refreshAccessToken();
+          retryCount = 0;
+          // Reintentar la petición original con el nuevo token
+          error.config.headers["Authorization"] = `Bearer ${newToken}`;
+          return axios(error.config);
+        } catch (refreshErr) {
+          console.warn('⚠️ [axios] Refresh falló tras 401 — sesión inválida');
+          retryCount = 0;
+          const hadToken = !!localStorage.getItem("token");
+          if (hadToken) {
             logout();
             runAuthLogout();
             if (window && window.showSessionExpiredModal) {
               window.showSessionExpiredModal();
-            } else {
-              alert("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.");
             }
-          }
-        } catch (e) {
-          console.error('❌ [axios] Error verificando token en timeout:', e);
-        }
-      }
-    }
-    
-    // ✅ Manejar errores de autenticación (401/403)
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.warn('🔒 [axios] Error de autenticación:', error.response.status);
-      if (!isWidgetContext()) {
-        const hadToken = !!localStorage.getItem("token");
-        if (hadToken) {
-          logout(); // limpia localStorage y opcionalmente llama al backend
-          runAuthLogout(); // actualiza AuthContext y redirige a /authentication/sign-in
-          if (window && window.showSessionExpiredModal) {
-            window.showSessionExpiredModal();
-          } else {
-            alert("Tu sesión ha expirado. Por favor, inicia sesión nuevamente.");
+            // NO usar alert() — es intrusivo. El modal o la redirección es suficiente.
           }
         }
       }

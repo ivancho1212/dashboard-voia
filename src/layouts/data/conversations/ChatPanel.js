@@ -288,12 +288,12 @@ const ChatPanel = forwardRef(
     const computeBannerLabel = () => {};
 
     const handleChangeStatus = (newStatus) => {
-      onStatusChange(newStatus);
-
       if (newStatus === "pendiente") {
+        // Solo abrir el editor, NO cambiar el estado aún
         setShowPendingEditor(true);
         setPendingTag({ title: "", description: "" });
       } else {
+        onStatusChange(newStatus);
         setShowPendingEditor(false);
         setPendingTag(null);
       }
@@ -1060,6 +1060,12 @@ const ChatPanel = forwardRef(
                         const updatedTags = await getTagsByConversationId(conversationId);
                         setConversationTags(updatedTags || []);
                         setExpandedTagIndex(null);
+
+                        // Si no quedan etiquetas, marcar conversación como resuelta
+                        if (!updatedTags || updatedTags.length === 0) {
+                          console.log('🏷️ No quedan etiquetas, marcando como resuelta...');
+                          onStatusChange("resuelta");
+                        }
                       } catch (error) {
                         console.error('Error eliminando etiqueta:', error);
                       }
@@ -1147,7 +1153,7 @@ const ChatPanel = forwardRef(
           <Box
             sx={{
               position: "absolute",
-              top: 92,
+              top: 44,
               right: 20,
               width: 300,
               zIndex: 10,
@@ -1174,9 +1180,31 @@ const ChatPanel = forwardRef(
               placeholder="Nombre de la etiqueta"
               size="small"
               fullWidth
+              autoFocus
               value={pendingTag?.label || ""}
               inputProps={{ maxLength: 100 }}
               onChange={(e) => setPendingTag((prev) => ({ ...prev, label: e.target.value }))}
+              onKeyDown={async (e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (!pendingTag?.label?.trim()) return;
+                  try {
+                    await createConversationTag({
+                      conversationId,
+                      label: pendingTag.label.trim(),
+                      highlightedMessageId: null,
+                    });
+                    const updatedTags = await getTagsByConversationId(conversationId);
+                    setConversationTags(updatedTags || []);
+                    // ✅ Ahora sí marcar como pendiente tras crear la etiqueta
+                    onStatusChange("pendiente");
+                    setShowPendingEditor(false);
+                    setPendingTag(null);
+                  } catch (error) {
+                    console.error("❌ Error guardando etiqueta:", error);
+                  }
+                }
+              }}
               InputProps={{
                 sx: {
                   width: "100% !important",
@@ -1224,6 +1252,8 @@ const ChatPanel = forwardRef(
                     });
                     const updatedTags = await getTagsByConversationId(conversationId);
                     setConversationTags(updatedTags || []);
+                    // ✅ Ahora sí marcar como pendiente tras crear la etiqueta
+                    onStatusChange("pendiente");
                     setShowPendingEditor(false);
                     setPendingTag(null);
                   } catch (error) {

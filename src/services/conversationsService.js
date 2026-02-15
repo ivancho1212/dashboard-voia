@@ -55,19 +55,45 @@ export async function getConversationsByUser(userId) {
 // ✅ Nuevo: Actualizar el estado de una conversación
 export async function updateConversationStatus(conversationId, newStatus) {
   try {
-    if (!_ensureToken()) return null; // avoid calling if no token
-
-    // Quick role check: ConversationsController requires Admin role
-    if (!hasRole('Admin')) {
+    if (!_ensureToken()) {
+      console.warn('⚠️ [updateConversationStatus] No hay token, abortando.');
       return null;
+    }
+
+    // Quick role check: el backend valida permisos con [HasPermission("CanEditConversations")]
+    // Solo loguear si no tiene rol Admin, pero NO bloquear — dejar que el backend decida
+    if (!hasRole('Admin')) {
+      console.warn('⚠️ [updateConversationStatus] hasRole("Admin") = false. Intentando de todas formas...');
     }
 
     const response = await axios.patch(
       `${BASE_URL}/api/Conversations/${conversationId}/status`,
       { status: newStatus } // El cuerpo coincide con el UpdateStatusDto
     );
+    console.log('✅ [updateConversationStatus] Respuesta:', response.data);
     return response.data;
   } catch (error) {
+    console.error('❌ [updateConversationStatus] Error:', error?.response?.status, error?.response?.data || error?.message);
+    return null;
+  }
+}
+
+// 🚫 Bloquear o desbloquear al usuario público de una conversación
+export async function blockUserByConversation(conversationId, block = true, reason = null) {
+  try {
+    if (!_ensureToken()) {
+      console.warn('⚠️ [blockUserByConversation] No hay token, abortando.');
+      return null;
+    }
+
+    const response = await axios.patch(
+      `${BASE_URL}/api/Conversations/${conversationId}/block-user`,
+      { block, reason }
+    );
+    console.log(`✅ [blockUserByConversation] Usuario ${block ? 'bloqueado' : 'desbloqueado'}:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ [blockUserByConversation] Error:', error?.response?.status, error?.response?.data || error?.message);
     return null;
   }
 }
@@ -215,7 +241,7 @@ export async function getConversationsWithLastMessage() {
         : "Conversación iniciada",
       updatedAt: c.lastMessage?.timestamp || c.updatedAt || new Date().toISOString(), // Use timestamp from lastMessage
       status: c.status,
-      blocked: false,
+      blocked: c.blocked || false,
       isWithAI: c.isWithAI,
     }));
   } catch (error) {

@@ -79,7 +79,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "build:widget": "webpack --config webpack.widget.js && node -e \"const fs=require('fs'); fs.copyFileSync('dist/widget.js','public/widget.js'); console.log('✅ Widget copiado a public/widget.js')\"",
+    "build:widget": "webpack --config webpack.widget.js && node -e \"const fs=require('fs'); const path=require('path'); fs.copyFileSync('dist/widget.js','public/widget.js'); const wwwroot=path.resolve(__dirname,'../vo-ia/wwwroot/widget.js'); try{fs.copyFileSync('dist/widget.js',wwwroot);console.log('✅ Widget copiado a public/ y wwwroot/')}catch(e){console.log('✅ Widget copiado a public/ (wwwroot no disponible)')}\"",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "install:clean": "rm -rf node_modules/ && rm -rf package-lock.json && npm install && npm start",

@@ -1,6 +1,20 @@
 const path = require('path');
 const webpack = require('webpack');
 
+// ╔════════════════════════════════════════════════════════════════════════╗
+// ║  WIDGET BUILD — INSTRUCCIONES DE USO                                  ║
+// ║                                                                       ║
+// ║  ⚠️  NO usar: npx webpack --config webpack.widget.js                  ║
+// ║      (solo compila a dist/widget.js, NO copia a public/ ni wwwroot)   ║
+// ║                                                                       ║
+// ║  ✅  USAR:  npm run build:widget                                      ║
+// ║      (compila a dist/ y copia a public/ y vo-ia/wwwroot/)             ║
+// ║                                                                       ║
+// ║  OUTPUT:  dist/widget.js  (build original)                            ║
+// ║  COPIAS:  public/widget.js  (servido por react dev server :3000)      ║
+// ║           ../vo-ia/wwwroot/widget.js  (servido por backend :5006)     ║
+// ╚════════════════════════════════════════════════════════════════════════╝
+
 module.exports = {
   entry: './src/widget/index.js', // Render directo (restaurado: iframe causaba problemas de render + memoria)
   output: {

@@ -33,7 +33,29 @@ export async function createConversation(userId, botId, clientSecret, forceNewSe
     );
     return data.conversationId;
   } catch (error) {
-    console.error("❌ [createConversation] Error:", error.response?.data?.message || error.message);
+    // 🚫 Detectar bloqueo de usuario (403) — múltiples formas de detección
+    const respData = error.response?.data || {};
+    const respStatus = error.response?.status;
+    const errMsg = respData.message || respData.Message || error.message || '';
+    const errCode = respData.error || respData.Error || '';
+    
+    const isBlocked = respStatus === 403 || 
+                      errCode === 'USER_BLOCKED' ||
+                      errMsg.includes('restringido') || 
+                      errMsg.includes('bloqueado');
+    
+    console.warn(`🔍 [createConversation] Error capturado: status=${respStatus}, errCode=${errCode}, msg=${errMsg}, isBlocked=${isBlocked}`);
+    
+    if (isBlocked) {
+      console.warn("🚫 [createConversation] Usuario bloqueado detectado:", respData);
+      return { 
+        blocked: true, 
+        message: errMsg || "Acceso restringido",
+        reason: respData.reason || respData.Reason,
+        contactEmail: respData.contactEmail || respData.ContactEmail || null
+      };
+    }
+    console.error("❌ [createConversation] Error:", errMsg);
     return null;
   }
 }

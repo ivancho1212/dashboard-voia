@@ -51,14 +51,50 @@ export const AuthProvider = ({ children }) => {
     const baseUrl = getApiBaseUrl();
     const meUrl = baseUrl.replace(/\/api\/?$/, "") + "/api/users/me";
 
-    fetch(meUrl, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${storedToken}`, "Content-Type": "application/json" },
-      credentials: "include",
-    })
-      .then((res) => {
+    const tryFetchMe = async (tokenToUse) => {
+      const res = await fetch(meUrl, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${tokenToUse}`, "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      return res;
+    };
+
+    tryFetchMe(storedToken)
+      .then(async (res) => {
         if (cancelled) return;
+        
+        // Si es 401, intentar refresh antes de cerrar sesión
         if (res.status === 401 || res.status === 403) {
+          try {
+            const refreshRes = await fetch(baseUrl.replace(/\/api\/?$/, "") + "/api/Auth/refresh", {
+              method: "POST",
+              credentials: "include",
+            });
+            if (refreshRes.ok) {
+              const data = await refreshRes.json();
+              const newToken = data.accessToken || data.token;
+              if (newToken) {
+                localStorage.setItem("token", newToken);
+                // Reintentar /me con el nuevo token
+                const retryRes = await tryFetchMe(newToken);
+                if (retryRes.ok) {
+                  try {
+                    const parsedUser = JSON.parse(storedUser);
+                    setUser(parsedUser);
+                    setToken(newToken);
+                    setIsAuthenticated(true);
+                  } catch (e) {
+                    clearSession();
+                  }
+                  setHydrated(true);
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            // Refresh falló, continuar con clearSession
+          }
           clearSession();
           setHydrated(true);
           return;
@@ -79,7 +115,16 @@ export const AuthProvider = ({ children }) => {
       })
       .catch(() => {
         if (!cancelled) {
-          clearSession();
+          // Error de red — NO cerrar sesión, asumir que el token sigue válido
+          // El usuario puede estar sin conexión temporal
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+            setToken(storedToken);
+            setIsAuthenticated(true);
+          } catch (e) {
+            clearSession();
+          }
           setHydrated(true);
         }
       });

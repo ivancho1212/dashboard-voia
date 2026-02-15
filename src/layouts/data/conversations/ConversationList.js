@@ -1,5 +1,5 @@
 // v2.1.0 - Date filter with colored calendar icons
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import PropTypes from "prop-types";
 import SoftTypography from "components/SoftTypography";
 import List from "@mui/material/List";
@@ -14,6 +14,7 @@ import Tooltip from "@mui/material/Tooltip";
 import InputAdornment from "@mui/material/InputAdornment";
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import FilterListIcon from "@mui/icons-material/FilterList";
+import BlockIcon from "@mui/icons-material/Block";
 import { format, startOfDay, differenceInDays, isSameDay, parseISO, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import ClearIcon from '@mui/icons-material/Clear';
@@ -93,6 +94,16 @@ function ConversationList({
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
 
+  // ✅ Timer para forzar re-render cada 15s y re-evaluar Date.now() en el LED de heartbeat
+  // Sin esto, el punto verde queda congelado cuando dejan de llegar heartbeats
+  const [, setHeartbeatTick] = useState(0);
+  useEffect(() => {
+    const tickInterval = setInterval(() => {
+      setHeartbeatTick(t => t + 1);
+    }, 15000);
+    return () => clearInterval(tickInterval);
+  }, []);
+
   const handleOpenMenu = (event) => setAnchorEl(event.currentTarget);
   const handleCloseMenu = () => setAnchorEl(null);
   const handleFilterChange = (value) => {
@@ -151,20 +162,28 @@ function ConversationList({
       50% { background-color: #fff176; }
       100% { background-color: #fffde7; }
     }
-    @keyframes led-blink {
+    @keyframes border-glow-green {
+      0%, 100% {
+        border-color: #39FF14;
+        box-shadow: inset 0 0 6px rgba(57, 255, 20, 0.3), 0 0 8px rgba(57, 255, 20, 0.2);
+      }
       50% {
-        opacity: 0.5;
-        box-shadow: none;
+        border-color: rgba(57, 255, 20, 0.4);
+        box-shadow: inset 0 0 3px rgba(57, 255, 20, 0.15), 0 0 4px rgba(57, 255, 20, 0.1);
       }
     }
-    @keyframes led-green-orange {
-      0%, 49% {
-        background-color: #39FF14;
-        box-shadow: 0 0 4px #39FF14, 0 0 8px #39FF14;
+    @keyframes border-glow-green-orange {
+      0%, 40% {
+        border-color: #39FF14;
+        box-shadow: inset 0 0 6px rgba(57, 255, 20, 0.3), 0 0 8px rgba(57, 255, 20, 0.2);
       }
-      50%, 100% {
-        background-color: #FF9800;
-        box-shadow: 0 0 4px #FF9800, 0 0 8px #FF9800;
+      50%, 90% {
+        border-color: #FF9800;
+        box-shadow: inset 0 0 6px rgba(255, 152, 0, 0.3), 0 0 8px rgba(255, 152, 0, 0.2);
+      }
+      100% {
+        border-color: #39FF14;
+        box-shadow: inset 0 0 6px rgba(57, 255, 20, 0.3), 0 0 8px rgba(57, 255, 20, 0.2);
       }
     }
   `;
@@ -377,158 +396,171 @@ function ConversationList({
         <List sx={{ width: "100%", padding: 0 }}>
           {filtered.map((conv) => {
             const hasUnread = conv.unreadCount > 0 && conv.id !== activeTab;
+            
+            // ✅ Calcular estado visual para el borde
+            const HEARTBEAT_INACTIVITY_THRESHOLD = 45 * 1000;
+            const isHeartbeatActive = conv.lastHeartbeatTime 
+              && (Date.now() - new Date(conv.lastHeartbeatTime) < HEARTBEAT_INACTIVITY_THRESHOLD)
+              && conv.status !== "inactiva" && conv.status !== "cerrada" && conv.status !== "resuelta";
+            const isPending = conv.status === "pendiente";
+            const isBlocked = conv.blocked === true;
+            const isClosed = ["cerrada", "closed", "resuelta", "expired", "expirada"].includes(conv.status?.toLowerCase());
+            const isInactive = conv.status === "inactiva";
+
+            // Determinar color y estilo del borde
+            let borderColor = '#d0d0d0'; // default: gris suave
+            let borderShadow = '0 1px 3px rgba(0,0,0,0.05)';
+            let borderAnimation = 'none';
+            let statusLabel = conv.status || 'activa';
+
+            if (isBlocked) {
+              borderColor = '#f44336';
+              borderShadow = 'inset 0 0 6px rgba(244, 67, 54, 0.25), 0 0 6px rgba(244, 67, 54, 0.15)';
+              statusLabel = 'bloqueada';
+            } else if (isHeartbeatActive && isPending) {
+              borderColor = '#39FF14';
+              borderShadow = 'inset 0 0 6px rgba(57, 255, 20, 0.3), 0 0 8px rgba(57, 255, 20, 0.2)';
+              borderAnimation = 'border-glow-green-orange 2s infinite';
+              statusLabel = 'en línea (pendiente)';
+            } else if (isHeartbeatActive) {
+              borderColor = '#39FF14';
+              borderShadow = 'inset 0 0 6px rgba(57, 255, 20, 0.3), 0 0 8px rgba(57, 255, 20, 0.2)';
+              borderAnimation = 'border-glow-green 1.5s infinite';
+              statusLabel = 'en línea';
+            } else if (isPending) {
+              borderColor = '#FF9800';
+              borderShadow = 'inset 0 0 6px rgba(255, 152, 0, 0.25), 0 0 6px rgba(255, 152, 0, 0.15)';
+              statusLabel = 'pendiente';
+            } else if (isClosed || isInactive) {
+              borderColor = '#bdbdbd';
+              borderShadow = '0 1px 2px rgba(0,0,0,0.04)';
+              statusLabel = isClosed ? 'cerrada' : 'inactiva';
+            }
+
             return (
-              <ListItemButton
-                key={conv.id}
-                onClick={() => { onSelect(conv.id); onClearHighlight(conv.id); }}
-                sx={{
-                  mb: 0.5,
-                  borderRadius: "8px",
-                  padding: "12px",
-                  paddingLeft: "20px",
-                  backgroundColor: highlightedIds.includes(conv.id) ? "#fff8e1" : (activeTab === conv.id ? "#e3f2fd" : "#f5f5f5"),
-                  animation: highlightedIds.includes(conv.id) ? "flash 1s infinite ease-in-out" : "none",
-                  "&:hover": { backgroundColor: "#d0f0f6" },
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                  maxWidth: "100%",
-                  overflow: "hidden",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                <Box sx={{ flex: 1, minWidth: 0, maxWidth: "calc(100% - 90px)", overflow: "hidden", pr: 1.5 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.3 }}>
-                    {/* 🔵 Badge simple con contador de mensajes no leídos */}
-                    {hasUnread && (
-                      <Box
+              <Tooltip key={conv.id} title={`Estado: ${statusLabel}`} placement="left" arrow>
+                <ListItemButton
+                  onClick={() => { onSelect(conv.id); onClearHighlight(conv.id); }}
+                  sx={{
+                    mb: 0.5,
+                    borderRadius: "10px",
+                    padding: "10px 12px",
+                    paddingLeft: "14px",
+                    backgroundColor: highlightedIds.includes(conv.id) 
+                      ? "#fff8e1" 
+                      : (activeTab === conv.id ? "#e8f5e9" : "#ffffff"),
+                    animation: highlightedIds.includes(conv.id) ? "flash 1s infinite ease-in-out" : borderAnimation,
+                    border: `2px solid ${borderColor}`,
+                    boxShadow: borderShadow,
+                    "&:hover": { 
+                      backgroundColor: activeTab === conv.id ? "#e8f5e9" : "#f5f5f5",
+                      boxShadow: borderShadow,
+                    },
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    maxWidth: "100%",
+                    overflow: "hidden",
+                    whiteSpace: "nowrap",
+                    transition: "border-color 0.4s ease, box-shadow 0.4s ease, background-color 0.2s ease",
+                  }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0, maxWidth: "calc(100% - 90px)", overflow: "hidden", pr: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, mb: 0.3 }}>
+                      {/* Badge de no leídos */}
+                      {hasUnread && (
+                        <Box
+                          sx={{
+                            minWidth: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: '#17a2b8',
+                            color: '#ffffff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '10px',
+                            fontWeight: 'bold',
+                            boxShadow: '0 2px 6px rgba(23, 162, 184, 0.4)',
+                            flexShrink: 0,
+                            padding: '0 3px'
+                          }}
+                        >
+                          {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
+                        </Box>
+                      )}
+                      {/* Icono de bloqueo */}
+                      {isBlocked && (
+                        <BlockIcon sx={{ fontSize: 16, color: '#f44336', flexShrink: 0 }} />
+                      )}
+                      {/* Nombre de sesión */}
+                      <Typography 
+                        variant="body2" 
+                        fontWeight={hasUnread ? "bold" : "600"} 
+                        color={isBlocked ? "error" : "text.primary"} 
+                        noWrap
+                        sx={{ fontSize: "12px" }}
+                      >
+                        Sesión {conv.id}
+                      </Typography>
+                    </Box>
+                    {/* Último mensaje */}
+                    <Tooltip title={conv.lastMessage || "Sin mensajes aún"} arrow>
+                      <Typography
+                        variant="body2"
+                        color={hasUnread ? "text.primary" : "secondary"}
+                        fontWeight={hasUnread ? "500" : "normal"}
                         sx={{
-                          minWidth: '22px',
-                          height: '22px',
-                          borderRadius: '50%',
-                          backgroundColor: '#17a2b8',
-                          color: '#ffffff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '11px',
-                          fontWeight: 'bold',
-                          boxShadow: '0 2px 6px rgba(23, 162, 184, 0.4)',
-                          flexShrink: 0,
-                          padding: '0 4px'
+                          fontSize: "12px",
+                          overflow: "hidden",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          lineHeight: 1.4,
+                          width: "100%",
+                          wordBreak: "break-word"
                         }}
                       >
-                        {conv.unreadCount > 99 ? '99+' : conv.unreadCount}
-                      </Box>
-                    )}
-                    {/* Nombre de sesión más pequeño y compacto */}
-                    <Typography 
-                      variant="body2" 
-                      fontWeight={hasUnread ? "bold" : "600"} 
-                      color={conv.blocked ? "error" : "text.primary"} 
-                      noWrap
-                      sx={{ fontSize: "12px" }}
-                    >
-                      Sesión {conv.id}
-                    </Typography>
+                        {conv.lastMessage || "Sin mensajes aún"}
+                      </Typography>
+                    </Tooltip>
                   </Box>
-                  {/* Último mensaje con 2 líneas máximo */}
-                  <Tooltip
-                    title={conv.lastMessage || "Sin mensajes aún"}
-                    arrow
-                  >
-                    <Typography
-                      variant="body2"
-                      color={hasUnread ? "text.primary" : "secondary"}
-                      fontWeight={hasUnread ? "500" : "normal"}
-                      sx={{
-                        fontSize: "12.5px",
-                        overflow: "hidden",
-                        display: "-webkit-box",
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: "vertical",
-                        lineHeight: 1.4,
-                        width: "100%",
-                        wordBreak: "break-word"
+
+                  {/* Acciones y fecha */}
+                  <Box display="flex" flexDirection="column" alignItems="flex-end" justifyContent="flex-start" sx={{ flexShrink: 0, width: "80px", pl: 0.5 }}>
+                    <Box display="flex" alignItems="center" gap={0.3}>
+                      {!conv.isWithAI && (
+                        <Tooltip title="IA pausada">
+                          <IconButton size="small" sx={{ color: "#c632e4ff", p: 0.3 }}>
+                            <PauseCircleOutlineIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      <ConversationActions
+                        onBlock={() => onBlock(conv.id)}
+                        onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
+                        blocked={conv.blocked}
+                        currentStatus={conv.status}
+                        conversationId={conv.id}
+                        onMovedToTrash={onMovedToTrash ? () => onMovedToTrash(conv.id) : undefined}
+                      />
+                    </Box>
+                    {/* Fecha/hora */}
+                    <Typography 
+                      variant="caption" 
+                      color="secondary" 
+                      sx={{ 
+                        fontSize: "10px", 
+                        mt: 0.3,
+                        whiteSpace: "nowrap",
+                        fontWeight: 500
                       }}
                     >
-                      {conv.lastMessage || "Sin mensajes aún"}
+                      {getCompactTimeAgo(conv.updatedAt)}
                     </Typography>
-                  </Tooltip>
-                </Box>
-
-                {/* Contenedor de acciones y fecha - ancho fijo para evitar overlap */}
-                <Box display="flex" flexDirection="column" alignItems="flex-end" justifyContent="flex-start" sx={{ flexShrink: 0, width: "85px", pl: 1 }}>
-                  <Box display="flex" alignItems="center" gap={0.5}>
-                    <Tooltip title={`Estado: ${conv.status}`}>
-                      <Box
-                        sx={(() => {
-                            const HEARTBEAT_INACTIVITY_THRESHOLD = 45 * 1000;
-                            const isHeartbeatActive = conv.lastHeartbeatTime 
-                              && (Date.now() - new Date(conv.lastHeartbeatTime) < HEARTBEAT_INACTIVITY_THRESHOLD)
-                              && conv.status !== "inactiva" && conv.status !== "cerrada" && conv.status !== "resuelta";
-                            const isPending = conv.status === "pendiente";
-
-                            const baseLedStyle = {
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                transition: 'all 0.3s ease',
-                            };
-
-                            let style = {
-                                ...baseLedStyle,
-                                backgroundColor: '#444',
-                                border: '1px solid #222',
-                            };
-
-                            if (isHeartbeatActive) {
-                                if (isPending) {
-                                    style = { ...style, border: 'none', animation: 'led-green-orange 1.5s infinite' };
-                                } else {
-                                    style = { ...style, backgroundColor: '#39FF14', border: 'none', boxShadow: '0 0 4px #39FF14, 0 0 8px #39FF14', animation: 'led-blink 1.2s infinite' };
-                                }
-                            } else { 
-                                if (isPending) {
-                                    style = { ...style, backgroundColor: '#FF9800', border: 'none', boxShadow: '0 0 4px #FF9800, 0 0 8px #FF9800' };
-                                }
-                            }
-                            return style;
-                        })()}
-                      />
-                    </Tooltip>
-                    {!conv.isWithAI && (
-                      <Tooltip title="IA pausada">
-                        <IconButton size="small" sx={{ color: "#c632e4ff", mr: -1.9 }}>
-                          <PauseCircleOutlineIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    <ConversationActions
-                      onBlock={() => onBlock(conv.id)}
-                      onStatusChange={(newStatus) => onStatusChange(conv.id, newStatus)}
-                      blocked={conv.blocked}
-                      currentStatus={conv.status}
-                      conversationId={conv.id}
-                      onMovedToTrash={onMovedToTrash ? () => onMovedToTrash(conv.id) : undefined}
-                    />
                   </Box>
-                  {/* Fecha/hora compacta */}
-                  <Typography 
-                    variant="caption" 
-                    color="secondary" 
-                    sx={{ 
-                      fontSize: "10px", 
-                      mt: 0.3,
-                      whiteSpace: "nowrap",
-                      fontWeight: 500
-                    }}
-                  >
-                    {getCompactTimeAgo(conv.updatedAt)}
-                  </Typography>
-                </Box>
-              </ListItemButton>
+                </ListItemButton>
+              </Tooltip>
             )}
           )}
         </List>

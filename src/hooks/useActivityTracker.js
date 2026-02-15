@@ -3,7 +3,10 @@ import { refreshAccessToken } from 'services/authService';
 
 /**
  * Hook para mantener la sesión activa mientras el usuario está usando la plataforma
- * Detecta actividad del usuario y extiende automáticamente la sesión
+ * Detecta actividad del usuario y extiende automáticamente la sesión.
+ * 
+ * Con tokens de 8 horas, el refresh se hace 30 min antes de expirar.
+ * El heartbeat revisa cada 10 minutos si el token necesita renovación.
  */
 export const useActivityTracker = () => {
   const lastActivityRef = useRef(Date.now());
@@ -28,8 +31,8 @@ export const useActivityTracker = () => {
         const now = Date.now();
         const timeSinceActivity = now - lastActivityRef.current;
         
-        // Si el usuario estuvo activo en los últimos 5 minutos
-        if (timeSinceActivity < 5 * 60 * 1000) {
+        // Si el usuario estuvo activo en los últimos 30 minutos
+        if (timeSinceActivity < 30 * 60 * 1000) {
           const token = localStorage.getItem('token');
           if (!token) return;
 
@@ -39,25 +42,34 @@ export const useActivityTracker = () => {
             const payload = JSON.parse(atob(base64Payload));
             const timeUntilExpiry = payload.exp - Math.floor(Date.now() / 1000);
             
-            // Si al token le quedan menos de 10 minutos Y el usuario está activo
-            if (timeUntilExpiry < 10 * 60) {
+            // Si al token le quedan menos de 60 minutos Y el usuario está activo → refrescar
+            if (timeUntilExpiry < 60 * 60 && timeUntilExpiry > 0) {
               console.log('🔄 [ActivityTracker] Usuario activo, extendiendo sesión...');
               await refreshAccessToken();
               console.log('✅ [ActivityTracker] Sesión extendida por actividad');
+            } else if (timeUntilExpiry > 0) {
+              console.log(`ℹ️ [ActivityTracker] Token válido por ${Math.floor(timeUntilExpiry/3600)}h ${Math.floor((timeUntilExpiry%3600)/60)}min más`);
             } else {
-              console.log(`ℹ️ [ActivityTracker] Token válido por ${Math.floor(timeUntilExpiry/60)} minutos más`);
+              // Token expirado — intentar refresh
+              console.warn('⚠️ [ActivityTracker] Token expirado, intentando renovar...');
+              try {
+                await refreshAccessToken();
+                console.log('✅ [ActivityTracker] Token renovado después de expiración');
+              } catch (e) {
+                console.error('❌ [ActivityTracker] No se pudo renovar token expirado:', e?.message);
+              }
             }
           } catch (e) {
             console.warn('⚠️ [ActivityTracker] Error verificando token:', e);
           }
         } else {
-          console.log('😴 [ActivityTracker] Usuario inactivo por más de 5 minutos');
+          console.log('😴 [ActivityTracker] Usuario inactivo por más de 30 minutos');
         }
-      }, 2 * 60 * 1000); // Cada 2 minutos
+      }, 10 * 60 * 1000); // Cada 10 minutos
     };
 
-    // Iniciar heartbeat después de 1 minuto
-    const initTimer = setTimeout(startHeartbeat, 60000);
+    // Iniciar heartbeat inmediatamente
+    startHeartbeat();
 
     // Cleanup
     return () => {
@@ -68,13 +80,11 @@ export const useActivityTracker = () => {
       if (heartbeatIntervalRef.current) {
         clearInterval(heartbeatIntervalRef.current);
       }
-      
-      clearTimeout(initTimer);
     };
   }, []);
 
   return {
     getLastActivity: () => lastActivityRef.current,
-    isUserActive: () => Date.now() - lastActivityRef.current < 5 * 60 * 1000
+    isUserActive: () => Date.now() - lastActivityRef.current < 30 * 60 * 1000
   };
 };

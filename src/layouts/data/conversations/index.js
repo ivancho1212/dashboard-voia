@@ -18,6 +18,11 @@ import IconButton from "@mui/material/IconButton";
 import CloseIcon from "@mui/icons-material/Close";
 import SoftTypography from "components/SoftTypography";
 import Tooltip from "@mui/material/Tooltip";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogActions from "@mui/material/DialogActions";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { getFilesByConversation } from "services/chatUploadedFilesService";
@@ -40,6 +45,7 @@ import {
   markMessagesAsRead,
   updateConversationIsWithAI,
   getConversationsWithLastMessage,
+  blockUserByConversation,
 } from "services/conversationsService";
 import { useAuth } from "contexts/AuthContext";
 
@@ -167,6 +173,13 @@ function Conversations() {
 
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [loadingConversationId, setLoadingConversationId] = useState(null);
+
+  // 🔒 Block confirmation dialog state
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [blockDialogConvId, setBlockDialogConvId] = useState(null);
+  const [blockDialogReason, setBlockDialogReason] = useState("");
+  const [blockDialogIsBlocked, setBlockDialogIsBlocked] = useState(false);
+  const [blockDialogLoading, setBlockDialogLoading] = useState(false);
 
   const { user, isAuthenticated } = useAuth();
   const userId = user?.id ?? user?.userId ?? user?.sub;
@@ -323,7 +336,9 @@ function Conversations() {
   };
 
   const handleUpdateConversationStatus = async (conversationId, newStatus) => {
+    console.log(`🔄 [StatusChange] Cambiando estado de conv=${conversationId} a "${newStatus}"...`);
     const result = await updateConversationStatus(conversationId, newStatus);
+    console.log(`🔄 [StatusChange] Resultado API:`, result);
     if (result) {
       setConversationList((prevList) =>
         prevList.map((item) => (item.id == conversationId ? { ...item, status: newStatus } : item))
@@ -331,6 +346,9 @@ function Conversations() {
       setOpenTabs((prevTabs) =>
         prevTabs.map((item) => (item.id == conversationId ? { ...item, status: newStatus } : item))
       );
+      console.log(`✅ [StatusChange] Estado local actualizado a "${newStatus}" para conv=${conversationId}`);
+    } else {
+      console.warn(`⚠️ [StatusChange] API devolvió null/false para conv=${conversationId}. Estado NO actualizado.`);
     }
   };
 
@@ -483,6 +501,39 @@ function Conversations() {
               conv.id === convId
                 ? { ...conv, lastHeartbeatTime: new Date().toISOString() }
                 : conv
+            )
+          );
+        });
+
+        // ✅ Escuchar señal de que el widget se cerró y apagar punto verde inmediatamente
+        connection.on("heartbeatstopped", (conversationId) => {
+          console.log(`💤 HeartbeatStopped recibido para conversación ${conversationId}`);
+          const convId = String(conversationId);
+          setConversationList(prevList =>
+            prevList.map(conv =>
+              conv.id === convId
+                ? { ...conv, lastHeartbeatTime: null }
+                : conv
+            )
+          );
+        });
+
+        // ✅ Escuchar cambios de estado de conversación (pendiente, resuelta, cerrada, etc.)
+        connection.on("conversationstatuschanged", (conversationId, newStatus) => {
+          console.log(`🔄 ConversationStatusChanged recibido: conv=${conversationId}, status=${newStatus}`);
+          const convId = String(conversationId);
+          setConversationList(prevList =>
+            prevList.map(conv =>
+              conv.id === convId
+                ? { ...conv, status: newStatus }
+                : conv
+            )
+          );
+          setOpenTabs(prevTabs =>
+            prevTabs.map(item =>
+              item.id === convId
+                ? { ...item, status: newStatus }
+                : item
             )
           );
         });
@@ -845,7 +896,7 @@ function Conversations() {
           console.warn('🔄 [SignalR] Intentando reconectar...', error?.message || '');
           setIsConnected(false);
           
-          // Verificar si el token está expirado
+          // Intentar refrescar token silenciosamente durante reconexión
           const token = localStorage.getItem("token");
           if (token) {
             try {
@@ -854,15 +905,15 @@ function Conversations() {
               const now = Math.floor(Date.now() / 1000);
               
               if (payload.exp && payload.exp < now) {
-                console.error('❌ [SignalR] Token expirado durante reconexión - deteniendo intentos');
-                connection.stop().catch(() => {});
-                setLoadError('Tu sesión ha expirado. Redirigiendo al login...');
-                setTimeout(() => {
-                  localStorage.removeItem('token');
-                  localStorage.removeItem('refreshToken');
-                  localStorage.removeItem('user');
-                  window.location.href = '/authentication/sign-in';
-                }, 2000);
+                console.log('🔄 [SignalR] Token expirado durante reconexión, intentando refresh...');
+                import('services/authService').then(({ refreshAccessToken }) => {
+                  refreshAccessToken()
+                    .then(() => console.log('✅ [SignalR] Token renovado durante reconexión'))
+                    .catch(() => {
+                      console.error('❌ [SignalR] Refresh falló durante reconexión');
+                      connection.stop().catch(() => {});
+                    });
+                });
               }
             } catch (e) {
               console.error('❌ [SignalR] Error verificando token en reconexión:', e);
@@ -883,7 +934,7 @@ function Conversations() {
           console.warn('🔌 [SignalR] Conexión cerrada.', error?.message || '');
           setIsConnected(false);
           
-          // Si hay error, verificar si es por token expirado
+          // Si hay error, intentar refresh y reconectar en vez de matar la sesión
           if (error) {
             const token = localStorage.getItem("token");
             if (token) {
@@ -893,14 +944,12 @@ function Conversations() {
                 const now = Math.floor(Date.now() / 1000);
                 
                 if (payload.exp && payload.exp < now) {
-                  console.error('❌ [SignalR] Conexión cerrada por token expirado');
-                  setLoadError('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
-                  setTimeout(() => {
-                    localStorage.removeItem('token');
-                    localStorage.removeItem('refreshToken');
-                    localStorage.removeItem('user');
-                    window.location.href = '/authentication/sign-in';
-                  }, 2000);
+                  console.log('🔄 [SignalR] Token expirado al cerrar conexión, intentando refresh...');
+                  import('services/authService').then(({ refreshAccessToken }) => {
+                    refreshAccessToken()
+                      .then(() => console.log('✅ [SignalR] Token renovado tras cierre'))
+                      .catch(() => console.warn('⚠️ [SignalR] Refresh falló tras cierre — la próxima interacción redirigirá al login'));
+                  });
                 }
               } catch (e) {
                 console.error('❌ [SignalR] Error verificando token en close:', e);
@@ -948,6 +997,8 @@ function Conversations() {
         conn.off("newconversation");
         conn.off("newconversationormessage");
         conn.off("heartbeat");
+        conn.off("heartbeatstopped");
+        conn.off("conversationstatuschanged");
         conn.off("updateconversation");
         conn.off("receivemessage");
       } catch (e) { /* ignore */ }
@@ -992,32 +1043,40 @@ function Conversations() {
       return;
     }
     
-    // ✅ Decodificar y verificar expiración del token
+    // ✅ Verificar si el token está expirado — intentar refresh antes de abortar
     try {
       const base64Payload = token.split('.')[1];
       const payload = JSON.parse(atob(base64Payload));
       const now = Math.floor(Date.now() / 1000);
       
       if (payload.exp && payload.exp < now) {
-        console.warn('⚠️ [FetchConversations] Token expirado. exp:', payload.exp, 'now:', now);
-        setLoadError('Tu sesión ha expirado. Redirigiendo al login...');
-        setLoadingList(false);
-        
-        // Cerrar conexión SignalR
-        const conn = connectionRef.current;
-        if (conn && (conn.state === "Connected" || conn.state === "Connecting")) {
-          console.log('🔌 [FetchConversations] Cerrando conexión SignalR por token expirado');
-          conn.stop().catch(() => {});
+        console.warn('⚠️ [FetchConversations] Token expirado, intentando refresh...');
+        try {
+          const { refreshAccessToken } = await import('services/authService');
+          await refreshAccessToken();
+          console.log('✅ [FetchConversations] Token renovado, continuando...');
+          // Token renovado, continuar con la petición
+        } catch (refreshErr) {
+          console.error('❌ [FetchConversations] No se pudo renovar token expirado:', refreshErr?.message);
+          setLoadError('Tu sesión ha expirado. Redirigiendo al login...');
+          setLoadingList(false);
+          
+          // Cerrar conexión SignalR
+          const conn = connectionRef.current;
+          if (conn && (conn.state === "Connected" || conn.state === "Connecting")) {
+            console.log('🔌 [FetchConversations] Cerrando conexión SignalR por token expirado');
+            conn.stop().catch(() => {});
+          }
+          
+          // Limpiar sesión y redirigir
+          setTimeout(() => {
+            localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
+            localStorage.removeItem('user');
+            window.location.href = '/authentication/sign-in';
+          }, 2000);
+          return;
         }
-        
-        // Limpiar sesión y redirigir
-        setTimeout(() => {
-          localStorage.removeItem('token');
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('user');
-          window.location.href = '/authentication/sign-in';
-        }, 2000);
-        return;
       }
     } catch (e) {
       console.error('❌ [FetchConversations] Error decodificando token:', e);
@@ -1862,9 +1921,45 @@ function Conversations() {
   };
 
   const handleBlockUser = (id) => {
-    setConversationList((prev) =>
-      prev.map((conv) => (conv.id === id ? { ...conv, blocked: !conv.blocked } : conv))
-    );
+    const conv = conversationList.find((c) => c.id === id);
+    if (!conv) return;
+    const currentlyBlocked = conv.blocked || false;
+    setBlockDialogConvId(id);
+    setBlockDialogIsBlocked(currentlyBlocked);
+    setBlockDialogReason("");
+    setBlockDialogOpen(true);
+  };
+
+  const handleBlockConfirm = async () => {
+    if (!blockDialogConvId) return;
+    setBlockDialogLoading(true);
+    try {
+      const shouldBlock = !blockDialogIsBlocked;
+      const result = await blockUserByConversation(
+        blockDialogConvId,
+        shouldBlock,
+        shouldBlock ? blockDialogReason || null : null
+      );
+      if (result) {
+        // Update all affected conversations in local state
+        // Convert IDs to strings since conv.id is stored as string in frontend
+        const rawIds = result.affectedConversations || [blockDialogConvId];
+        const affectedIds = rawIds.map((id) => String(id));
+        setConversationList((prev) =>
+          prev.map((conv) =>
+            affectedIds.includes(String(conv.id))
+              ? { ...conv, blocked: shouldBlock, status: shouldBlock ? "bloqueada" : "activa" }
+              : conv
+          )
+        );
+        console.log(`✅ Usuario ${shouldBlock ? "bloqueado" : "desbloqueado"} en ${affectedIds.length} conversación(es)`);
+      }
+    } catch (err) {
+      console.error("❌ Error al bloquear/desbloquear usuario:", err);
+    } finally {
+      setBlockDialogLoading(false);
+      setBlockDialogOpen(false);
+    }
   };
 
   const selectedConversation = conversationList.find((conv) => conv.id === activeTab);
@@ -1994,6 +2089,59 @@ function Conversations() {
           </Grid>
         </Grid>
       </SoftBox>
+      {/* 🔒 Confirmation dialog for blocking/unblocking */}
+      <Dialog open={blockDialogOpen} onClose={() => !blockDialogLoading && setBlockDialogOpen(false)}>
+        <DialogTitle>
+          {blockDialogIsBlocked ? "Desbloquear usuario" : "Bloquear usuario"}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText sx={{ mb: 2 }}>
+            {blockDialogIsBlocked
+              ? "¿Estás seguro de desbloquear a este usuario? Podrá enviar mensajes nuevamente en todas sus conversaciones."
+              : "¿Estás seguro de bloquear a este usuario? Se bloqueará en TODAS sus conversaciones con este bot."}
+          </DialogContentText>
+          {!blockDialogIsBlocked && (
+            <textarea
+              autoFocus
+              placeholder="Razón del bloqueo (opcional)"
+              value={blockDialogReason}
+              onChange={(e) => setBlockDialogReason(e.target.value)}
+              rows={2}
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                borderRadius: "8px",
+                border: "1px solid #d2d6da",
+                fontFamily: "inherit",
+                fontSize: "14px",
+                resize: "vertical",
+                outline: "none",
+                boxSizing: "border-box",
+                transition: "border-color 0.2s",
+              }}
+              onFocus={(e) => (e.target.style.borderColor = "#17c1e8")}
+              onBlur={(e) => (e.target.style.borderColor = "#d2d6da")}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBlockDialogOpen(false)} disabled={blockDialogLoading}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleBlockConfirm}
+            color={blockDialogIsBlocked ? "success" : "error"}
+            variant="contained"
+            disabled={blockDialogLoading}
+          >
+            {blockDialogLoading
+              ? "Procesando..."
+              : blockDialogIsBlocked
+              ? "Desbloquear"
+              : "Bloquear"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </DashboardLayout>
   );
 }

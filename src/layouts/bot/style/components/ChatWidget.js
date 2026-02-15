@@ -143,6 +143,11 @@ function ChatWidget({
 
   const [isBlockedByOtherDevice, setIsBlockedByOtherDevice] = useState(deviceSessionLock.isBlockedByOtherDevice);
   const [blockMessage, setBlockMessage] = useState(deviceSessionLock.blockMessage);
+
+  // 🚫 Admin-level ban state (blocked by admin from dashboard)
+  const [isUserBanned, setIsUserBanned] = useState(false);
+  const [banContactEmail, setBanContactEmail] = useState(null);
+  const isUserBannedRef = useRef(false);
   const blockingDevice = deviceSessionLock.blockingDevice;
 
   // Log para verificar el estado de bloqueo
@@ -973,6 +978,16 @@ function ChatWidget({
 
     if (wasOpenBefore && !isOpen && (conversationId || messages.length > 0)) {
       // ✅ Widget cerrado manualmente - INICIAR timer de inactividad para limpieza diferida
+      
+      // ✅ Detener conexión SignalR después de un breve delay
+      // para que el UserInactive del heartbeat cleanup tenga tiempo de enviarse
+      const conn = connectionRef.current;
+      if (conn) {
+        setTimeout(() => {
+          conn.stop().catch(() => {});
+        }, 500);
+      }
+      
       const now = Date.now();
       const inactivityInfo = {
         closedAt: now,
@@ -1344,7 +1359,33 @@ function ChatWidget({
           if (!convId) {
             // ✅ Si no hay caché válido, crear nueva conversación CON NUEVA SESIÓN
             convId = await createConversation(userId, botId, widgetClientSecret, true);  // ✅ Pasar clientSecret
+          } else {
+            // 🚫 Si hay conversación en caché, verificar que el usuario no esté bloqueado
+            // Llamamos a get-or-create con forceNewSession=false para detectar 403
+            console.log(`🔍 [BlockCheck] Verificando bloqueo para conversación en caché: ${convId}`);
+            try {
+              const blockCheck = await createConversation(userId, botId, widgetClientSecret, false);
+              if (blockCheck && typeof blockCheck === 'object' && blockCheck.blocked) {
+                console.warn("🚫 [BlockCheck] Usuario bloqueado detectado via API");
+                setIsUserBanned(true);
+                isUserBannedRef.current = true;
+                setBanContactEmail(blockCheck.contactEmail || null);
+                return;
+              }
+              console.log(`✅ [BlockCheck] Usuario no bloqueado, continuando con convId: ${convId}`);
+            } catch (blockErr) {
+              console.warn('⚠️ [BlockCheck] Error verificando bloqueo:', blockErr);
+            }
           }
+        }
+
+        // 🚫 Detectar si el usuario fue bloqueado al intentar crear conversación
+        if (convId && typeof convId === 'object' && convId.blocked) {
+          console.warn("🚫 Usuario bloqueado, no se puede crear conversación");
+          setIsUserBanned(true);
+          isUserBannedRef.current = true;
+          setBanContactEmail(convId.contactEmail || null);
+          return;
         }
 
         if (!convId) throw new Error("No se recibió conversationId");
@@ -1466,8 +1507,21 @@ function ChatWidget({
         const joinAndActivate = async (convId) => {
           try {
             await connection.invoke("JoinRoom", convId);
+            // Dar tiempo al evento userblocked de llegar antes de continuar
+            await new Promise(resolve => setTimeout(resolve, 300));
+            if (isUserBannedRef.current) return; // 🚫 No continuar si fue bloqueado
             await connection.invoke("UserIsActive", convId);
           } catch (err) {
+            const errMsg = String(err?.message || err || '');
+            console.warn('⚠️ [joinAndActivate] Error:', errMsg);
+            // 🚫 Si JoinRoom lanza USER_BLOCKED (o cualquier bloqueo), marcar como baneado
+            if (errMsg.includes('USER_BLOCKED') || errMsg.includes('bloqueado') || isUserBannedRef.current) {
+              console.warn('🚫 [JoinRoom] Usuario bloqueado por el servidor');
+              setIsUserBanned(true);
+              isUserBannedRef.current = true;
+              setIsConnected(false);
+              return;
+            }
             console.error('❌ [SignalR] Error al unir y activar usuario:', err);
           }
         };
@@ -1506,6 +1560,15 @@ function ChatWidget({
               setIsConnected(false);
             });
 
+            // 🚫 Listener para bloqueo de usuario por el admin
+            connection.on("userblocked", (data) => {
+              console.log("[SignalR] Usuario bloqueado por admin:", data);
+              setIsUserBanned(true);
+              isUserBannedRef.current = true;
+              if (data?.contactEmail) setBanContactEmail(data.contactEmail);
+              setIsConnected(false);
+            });
+
             // Iniciar conexión y ESPERAR a que esté Connected
             await connection.start();
             setConnectionStatus("conectado");
@@ -1517,7 +1580,10 @@ function ChatWidget({
             await joinAndActivate(convIdNum);
             
             // ✅ SOLO AHORA habilitar el envío de mensajes (después de unirse al grupo)
-            setIsConnected(true);
+            // 🚫 Pero NO si fue bloqueado durante JoinRoom
+            if (!isUserBannedRef.current) {
+              setIsConnected(true);
+            }
           } else if (connection.state === 'Connecting') {
             // Esperar a que termine de conectar
             await new Promise((resolve) => {
@@ -1537,13 +1603,17 @@ function ChatWidget({
             if (connection.state === 'Connected') {
               setConnectionStatus("conectado");
               await joinAndActivate(convIdNum);
-              setIsConnected(true);
+              if (!isUserBannedRef.current) {
+                setIsConnected(true);
+              }
             }
           } else if (connection.state === 'Connected') {
             setConnectionStatus("conectado");
             await joinAndActivate(convIdNum);
             console.log(`✅ [SignalR] Usuario unido al grupo ${convIdNum}, habilitando envío de mensajes`);
-            setIsConnected(true);
+            if (!isUserBannedRef.current) {
+              setIsConnected(true);
+            }
           } else {
             console.warn(`⚠️ [SignalR] Estado inesperado: ${connection.state}`);
           }
@@ -1592,6 +1662,11 @@ function ChatWidget({
         }
 
       } catch (err) {
+        // 🚫 Si fue bloqueado, no mostrar error genérico
+        if (isUserBannedRef.current) {
+          console.warn('🚫 [initConnection] Usuario bloqueado, suprimiendo error de conexión');
+          return;
+        }
         console.error('❌ [initConnection] ERROR CRÍTICO en inicialización:', {
           message: err?.message,
           name: err?.name,
@@ -1615,6 +1690,7 @@ function ChatWidget({
         connectionRef.current.off("mobilesessionstarted");
         connectionRef.current.off("mobilesessionended");
         connectionRef.current.off("conversationclosed");
+        connectionRef.current.off("userblocked");
         connectionRef.current.stop();
         connectionRef.current = null;
       }
@@ -1756,6 +1832,17 @@ function ChatWidget({
     return () => {
       isUnmounted = true;
       if (intervalId) clearInterval(intervalId);
+      // ✅ Notificar al backend que el usuario ya no está activo
+      // para que el dashboard apague el punto verde inmediatamente
+      const conn = connectionRef.current;
+      if (conn && conn.state === "Connected" && conversationId) {
+        console.log(`[Heartbeat] 🔴 Enviando UserInactive para conversación ${conversationId}`);
+        conn.invoke("UserInactive", conversationId).catch((err) => {
+          console.warn(`[Heartbeat] ⚠️ Error enviando UserInactive:`, err);
+        });
+      } else {
+        console.log(`[Heartbeat] 🔴 Cleanup sin UserInactive - conn: ${!!conn}, state: ${conn?.state}, convId: ${conversationId}`);
+      }
     };
   }, [isOpen, conversationId]);
 
@@ -2100,6 +2187,15 @@ function ChatWidget({
       await connection.invoke("SendMessage", convId, payload);
       console.log('[LOG][MESSAGE] ✅ invoke("SendMessage") completado para:', trimmedMessage);
     } catch (err) {
+      // 🚫 Si el error es por usuario bloqueado, mostrar overlay
+      const errMsg = String(err?.message || err || '');
+      if (errMsg.includes('USER_BLOCKED') || errMsg.includes('bloqueado')) {
+        console.warn('🚫 [SendMessage] Usuario bloqueado detectado en envío:', errMsg);
+        setIsUserBanned(true);
+        isUserBannedRef.current = true;
+        setIsConnected(false);
+        return;
+      }
       // Si el error es por token expirado, guardar el mensaje pendiente y renovar el token
       if (err?.response?.status === 401) {
         pendingUserMessage = {
@@ -2395,7 +2491,7 @@ function ChatWidget({
     };
   }, [isDemo, isOpen]);
 
-  const isInputDisabled = isDemo ? true : (!isConnected || isMobileLocked || isBlockedByOtherDevice || isMobileConversationExpired);
+  const isInputDisabled = isDemo ? true : (!isConnected || isMobileLocked || isBlockedByOtherDevice || isMobileConversationExpired || isUserBanned);
 
   // 🔍 DEBUG: Log del estado del input
   useEffect(() => {
@@ -2885,6 +2981,42 @@ function ChatWidget({
                 blockMessage={blockMessage || "Conversación abierta en móvil. Por favor, continúa desde ahí."}
               />
             </>
+          )}
+
+          {/* 🚫 Overlay de bloqueo por admin */}
+          {isUserBanned && (
+            <div style={{
+              position: 'absolute',
+              top: 0, left: 0, right: 0, bottom: 0,
+              backgroundColor: 'rgba(0,0,0,0.82)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 9999,
+              color: '#fff',
+              padding: '24px',
+              textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '44px', marginBottom: '14px' }}>🚫</div>
+              <div style={{ fontSize: '17px', fontWeight: 'bold', marginBottom: '10px' }}>
+                Acceso restringido
+              </div>
+              <div style={{ fontSize: '13px', opacity: 0.85, lineHeight: 1.5, maxWidth: '280px' }}>
+                Tu acceso a este chat ha sido restringido por el administrador.
+              </div>
+              {banContactEmail && (
+                <div style={{ marginTop: '16px', fontSize: '13px', opacity: 0.9, lineHeight: 1.5 }}>
+                  Si crees que esto es un error, contáctanos en:<br/>
+                  <a 
+                    href={`mailto:${banContactEmail}`} 
+                    style={{ color: '#60cfff', textDecoration: 'underline', fontWeight: 'bold' }}
+                  >
+                    {banContactEmail}
+                  </a>
+                </div>
+              )}
+            </div>
           )}
 
           <ImagePreviewModal
