@@ -1,5 +1,6 @@
 import { getTemplateTrainingSessionsByTemplate } from "../../../services/templateTrainingSessionsService.js";
 import { getBotTemplateById } from "services/botTemplateService";
+import usePlanFeatures from "hooks/usePlanFeatures";
 import TextsSection from "./components/TextsSection";
 import UrlsSection from "./components/UrlsSection";
 import FilesSection from "./components/FilesSection";
@@ -54,6 +55,7 @@ function BotTraining() {
   const navigate = useNavigate();
   const location = useLocation();
   const { id: botParamId } = useParams();
+  const { features: planFeatures } = usePlanFeatures();
 
   // --- ESTADOS ---
   const [tabIndex, setTabIndex] = useState(0);
@@ -376,7 +378,6 @@ function BotTraining() {
 
   // Esperar todos (no es necesario usar resultados aquí)
   Promise.all(uploadPromises).then(() => {
-    console.log('Todos los uploads finalizados');
   });
   };
 
@@ -421,9 +422,6 @@ function BotTraining() {
   const handleAddUrl = async () => {
   if (currentUrl && validateUrl(currentUrl, setUrlErrors, urlErrors)) {
       // Log para depuración
-      console.log('DEBUG bot:', bot);
-      console.log('DEBUG template:', template);
-      console.log('DEBUG userId:', userId);
       // Validar campos requeridos
       if (!botParamId || !(template?.id || bot?.botTemplateId) || !userId) {
         Swal.fire({ icon: 'error', title: 'Datos incompletos', text: 'Faltan datos requeridos para guardar la URL. Verifica que el bot, plantilla y usuario estén correctamente cargados.' });
@@ -455,7 +453,6 @@ function BotTraining() {
           userId: Number(userId),
           url: currentUrl
         };
-        console.log('DEBUG payload URL:', payload);
   const urlResp = await createTrainingUrl(payload);
   setUrls((prev) => [...prev, urlResp || { url: currentUrl }]);
         Swal.fire({ icon: 'success', title: 'URL añadida', text: 'La URL se guardó correctamente.' });
@@ -475,9 +472,6 @@ function BotTraining() {
   const handleAddText = async () => {
     if (currentText) {
       // Log para depuración
-      console.log('DEBUG bot:', bot);
-      console.log('DEBUG template:', template);
-      console.log('DEBUG userId:', userId);
       // Validar campos requeridos
       if (!botParamId || !(template?.id || bot?.botTemplateId) || !userId) {
         Swal.fire({ icon: 'error', title: 'Datos incompletos', text: 'Faltan datos requeridos para guardar el texto. Verifica que el bot, plantilla y usuario estén correctamente cargados.' });
@@ -508,7 +502,6 @@ function BotTraining() {
           userId: Number(userId),
           content: currentText
         };
-        console.log('DEBUG payload TEXT:', payload);
         const resp = await createTrainingCustomText(payload);
         // createTrainingCustomText may return a duplicate object or the created resource with id
         if (resp && resp.duplicate) {
@@ -612,6 +605,13 @@ function BotTraining() {
           await deleteBotCustomPrompt(assistantPrompt.id);
         }
         setInteractions((prev) => prev.filter((p, i) => i !== index && i !== index + 1));
+        try {
+          const bid = Number(createdBotId || botParamId);
+          if (bid) {
+            localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+            window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+          }
+        } catch (e) { /* ignore */ }
       } catch (err) {
         console.error('Error eliminando interacción', err);
         Swal.fire({ icon: 'error', title: 'Error al eliminar interacción', text: err?.response?.data?.message || err.message || 'No se pudo eliminar la interacción.' });
@@ -630,6 +630,13 @@ function BotTraining() {
         const newErrors = new Map(fileErrors);
         newErrors.delete(fileToDelete);
         setFileErrors(newErrors);
+        try {
+          const bid = Number(createdBotId || botParamId);
+          if (bid) {
+            localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+            window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+          }
+        } catch (e) { /* ignore */ }
       } catch (err) {
         console.error('Error eliminando archivo', err);
         Swal.fire({ icon: 'error', title: 'Error al eliminar', text: err?.response?.data?.message || err.message || 'No se pudo eliminar el archivo.' });
@@ -655,6 +662,13 @@ function BotTraining() {
           }
         }
         setUrls((prev) => prev.filter((u) => (typeof u === 'object' ? u.id !== id && u.url !== urlToDelete : u !== urlToDelete)));
+        try {
+          const bid = Number(createdBotId || botParamId);
+          if (bid) {
+            localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+            window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+          }
+        } catch (e) { /* ignore */ }
       } catch (err) {
         console.error('Error eliminando URL', err);
         Swal.fire({ icon: 'error', title: 'Error al eliminar URL', text: err?.response?.data?.message || err.message || 'No se pudo eliminar la URL.' });
@@ -678,6 +692,13 @@ function BotTraining() {
           }
         }
         setTexts((prev) => prev.filter((t) => (typeof t === 'object' ? t.id !== id && t.content !== textToDelete : t !== textToDelete)));
+        try {
+          const bid = Number(createdBotId || botParamId);
+          if (bid) {
+            localStorage.setItem(`bot_phases_refresh_${bid}`, Date.now().toString());
+            window.dispatchEvent(new CustomEvent('botPhasesUpdated', { detail: { botId: bid } }));
+          }
+        } catch (e) { /* ignore */ }
       } catch (err) {
         console.error('Error eliminando texto', err);
         Swal.fire({ icon: 'error', title: 'Error al eliminar texto', text: err?.response?.data?.message || err.message || 'No se pudo eliminar el texto.' });
@@ -849,7 +870,7 @@ function BotTraining() {
             <SoftTypography variant="h6" mb={0.5}>2. Añade Contexto Adicional (Opcional)</SoftTypography>
             <SoftTypography variant="body2" color="text" mb={2}>Sube archivos, páginas web o texto para un conocimiento más profundo.</SoftTypography>
 
-            {/* Archivos */}
+            {/* Archivos — limitado por plan */}
             <FilesSection
               files={files}
               fileErrors={fileErrors}
@@ -857,18 +878,20 @@ function BotTraining() {
               handleDeleteFile={handleDeleteFile}
               handleRetryFile={handleRetryFile}
               ALLOWED_FILE_TYPES={ALLOWED_FILE_TYPES}
+              fileUploadLimit={planFeatures.fileUploadLimit}
             />
 
-            {/* URLs */}
+            {/* URLs — bloqueado si el plan no lo permite */}
             <UrlsSection
               urls={urls}
               currentUrl={currentUrl}
               setCurrentUrl={setCurrentUrl}
               handleAddUrl={handleAddUrl}
               handleDeleteUrl={handleDeleteUrl}
+              disabled={!planFeatures.allowTrainingUrls}
             />
 
-            {/* Textos planos editables */}
+            {/* Textos planos — bloqueado si el plan no lo permite */}
             <TextsSection
               texts={texts}
               currentText={currentText}
@@ -876,17 +899,26 @@ function BotTraining() {
               handleAddText={handleAddText}
               handleDeleteText={handleDeleteText}
               setTexts={setTexts}
+              disabled={!planFeatures.allowTrainingUrls}
             />
 
             {/* Botón para pasar a la etapa de captación de datos */}
-            <SoftBox display="flex" justifyContent="flex-end">
+            <SoftBox mt={4} display="flex" justifyContent="flex-end" gap={2}>
+              <SoftButton
+                variant="outlined"
+                color="error"
+                sx={{ fontWeight: "bold", px: 3 }}
+                onClick={() => navigate("/profile")}
+              >
+                Cancelar
+              </SoftButton>
               <SoftButton
                 variant="gradient"
                 color="info"
-                sx={{ mt: 3, fontWeight: 'bold', width: 260 }}
+                sx={{ fontWeight: "bold", px: 3 }}
                 onClick={() => navigate(`/bots/captured-data/${createdBotId || botParamId}`, { state: { botId: createdBotId || botParamId } })}
               >
-                Continuar
+                Continuar al siguiente paso
               </SoftButton>
             </SoftBox>
           </Card>

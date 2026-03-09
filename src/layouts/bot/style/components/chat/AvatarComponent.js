@@ -30,15 +30,6 @@ const AvatarComponent = ({ avatarUrl, isEmojiAvatar, size = "42px", defaultAvata
      !avatarUrl.includes('/') && !avatarUrl.includes('.') && 
      !avatarUrl.includes('http') && !avatarUrl.includes('data:'));
 
-  // Debug logging (solo cuando es necesario)
-  if (shouldRenderAsEmoji) {
-    console.log("🔧 AvatarComponent - Renderizando emoji:", {
-      avatarUrl,
-      isEmojiAvatar,
-      shouldRenderAsEmoji,
-      size
-    });
-  }
 
   if (shouldRenderAsEmoji && avatarUrl) {
     // Calcular tamaño de emoji basado en el size del contenedor
@@ -85,7 +76,6 @@ const AvatarComponent = ({ avatarUrl, isEmojiAvatar, size = "42px", defaultAvata
               objectFit: "cover",
             }}
             onError={(e) => {
-              console.log("❌ Error cargando avatar launcher:", avatarUrl);
               e.target.style.display = "none";
             }}
           />
@@ -112,7 +102,6 @@ const AvatarComponent = ({ avatarUrl, isEmojiAvatar, size = "42px", defaultAvata
       src={getImageSrc()}
       alt="Avatar"
       onError={(e) => {
-        console.log("❌ Error cargando avatar:", avatarUrl, "Intentando con avatar por defecto");
         e.target.src = defaultAvatar;
       }}
       style={{

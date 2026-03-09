@@ -42,7 +42,6 @@ axios.interceptors.request.use(
       
       // ✅ DEDUPLICACIÓN: Evitar refresh múltiples
       if (refreshTokenPromise) {
-        console.log('🔄 [axios] Refresh ya en progreso, esperando...');
         try {
           const newToken = await refreshTokenPromise;
           config.headers["Authorization"] = `Bearer ${newToken}`;
@@ -62,7 +61,6 @@ axios.interceptors.request.use(
         return config;
       }
       
-      console.log(`🔄 [axios] Token expira en ${Math.floor(timeUntilExpiry/60)}min, refrescando...`);
       
       try {
         lastRefreshTime = Date.now();
@@ -71,7 +69,6 @@ axios.interceptors.request.use(
         refreshTokenPromise = null;
         
         config.headers["Authorization"] = `Bearer ${newToken}`;
-        console.log('✅ [axios] Token refrescado exitosamente');
         return config;
       } catch (e) {
         console.warn('⚠️ [axios] Error al refrescar token, usando token actual:', e?.message);
@@ -94,7 +91,6 @@ axios.interceptors.request.use(
         const newToken = await refreshTokenPromise;
         refreshTokenPromise = null;
         config.headers["Authorization"] = `Bearer ${newToken}`;
-        console.log('✅ [axios] Token renovado después de expiración');
         return config;
       } catch (e) {
         refreshTokenPromise = null;
@@ -111,8 +107,8 @@ axios.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Interceptor de respuesta: 401/403 → intentar refresh antes de cerrar sesión
-// Track de reintentos para evitar loops infinitos
+// Interceptor de respuesta: 401 → intentar refresh antes de cerrar sesión
+// 403 NO dispara logout: significa autenticado pero sin permisos, refrescar no cambia el rol
 let retryCount = 0;
 const MAX_RETRIES = 1;
 
@@ -127,15 +123,15 @@ axios.interceptors.response.use(
       console.warn('⏱️ [axios] Timeout en petición:', error.config?.url);
       return Promise.reject(error);
     }
-    
-    // ✅ Manejar errores de autenticación (401/403) — intentar refresh primero
-    if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-      console.warn('🔒 [axios] Error de autenticación:', error.response.status, error.config?.url);
-      
+
+    // ✅ Manejar 401 (token expirado) — intentar refresh y reintentar
+    // NO manejar 403 aquí: 403 = autenticado pero sin permisos, refrescar no cambia el rol
+    if (error.response && error.response.status === 401) {
+      console.warn('🔒 [axios] 401 en:', error.config?.url);
+
       if (!isWidgetContext() && retryCount < MAX_RETRIES) {
         retryCount++;
         try {
-          console.log('🔄 [axios] Intentando refresh por 401...');
           const newToken = await refreshAccessToken();
           retryCount = 0;
           // Reintentar la petición original con el nuevo token
@@ -151,7 +147,6 @@ axios.interceptors.response.use(
             if (window && window.showSessionExpiredModal) {
               window.showSessionExpiredModal();
             }
-            // NO usar alert() — es intrusivo. El modal o la redirección es suficiente.
           }
         }
       }

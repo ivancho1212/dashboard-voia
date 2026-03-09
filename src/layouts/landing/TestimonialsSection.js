@@ -59,7 +59,6 @@ const testimonials = [
 
 const TestimonialsSection = () => {
   useEffect(() => {
-    console.log("TestimonialsSection montada / visible");
   }, []);
 
   return (

@@ -24,15 +24,18 @@ import Avatar from '@mui/material/Avatar';
 import SettingsIcon from '@mui/icons-material/Settings';
 import Box from '@mui/material/Box';
 import CheckIcon from '@mui/icons-material/Check';
-import { deleteBot, getBotPhases as fetchBotPhases } from "services/botService";
-import { getMyProfile, updateMyProfile } from "services/authService";
+import { deleteBot, getBotPhases as fetchBotPhases, getBotTrainingSummary } from "services/botService";
+import { getMyProfile, updateMyProfile, hasRole } from "services/authService";
 import { getBotById } from "services/botService";
-import { getMyPlan } from "services/planService";
+import { getMyPlan, cancelMyPlan } from "services/planService";
 import { getBotDataCaptureFields } from "services/botDataCaptureService";
+import { deleteBotStyle } from "services/botStylesService";
 
 function Overview() {
   const navigate = useNavigate();
-  const { logout } = useContext(AuthContext);
+  const { logout, user: authUser } = useContext(AuthContext);
+  const isComercial = authUser?.role?.name === "Comercial";
+  const isSuperAdmin = hasRole("Super Admin");
   const [user, setUser] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [editedUser, setEditedUser] = useState({});
@@ -40,6 +43,7 @@ function Overview() {
   const [loading, setLoading] = useState(true);
   const [botFields, setBotFields] = useState({});
   const [phasesByBot, setPhasesByBot] = useState({});
+  const [trainingSummaryByBot, setTrainingSummaryByBot] = useState({});
 
   // shared button style for consistent look; text color set to info.main
   const commonBtnSx = { borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 14, minWidth: 120, color: 'info.main' };
@@ -90,17 +94,21 @@ function Overview() {
               // will fallback to heuristic below
             }
 
-            if (!gotPhases) {
-              // only call the potentially heavy fields API when we don't have server phases
-              try {
-                fieldsByBot[bot.id] = await getBotDataCaptureFields(bot.id);
-              } catch (err) {
-                // ignore field fetch failures
-              }
+            try {
+              fieldsByBot[bot.id] = await getBotDataCaptureFields(bot.id);
+            } catch (err) {
+              // ignore field fetch failures
             }
           }
           setBotFields(fieldsByBot);
           if (Object.keys(phasesMap).length) setPhasesByBot(phasesMap);
+          // Fetch training sub-channel summary for each bot (non-blocking)
+          const summaryMap = {};
+          await Promise.allSettled(data.bots.map(async (bot) => {
+            const s = await getBotTrainingSummary(bot.id);
+            if (s) summaryMap[bot.id] = s;
+          }));
+          setTrainingSummaryByBot(summaryMap);
         }
       } catch (error) {
         if (error.response && error.response.status === 401) {
@@ -122,15 +130,24 @@ function Overview() {
       try {
         const botId = ev?.detail?.botId;
         if (!botId) return;
-        const res = await fetchBotPhases(botId);
-        const p = (res && res.phases) || {};
-        setPhasesByBot((prev) => ({ ...prev, [botId]: {
-          training: !!(p.training && p.training.completed),
-          dataCapture: !!(p.data_capture && p.data_capture.completed) || !!(p.dataCapture && p.dataCapture.completed),
-          styles: !!(p.styles && p.styles.completed),
-          integration: !!(p.integration && p.integration.completed),
-          finished: !!(p.finished && p.finished.completed),
-        } }));
+        const [phasesRes, summary] = await Promise.all([
+          fetchBotPhases(botId).catch(() => null),
+          getBotTrainingSummary(botId).catch(() => null),
+        ]);
+        if (summary !== null) {
+          setTrainingSummaryByBot((prev) => ({ ...prev, [botId]: summary }));
+        }
+        if (phasesRes) {
+          const p = (phasesRes && phasesRes.phases) || {};
+          const allEmpty = summary !== null && summary.documents === 0 && summary.urls === 0 && summary.texts === 0 && summary.interactions === 0;
+          setPhasesByBot((prev) => ({ ...prev, [botId]: {
+            training: !allEmpty && !!(p.training && p.training.completed),
+            dataCapture: !!(p.data_capture && p.data_capture.completed) || !!(p.dataCapture && p.dataCapture.completed),
+            styles: !!(p.styles && p.styles.completed),
+            integration: !!(p.integration && p.integration.completed),
+            finished: !!(p.finished && p.finished.completed),
+          } }));
+        }
       } catch (e) { console.warn('Error refreshing bot phases', e); }
     };
 
@@ -179,6 +196,11 @@ function Overview() {
     if (confirm) {
       try {
         await deleteBot(bot.id);
+        // Also delete the bot's associated style so it doesn't become orphaned
+        const styleId = bot.styleId ?? bot.style_id ?? bot.StyleId;
+        if (styleId) {
+          try { await deleteBotStyle(styleId); } catch (e) { /* ignore if already gone */ }
+        }
         setUser((prev) => ({
           ...prev,
           bots: prev.bots.filter((b) => b.id !== bot.id),
@@ -209,34 +231,8 @@ function Overview() {
     // detect data capture fields (explicit)
     const hasDataCapture = !!(botFields[bot.id] && Array.isArray(botFields[bot.id]) && botFields[bot.id].length > 0) || !!bot.hasDataCapture || !!bot.dataCapture || !!bot.data_capture;
 
-    // detect integration explicitly
-    const hasIntegration = (() => {
-      try {
-        if (bot.hasIntegration || bot.isReady) return true;
-        if (bot.integration) return true;
-        if (Array.isArray(bot.integrations) && bot.integrations.length > 0) return true;
-        if (Array.isArray(bot.botIntegrations) && bot.botIntegrations.length > 0) return true;
-        if (Array.isArray(bot.bot_integrations) && bot.bot_integrations.length > 0) return true;
-        if (bot.botIntegration || bot.BotIntegration) return true;
-        if (bot.api_token_hash || bot.apiTokenHash || bot.apiToken) return true;
-        const settings = bot.settings_json || bot.settings || (bot.integrations && bot.integrations[0] && bot.integrations[0].settings_json);
-        if (settings) {
-          if (typeof settings === 'string') {
-            try {
-              const parsed = JSON.parse(settings);
-              if (parsed && Object.keys(parsed).length > 0) return true;
-            } catch (e) {
-              return true;
-            }
-          } else if (typeof settings === 'object' && Object.keys(settings).length > 0) {
-            return true;
-          }
-        }
-      } catch (e) {
-        // ignore
-      }
-      return false;
-    })();
+    // detect integration: use authoritative backend flag (hasIntegration = BotIntegration record exists)
+    const hasIntegration = bot.hasIntegration === true;
 
     const finished = !!bot.isReady || !!bot.finished || !!bot.is_ready;
 
@@ -369,8 +365,8 @@ function Overview() {
                   )}
                 </SoftBox>
               </Grid>
-              {/* Columna derecha: plan actual */}
-              <Grid item xs={12} md={6}>
+              {/* Columna derecha: plan actual — solo para usuarios con plan propio */}
+              {!isComercial && <Grid item xs={12} md={6}>
                 {/* Split the plan area: main plan details (left) and vertical tokens card (right) */}
                 <Grid container spacing={2}>
                   <Grid item xs={12} md={8}>
@@ -402,7 +398,16 @@ function Overview() {
                             color="info"
                             size="small"
                             sx={{ ml: 1, ...commonBtnSx, boxShadow: '0 6px 16px rgba(0,0,0,0.06)', border: '1px solid rgba(0,0,0,0.08)', backgroundColor: '#fff', color: 'info.main' }}
-                            onClick={() => window.confirm('¿Seguro que deseas cancelar tu plan?') && window.location.reload()}
+                            onClick={async () => {
+                              if (!window.confirm('¿Seguro que deseas cancelar tu plan?')) return;
+                              try {
+                                await cancelMyPlan();
+                                const updated = await getMyPlan();
+                                setPlan(updated);
+                              } catch (e) {
+                                // cancelMyPlan ya muestra alert de error internamente
+                              }
+                            }}
                           >
                             Cancelar plan
                           </Button>
@@ -421,51 +426,69 @@ function Overview() {
                     )}
                   </Grid>
 
-                  <Grid item xs={12} md={4}>
-                    {/* Vertical tokens card placed to the right */}
-                    {(() => {
-                      const limit = plan?.tokensLimit ?? plan?.tokenLimit ?? plan?.limit ?? plan?.token_limit ?? plan?.maxTokens ?? 0;
-                      const used = plan?.tokensUsed ?? plan?.tokenUsed ?? plan?.used ?? plan?.token_used ?? 0;
-                      if (limit > 0) {
-                        const percent = Math.min(100, (used / limit) * 100);
-                        return (
-                          <Card sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                            <SoftTypography variant="caption" sx={{ mb: 1, fontWeight: 700 }}>Tokens consumidos</SoftTypography>
-                            <SoftTypography variant="h6" sx={{ mb: 1 }}>{used.toLocaleString()} / {limit.toLocaleString()}</SoftTypography>
-                            <Box sx={{ width: 24, height: 160, background: '#f1f1f1', borderRadius: 2, position: 'relative', overflow: 'hidden' }}>
-                              <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: `${percent}%`, background: 'linear-gradient(180deg, var(--mui-palette-info-main, #00897b), rgba(0,0,0,0.05))', transition: 'height 0.4s' }} />
-                            </Box>
-                            <SoftTypography variant="caption" sx={{ mt: 1 }}>{Math.round(percent)}%</SoftTypography>
-                          </Card>
-                        );
-                      }
-                      return null;
-                    })()}
-                  </Grid>
                 </Grid>
-              </Grid>
+              </Grid>}
             </Grid>
           )}
         </Card>
       </SoftBox>
 
-      {/* Sección de Bots del Usuario */}
-      {user && (
+      {/* Sección de Bots del Usuario — solo para usuarios con plan propio */}
+      {user && !isComercial && (
         <SoftBox mt={3} mb={3}>
           <Card sx={{ p: 3, borderRadius: 4, boxShadow: 2, width: '100%', maxWidth: '100%', mx: 'auto' }}>
             <SoftTypography variant="h5" fontWeight="bold" mb={2}>Mis Bots</SoftTypography>
             <Divider sx={{ mb: 2 }} />
             <Grid container spacing={3}>
-              {/* Mostrar siempre la card de crear nuevo bot */}
+              {/* Tarjeta de acción según si tiene plan o no */}
               <Grid item xs={12} sm={6} md={3} lg={3} xl={3}>
-                <Link to="/bots" style={{ textDecoration: 'none' }}>
-                  <Card sx={{ height: 340, minHeight: 400, maxHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #ccc', cursor: 'pointer', '&:hover': { borderColor: '#1976d2' } }}>
-                    <SoftBox p={2} textAlign="center">
-                      <AddIcon sx={{ fontSize: 40, color: '#1976d2' }} />
-                      <SoftTypography variant="h6" color="info" sx={{ fontSize: 16 }}>Crear Nuevo Bot</SoftTypography>
-                    </SoftBox>
-                  </Card>
-                </Link>
+                {(plan && plan.isActive) || isSuperAdmin ? (() => {
+                  const botsCount = user?.bots?.length ?? 0;
+                  const atBotLimit = !isSuperAdmin && plan?.botsLimit != null && botsCount >= plan.botsLimit;
+                  if (atBotLimit) {
+                    return (
+                      <Link to="/plans" style={{ textDecoration: 'none' }}>
+                        <Card sx={{ height: 480, minHeight: 480, maxHeight: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #f0a500', cursor: 'pointer', '&:hover': { borderColor: '#e65100' } }}>
+                          <SoftBox p={2} textAlign="center">
+                            <SoftTypography variant="h6" sx={{ fontSize: 28, mb: 1 }}>🔒</SoftTypography>
+                            <SoftTypography variant="h6" fontWeight="bold" sx={{ fontSize: 15, mb: 1 }}>
+                              Límite alcanzado
+                            </SoftTypography>
+                            <SoftTypography variant="caption" color="text" sx={{ fontSize: 13 }}>
+                              Tu plan permite {plan.botsLimit} bot{plan.botsLimit !== 1 ? 's' : ''}.
+                              Mejora tu plan para crear más.
+                            </SoftTypography>
+                          </SoftBox>
+                        </Card>
+                      </Link>
+                    );
+                  }
+                  return (
+                    <Link to="/bots" style={{ textDecoration: 'none' }}>
+                      <Card sx={{ height: 480, minHeight: 480, maxHeight: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #ccc', cursor: 'pointer', '&:hover': { borderColor: '#1976d2' } }}>
+                        <SoftBox p={2} textAlign="center">
+                          <AddIcon sx={{ fontSize: 40, color: '#1976d2' }} />
+                          <SoftTypography variant="h6" color="info" sx={{ fontSize: 16 }}>Crear Nuevo Bot</SoftTypography>
+                          {!isSuperAdmin && plan?.botsLimit != null && (
+                            <SoftTypography variant="caption" color="text" sx={{ fontSize: 12, display: 'block', mt: 0.5 }}>
+                              {botsCount} / {plan.botsLimit} bots usados
+                            </SoftTypography>
+                          )}
+                        </SoftBox>
+                      </Card>
+                    </Link>
+                  );
+                })() : (
+                  <Link to="/plans" style={{ textDecoration: 'none' }}>
+                    <Card sx={{ height: 480, minHeight: 480, maxHeight: 480, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px dashed #f0a500', cursor: 'pointer', '&:hover': { borderColor: '#e65100' } }}>
+                      <SoftBox p={2} textAlign="center">
+                        <SoftTypography variant="h6" sx={{ fontSize: 28, mb: 1 }}>🔒</SoftTypography>
+                        <SoftTypography variant="h6" fontWeight="bold" sx={{ fontSize: 15, mb: 1 }}>Sin plan activo</SoftTypography>
+                        <SoftTypography variant="caption" color="text" sx={{ fontSize: 13 }}>Adquiere un plan para crear bots</SoftTypography>
+                      </SoftBox>
+                    </Card>
+                  </Link>
+                )}
               </Grid>
               {/* Si hay bots, mostrar las cards, si no, no mostrar nada más */}
               {user.bots && Array.isArray(user.bots) && user.bots.length > 0 && user.bots.map((bot) => {
@@ -473,7 +496,7 @@ function Overview() {
                 return (
                   
                   <Grid item xs={12} sm={6} md={3} lg={3} xl={3} key={bot.id}>
-                    <Card sx={{ height: 400, minHeight: 400, maxHeight: 400, display: 'flex', flexDirection: 'column' }}>
+                    <Card sx={{ height: 480, minHeight: 480, maxHeight: 480, display: 'flex', flexDirection: 'column' }}>
                       {/* Top-right delete stays absolute */}
                       <SoftBox position="absolute" top={10} right={10} zIndex={2} display="flex" gap={1}>
                         <Tooltip title="Eliminar bot">
@@ -528,12 +551,42 @@ function Overview() {
                               <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.training ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
-                          onClick={() => phases.training && handlePhaseClick(bot, 'training')}
-                          disabled={!Boolean(phases.training)}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.training ? 1 : 0.65, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
+                          onClick={() => handlePhaseClick(bot, 'training')}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Entrenamiento</span>
                         </Button>
+                        {/* Sub-indicadores de canales de entrenamiento */}
+                        {(() => {
+                          const s = trainingSummaryByBot[bot.id];
+                          if (!s) return null;
+                          const channels = [
+                            { label: "Docs", count: s.documents, icon: "📄" },
+                            { label: "URLs", count: s.urls, icon: "🌐" },
+                            { label: "Texto", count: s.texts, icon: "📝" },
+                            { label: "Q&A", count: s.interactions, icon: "💬" },
+                          ];
+                          return (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5, pl: 0.5 }}>
+                              {channels.map((c) => (
+                                <Tooltip key={c.label} title={c.count > 0 ? `${c.label}: ${c.count} elemento(s)` : `${c.label}: sin contenido`} arrow>
+                                  <Box sx={{
+                                    display: 'flex', alignItems: 'center', gap: 0.3,
+                                    px: 0.8, py: 0.2, borderRadius: 1, fontSize: 10,
+                                    background: c.count > 0 ? '#e0f7fa' : '#f5f5f5',
+                                    color: c.count > 0 ? '#00838f' : '#bdbdbd',
+                                    fontWeight: c.count > 0 ? 600 : 400,
+                                    border: `1px solid ${c.count > 0 ? '#80deea' : '#e0e0e0'}`,
+                                    cursor: 'default',
+                                  }}>
+                                    <span>{c.icon}</span>
+                                    <span>{c.count > 0 ? c.count : '—'}</span>
+                                  </Box>
+                                </Tooltip>
+                              ))}
+                            </Box>
+                          );
+                        })()}
                         {/* Datos */}
                         <Button
                           variant={phases.dataCapture ? 'contained' : 'outlined'}
@@ -544,12 +597,25 @@ function Overview() {
                               <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.dataCapture ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
-                          onClick={() => phases.dataCapture && handlePhaseClick(bot, 'dataCapture')}
-                          disabled={!Boolean(phases.dataCapture)}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.dataCapture ? 1 : 0.65, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
+                          onClick={() => handlePhaseClick(bot, 'dataCapture')}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Datos</span>
                         </Button>
+                        {/* Sub-indicadores de datos */}
+                        {(() => {
+                          const fields = botFields[bot.id];
+                          const count = Array.isArray(fields) ? fields.length : 0;
+                          return (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5, pl: 0.5 }}>
+                              <Tooltip title={count > 0 ? `Campos de captura: ${count} configurado(s)` : "Sin campos de captura configurados"} arrow>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, px: 0.8, py: 0.2, borderRadius: 1, fontSize: 10, background: count > 0 ? '#e0f7fa' : '#f5f5f5', color: count > 0 ? '#00838f' : '#bdbdbd', fontWeight: count > 0 ? 600 : 400, border: `1px solid ${count > 0 ? '#80deea' : '#e0e0e0'}`, cursor: 'default' }}>
+                                  <span>📋</span><span>{count > 0 ? count : '—'}</span>
+                                </Box>
+                              </Tooltip>
+                            </Box>
+                          );
+                        })()}
                         {/* Estilos */}
                         <Button
                           variant={phases.styles ? 'contained' : 'outlined'}
@@ -560,12 +626,28 @@ function Overview() {
                               <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.styles ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
-                          onClick={() => phases.styles && handlePhaseClick(bot, 'styles')}
-                          disabled={!Boolean(phases.styles)}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.styles ? 1 : 0.65, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
+                          onClick={() => handlePhaseClick(bot, 'styles')}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Estilos</span>
                         </Button>
+                        {/* Sub-indicadores de estilos */}
+                        {(() => {
+                          const styleName = bot.styleName || (bot.style && bot.style.name) || (bot.Style && bot.Style.name) || null;
+                          // Detect style directly from bot object (BotPhases table may not have "styles" entry)
+                          const styleIdCandidates = [bot.styleId, bot.style_id, bot.StyleId, bot.botStyleId];
+                          const hasStyleFromBot = styleIdCandidates.some(v => v !== undefined && v !== null && !isNaN(Number(v)) && Number(v) > 0) || !!styleName;
+                          const hasStyle = phases.styles || hasStyleFromBot;
+                          return (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5, pl: 0.5 }}>
+                              <Tooltip title={hasStyle ? `Estilo visual configurado${styleName ? ': ' + styleName : ''}` : "Sin estilo visual configurado"} arrow>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, px: 0.8, py: 0.2, borderRadius: 1, fontSize: 10, background: hasStyle ? '#e0f7fa' : '#f5f5f5', color: hasStyle ? '#00838f' : '#bdbdbd', fontWeight: hasStyle ? 600 : 400, border: `1px solid ${hasStyle ? '#80deea' : '#e0e0e0'}`, cursor: 'default' }}>
+                                  <span>🎨</span><span>{styleName || (hasStyle ? 'Activo' : '—')}</span>
+                                </Box>
+                              </Tooltip>
+                            </Box>
+                          );
+                        })()}
                         {/* Integración */}
                         <Button
                           variant={phases.integration ? 'contained' : 'outlined'}
@@ -576,12 +658,24 @@ function Overview() {
                               <SettingsIcon sx={{ fontSize: 16, color: 'info.main' }} />
                             </Tooltip>
                           ) : null}
-                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.integration ? 1 : 0.5, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
-                          onClick={() => phases.integration && handlePhaseClick(bot, 'integration')}
-                          disabled={!Boolean(phases.integration)}
+                          sx={{ justifyContent: 'space-between', borderRadius: 2, textTransform: 'none', fontWeight: 500, fontSize: 13, minHeight: 32, mb: 0.5, opacity: phases.integration ? 1 : 0.65, color: 'info.main', '&:hover': { color: 'info.dark' }, py: 0.5 }}
+                          onClick={() => handlePhaseClick(bot, 'integration')}
                         >
                           <span style={{ color: 'var(--mui-palette-info-main)' }}>Integración</span>
                         </Button>
+                        {/* Sub-indicadores de integración */}
+                        {(() => {
+                          const hasIntegration = phases.integration;
+                          return (
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.5, pl: 0.5 }}>
+                              <Tooltip title={hasIntegration ? "Widget de integración configurado" : "Sin configuración de integración"} arrow>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.3, px: 0.8, py: 0.2, borderRadius: 1, fontSize: 10, background: hasIntegration ? '#e0f7fa' : '#f5f5f5', color: hasIntegration ? '#00838f' : '#bdbdbd', fontWeight: hasIntegration ? 600 : 400, border: `1px solid ${hasIntegration ? '#80deea' : '#e0e0e0'}`, cursor: 'default' }}>
+                                  <span>🔗</span><span>{hasIntegration ? 'Activo' : '—'}</span>
+                                </Box>
+                              </Tooltip>
+                            </Box>
+                          );
+                        })()}
                       </SoftBox>
 
                       {/* divider between phases and bottom row */}
@@ -593,24 +687,34 @@ function Overview() {
                       {/* Row 4: Estado actual (left) + action button (right) */}
                       <SoftBox sx={{ height: { xs: 80, md: 104 }, display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2 }}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 160, maxWidth: 160 }}>
-                          <SoftTypography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 12, mb: 0.5 }}>Estado actual</SoftTypography>
+                          <SoftTypography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: 12, mb: 0.5 }}>
+                            Estado actual
+                            {(() => {
+                              const done = [phases.training, phases.dataCapture, phases.styles, phases.integration].filter(Boolean).length;
+                              return done < 4 ? (
+                                <span style={{ color: '#f57c00', fontWeight: 400, marginLeft: 4 }}>({done}/4)</span>
+                              ) : (
+                                <span style={{ color: '#00897b', fontWeight: 400, marginLeft: 4 }}>listo</span>
+                              );
+                            })()}
+                          </SoftTypography>
                           <Box sx={{ display: 'flex', flexDirection: 'row', gap: 1, alignItems: 'center', width: '100%', justifyContent: 'flex-start', overflow: 'hidden' }}>
-                            <Tooltip title="Entrenamiento" arrow>
+                            <Tooltip title={phases.training ? "Entrenamiento ✓" : "Pendiente: añade preguntas/respuestas, documentos o URLs de entrenamiento"} arrow>
                                 <span>
                                   <SchoolIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.training ? 'info.main' : '#bdbdbd' }} />
                                 </span>
                               </Tooltip>
-                              <Tooltip title="Datos" arrow>
+                              <Tooltip title={phases.dataCapture ? "Datos ✓" : "Pendiente: configura los campos de captura de datos (opcional)"} arrow>
                                 <span>
                                   <StorageIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.dataCapture ? 'info.main' : '#bdbdbd' }} />
                                 </span>
                               </Tooltip>
-                              <Tooltip title="Estilos" arrow>
+                              <Tooltip title={phases.styles ? "Estilos ✓" : "Pendiente: personaliza el aspecto visual del widget"} arrow>
                                 <span>
                                   <PaletteIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.styles ? 'info.main' : '#bdbdbd' }} />
                                 </span>
                               </Tooltip>
-                              <Tooltip title="Integración" arrow>
+                              <Tooltip title={phases.integration ? "Integración ✓" : "Pendiente: configura cómo integrar el bot en tu sitio web"} arrow>
                                 <span>
                                   <IntegrationInstructionsIcon sx={{ fontSize: { xs: '18px !important', md: '20px !important' }, color: phases.integration ? 'info.main' : '#bdbdbd' }} />
                                 </span>

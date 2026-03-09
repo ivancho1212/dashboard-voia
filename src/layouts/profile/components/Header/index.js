@@ -26,6 +26,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 
 // Imagen de fondo
 import curved0 from "assets/images/curved-images/curved0.jpg";
+import { hasRole } from "services/authService";
 
 function Header({ user }) {
   const fileInputRef = useRef(null);
@@ -153,11 +154,17 @@ function Header({ user }) {
 
   // ✅ Verificar suscripción
   const isSubscriptionActive = () => {
-    if (!localUser?.subscription?.expiresAt || !localUser?.subscription?.status)
-      return false;
+    if (!localUser?.subscription?.status) return false;
     const now = new Date();
-    const expiresAt = new Date(localUser.subscription.expiresAt);
-    return localUser.subscription.status === "active" && expiresAt > now;
+    const expiresAt = localUser.subscription.expiresAt
+      ? new Date(localUser.subscription.expiresAt)
+      : null;
+    return localUser.subscription.status === "active" && (expiresAt === null || expiresAt > now);
+  };
+
+  const isFreePlan = () => {
+    const price = localUser?.subscription?.planPrice;
+    return price != null ? Number(price) === 0 : false;
   };
 
   return (
@@ -304,11 +311,21 @@ function Header({ user }) {
               </SoftTypography>
 
               {/* Suscripción */}
-              {isSubscriptionActive() ? (
+              {hasRole("Super Admin") ? (
                 <SoftTypography variant="caption" color="text">
-                  Tu plan vence el{" "}
-                  {new Date(localUser.subscription.expiresAt).toLocaleDateString()}
+                  Super Admin
                 </SoftTypography>
+              ) : isSubscriptionActive() ? (
+                isFreePlan() ? (
+                  <SoftTypography variant="caption" color="text">
+                    Plan gratuito
+                  </SoftTypography>
+                ) : (
+                  <SoftTypography variant="caption" color="text">
+                    Tu plan vence el{" "}
+                    {new Date(localUser.subscription.expiresAt).toLocaleDateString()}
+                  </SoftTypography>
+                )
               ) : (
                 <>
                   <SoftTypography variant="caption" color="text">

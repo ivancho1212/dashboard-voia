@@ -124,9 +124,11 @@ const InteractionsSection = ({
           </Grid>
         </Grid>
       </Grid>
-      <SoftButton variant="gradient" color="info" onClick={handleAddInteraction} disabled={isAddDisabled} fullWidth sx={{ mt: 2, opacity: isAddDisabled ? 0.6 : 1 }}>
-        <Icon>add</Icon>&nbsp;{isAddingInteraction ? "Agregando..." : "Agregar Interacción"}
-      </SoftButton>
+      <SoftBox mt={2} display="flex" justifyContent="flex-end">
+        <SoftButton variant="gradient" color="info" onClick={handleAddInteraction} disabled={isAddDisabled} sx={{ fontWeight: "bold", px: 3, opacity: isAddDisabled ? 0.6 : 1 }}>
+          <Icon>add</Icon>&nbsp;{isAddingInteraction ? "Agregando..." : "Agregar Interacción"}
+        </SoftButton>
+      </SoftBox>
       {!editMode && !createdBotId && (
         <SoftTypography variant="caption" color="text" sx={{ display: 'block', mt: 1 }}>Debes crear primero el bot para poder añadir interacciones.</SoftTypography>
       )}
@@ -163,12 +165,12 @@ const InteractionsSection = ({
         </SoftBox>
       )}
       {editMode && (
-        <SoftBox display="flex" gap={2} mt={2}>
-          <SoftButton variant="gradient" color="success" onClick={handleUpdateBot} disabled={creatingBot} fullWidth>
-            {creatingBot ? "Guardando..." : "Guardar"}
-          </SoftButton>
-          <SoftButton variant="outlined" color="dark" onClick={handleCancelEdit} disabled={creatingBot} fullWidth>
+        <SoftBox display="flex" justifyContent="flex-end" gap={2} mt={2}>
+          <SoftButton variant="outlined" color="error" sx={{ fontWeight: "bold", px: 3 }} onClick={handleCancelEdit} disabled={creatingBot}>
             Cancelar
+          </SoftButton>
+          <SoftButton variant="gradient" color="info" sx={{ fontWeight: "bold", px: 3 }} onClick={handleUpdateBot} disabled={creatingBot}>
+            {creatingBot ? "Guardando..." : "Guardar"}
           </SoftButton>
         </SoftBox>
       )}

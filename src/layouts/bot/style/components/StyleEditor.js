@@ -11,7 +11,7 @@ import SoftButton from "components/SoftButton";
 import AvatarUploader from "./AvatarUploader";
 import SaveApplyButtons from "./SaveApplyButtons";
 
-import Switch from "@mui/material/Switch";
+import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import TextField from "@mui/material/TextField";
 
@@ -24,6 +24,8 @@ export default function StyleEditor({
   onCancel,
   setLoading, // ✅ Agrega esto
   setLoadingMessage, // ✅ Y esto también
+  allowCustomTheme = true,
+  allowWidgetUploads = true,
 }) {
   const [editorStyle, setEditorStyle] = useState(style);
   const [showPrimaryPicker, setShowPrimaryPicker] = useState(false);
@@ -43,10 +45,8 @@ export default function StyleEditor({
       headerBackgroundColor:
         style.headerBackgroundColor || style.HeaderBackgroundColor || style.header_background_color || "#f5f5f5",
       fontFamily: style.fontFamily || style.FontFamily || style.font_family || "Arial",
-      allowImageUpload:
-        style.allowImageUpload ?? style.AllowImageUpload ?? style.allow_image_upload ?? true,
-      allowFileUpload:
-        style.allowFileUpload ?? style.AllowFileUpload ?? style.allow_file_upload ?? true,
+      allowImageUpload: false,
+      allowFileUpload: false,
       position: style.position || style.Position || "bottom-right",
       width: style.width ?? style.Width ?? 380,
       height: style.height ?? style.Height ?? 600,
@@ -139,16 +139,24 @@ export default function StyleEditor({
       </SoftBox>
 
       <SoftBox mb={2}>
-        <SoftTypography variant="caption">Tema</SoftTypography>
+        <SoftTypography variant="caption">
+          Tema {!allowCustomTheme && <span style={{ fontSize: "0.7rem", color: "#f0a500" }}>🔒 Solo en planes superiores</span>}
+        </SoftTypography>
         <SoftSelect
           label="Tema"
           value={editorStyle.theme || "light"}
           onChange={handleSelectChange("theme")}
           fullWidth
+          disabled={!allowCustomTheme}
         >
           {["light", "dark", "custom"].map((value) => (
-            <MenuItem key={value} value={value} style={{ width: "100%" }}>
-              {value === "light" ? "Claro" : value === "dark" ? "Oscuro" : "Personalizado"}
+            <MenuItem
+              key={value}
+              value={value}
+              disabled={value === "custom" && !allowCustomTheme}
+              style={{ width: "100%" }}
+            >
+              {value === "light" ? "Claro" : value === "dark" ? "Oscuro" : allowCustomTheme ? "Personalizado" : "Personalizado 🔒"}
             </MenuItem>
           ))}
         </SoftSelect>
@@ -293,7 +301,9 @@ export default function StyleEditor({
 
       <SoftBox mb={2} display="flex" gap={3}>
         <SoftBox flex={1}>
-          <SoftTypography variant="caption">Fuente</SoftTypography>
+          <SoftTypography variant="caption">
+            Fuente {!allowCustomTheme && <span style={{ fontSize: "0.7rem", color: "#f0a500" }}>🔒</span>}
+          </SoftTypography>
           <SoftSelect
             label="Fuente"
             value={editorStyle.fontFamily || "Arial"}
@@ -323,15 +333,22 @@ export default function StyleEditor({
               "Tahoma",
               "Impact",
             ].map((font) => (
-              <MenuItem key={font} value={font} style={{ fontFamily: font, width: "100%" }}>
-                {font}
+              <MenuItem
+                key={font}
+                value={font}
+                disabled={!allowCustomTheme && font !== "Arial"}
+                style={{ fontFamily: font, width: "100%" }}
+              >
+                {font}{!allowCustomTheme && font !== "Arial" ? " 🔒" : ""}
               </MenuItem>
             ))}
           </SoftSelect>
         </SoftBox>
 
         <SoftBox flex={1}>
-          <SoftTypography variant="caption">Posición</SoftTypography>
+          <SoftTypography variant="caption">
+            Posición {!allowCustomTheme && <span style={{ fontSize: "0.7rem", color: "#f0a500" }}>🔒 Posiciones limitadas</span>}
+          </SoftTypography>
           <SoftSelect
             label="Posición"
             value={editorStyle.position || "bottom-right"}
@@ -345,37 +362,20 @@ export default function StyleEditor({
               ["center-right", "Centro derecha"],
               ["bottom-left", "Abajo izquierda"],
               ["bottom-right", "Abajo derecha"],
-            ].map(([value, label]) => (
-              <MenuItem key={value} value={value} style={{ width: "100%" }}>
-                {label}
-              </MenuItem>
-            ))}
+            ].map(([value, label]) => {
+              const isFreeAllowed = value === "bottom-left" || value === "bottom-right";
+              return (
+                <MenuItem
+                  key={value}
+                  value={value}
+                  disabled={!allowCustomTheme && !isFreeAllowed}
+                  style={{ width: "100%" }}
+                >
+                  {label}{!allowCustomTheme && !isFreeAllowed ? " 🔒" : ""}
+                </MenuItem>
+              );
+            })}
           </SoftSelect>
-        </SoftBox>
-      </SoftBox>
-
-      <SoftBox display="flex" gap={2} mb={2} flexWrap="wrap">
-        <SoftBox flex={1} minWidth={100}>
-          <SoftTypography variant="caption">Ancho (px)</SoftTypography>
-          <TextField
-            type="number"
-            fullWidth
-            size="small"
-            value={editorStyle.width ?? 380}
-            onChange={(e) => handleStyleChange((prev) => ({ ...prev, width: Math.min(600, Math.max(280, parseInt(e.target.value, 10) || 380)) }))}
-            inputProps={{ min: 280, max: 600 }}
-          />
-        </SoftBox>
-        <SoftBox flex={1} minWidth={100}>
-          <SoftTypography variant="caption">Alto (px)</SoftTypography>
-          <TextField
-            type="number"
-            fullWidth
-            size="small"
-            value={editorStyle.height ?? 600}
-            onChange={(e) => handleStyleChange((prev) => ({ ...prev, height: Math.min(800, Math.max(400, parseInt(e.target.value, 10) || 600)) }))}
-            inputProps={{ min: 400, max: 800 }}
-          />
         </SoftBox>
       </SoftBox>
 
@@ -385,24 +385,26 @@ export default function StyleEditor({
         </SoftTypography>
       </SoftBox>
 
+      {!allowWidgetUploads && (
+        <SoftBox mb={2} p={1.5} sx={{ border: "1.5px dashed #f0a500", borderRadius: 2, backgroundColor: "#fffbf0", display: "flex", alignItems: "center", gap: 1 }}>
+          <span>🔒</span>
+          <SoftTypography variant="caption" color="warning" fontWeight="bold">
+            Opciones de carga disponibles en planes superiores
+          </SoftTypography>
+        </SoftBox>
+      )}
+
       <SoftBox mb={3} ml={2} display="flex" gap={3}>
         <FormControlLabel
           labelPlacement="end"
           control={
-            <Switch
-              checked={editorStyle.allowImageUpload ?? true}
+            <Checkbox
+              checked={editorStyle.allowImageUpload ?? false}
               onChange={(e) =>
                 handleStyleChange((prev) => ({ ...prev, allowImageUpload: e.target.checked }))
               }
-              color="info" // asegúrate de que "info" esté definido en el theme
-              sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': {
-                  color: '#00bcd4', // color info personalizado
-                },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                  backgroundColor: '#00bcd4',
-                },
-              }}
+              disabled={!allowWidgetUploads}
+              sx={{ color: '#00bcd4', '&.Mui-checked': { color: '#00bcd4' } }}
             />
           }
           label={
@@ -414,20 +416,13 @@ export default function StyleEditor({
         <FormControlLabel
           labelPlacement="end"
           control={
-            <Switch
-              checked={editorStyle.allowFileUpload ?? true}
+            <Checkbox
+              checked={editorStyle.allowFileUpload ?? false}
               onChange={(e) =>
                 handleStyleChange((prev) => ({ ...prev, allowFileUpload: e.target.checked }))
               }
-              color="info"
-              sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': {
-                  color: '#00bcd4',
-                },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                  backgroundColor: '#00bcd4',
-                },
-              }}
+              disabled={!allowWidgetUploads}
+              sx={{ color: '#00bcd4', '&.Mui-checked': { color: '#00bcd4' } }}
             />
           }
           label={
@@ -461,6 +456,8 @@ StyleEditor.propTypes = {
   botId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
   userId: PropTypes.number.isRequired,
   onCancel: PropTypes.func.isRequired,
-  setLoading: PropTypes.func.isRequired, // ✅ Agrega esto
-  setLoadingMessage: PropTypes.func.isRequired, // ✅ Agrega esto
+  setLoading: PropTypes.func.isRequired,
+  setLoadingMessage: PropTypes.func.isRequired,
+  allowCustomTheme: PropTypes.bool,
+  allowWidgetUploads: PropTypes.bool,
 };

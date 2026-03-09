@@ -227,9 +227,7 @@ function AdminUserPanel() {
           },
         ],
       };
-      console.log("[DEBUG] Payload a enviar:", userPayload);
       const result = await createUser(userPayload);
-      console.log("[DEBUG] Respuesta de createUser:", result);
       setUserSuccess("Usuario registrado exitosamente");
       setNewUser({
         name: "",

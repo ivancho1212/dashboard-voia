@@ -31,6 +31,14 @@ export const updateUser = async (id, user) => {
   return response.data;
 };
 
+export const patchUserStatus = async (id, status) => {
+  const token = localStorage.getItem("token");
+  const response = await axios.patch(`${API_BASE_URL}/Users/${id}/status`, { status }, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
 export const deleteUser = async (id) => {
   const token = localStorage.getItem("token");
   const response = await axios.delete(`${API_BASE_URL}/Users/${id}`, {
@@ -44,6 +52,11 @@ export const getRoles = async () => {
   const response = await axios.get(`${API_BASE_URL}/Roles`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  return response.data;
+};
+
+export const getRoleNames = async () => {
+  const response = await axios.get(`${API_BASE_URL}/Roles/names`);
   return response.data;
 };
 

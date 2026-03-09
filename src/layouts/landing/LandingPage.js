@@ -13,36 +13,13 @@ const LandingPage = () => {
   const location = useLocation();
 
   // Cargar el widget tras un breve retraso para evitar OOM al inicializar
-  // (main app y widget a la vez consumen mucha memoria)
-  useEffect(() => {
-    if (document.getElementById("voia-widget-js")) return;
-    const loadWidget = () => {
-      if (document.getElementById("voia-widget-js")) return;
-      const origin = window.location.origin;
-      const js = document.createElement("script");
-      js.id = "voia-widget-js";
-      js.async = true;
-      js.src = `${origin}/widget.js`;
-      js.setAttribute("data-user-id", "anon");
-      js.setAttribute("data-bot-id", "4");
-      js.setAttribute("data-bot", "4");
-      js.setAttribute("data-api-base", origin);
-      js.setAttribute("data-theme", "auto");
-      js.setAttribute("data-position", "bottom-right");
-      js.setAttribute("data-language", "es");
-      js.setAttribute("data-allowed-domain", origin);
-      js.setAttribute("data-client-secret", "");
-      document.body.appendChild(js);
-    };
-    const useIdle = typeof requestIdleCallback !== "undefined";
-    const id = useIdle
-      ? requestIdleCallback(loadWidget, { timeout: 2000 })
-      : setTimeout(loadWidget, 1500);
-    return () => {
-      if (useIdle && typeof cancelIdleCallback !== "undefined") cancelIdleCallback(id);
-      else clearTimeout(id);
-    };
-  }, []);
+
+// Or in a component (e.g. LandingPage)
+useEffect(() => {
+  try{ const allowed = 'http://localhost:3000'; if (allowed){ const allowedHost = (new URL(allowed)).host; if (window.location.host !== allowedHost) return; } } catch(e) {}
+  if (document.getElementById('voia-widget-js')) return;
+  const js = document.createElement('script'); js.id = 'voia-widget-js'; js.async = true; js.src = 'http://localhost:3000/widget.js'; js.setAttribute('data-user-id', '5'); js.setAttribute('data-bot-id', '12'); js.setAttribute('data-bot', '12'); js.setAttribute('data-api-base', 'http://localhost:3000'); js.setAttribute('data-theme', 'auto'); js.setAttribute('data-position', 'bottom-right'); js.setAttribute('data-language', 'es'); js.setAttribute('data-allowed-domain', 'http://localhost:3000'); js.setAttribute('data-client-secret', ''); document.body.appendChild(js);
+}, []);
 
   useEffect(() => {
     if (location.state?.scrollTo) {

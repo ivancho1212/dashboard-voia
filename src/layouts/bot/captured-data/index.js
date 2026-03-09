@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import Swal from "sweetalert2";
+import usePlanFeatures from "hooks/usePlanFeatures";
 import {
   getCapturedFields,
   createCapturedField,
@@ -36,6 +37,9 @@ function DefineCapturedData() {
   const [newField, setNewField] = useState("");
   const [editingField, setEditingField] = useState({ id: null, name: "" }); // 1. Estado para la edición
   const { id } = useParams();
+  const { features: planFeatures } = usePlanFeatures();
+  const dataCaptureLimit = planFeatures.dataCaptureLimit;
+  const atLimit = dataCaptureLimit != null && fields.length >= dataCaptureLimit;
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -129,13 +133,29 @@ function DefineCapturedData() {
       <DashboardNavbar />
       <SoftBox pt={1} pb={3} px={2}>
         <Card sx={{ p: 3, mb: 4, borderRadius: "xl", boxShadow: "lg" }}>
-          <SoftTypography variant="h5" fontWeight="bold" gutterBottom>
-            Configura los campos a capturar
-          </SoftTypography>
+          <SoftBox display="flex" alignItems="baseline" gap={1}>
+            <SoftTypography variant="h5" fontWeight="bold" gutterBottom>
+              Configura los campos a capturar
+            </SoftTypography>
+            {dataCaptureLimit != null && (
+              <SoftTypography component="span" variant="caption" color={atLimit ? "error" : "text"} ml={1}>
+                {fields.length}/{dataCaptureLimit} {atLimit ? "— límite alcanzado" : ""}
+              </SoftTypography>
+            )}
+          </SoftBox>
           <SoftTypography variant="body2" color="text" sx={{ mb: 3 }}>
             Agrega los campos que deseas que el bot intente recolectar durante la conversación.
           </SoftTypography>
           <Divider sx={{ mb: 3 }} />
+
+          {atLimit && (
+            <SoftBox mb={2} p={1.5} sx={{ border: "1.5px dashed #f0a500", borderRadius: 2, backgroundColor: "#fffbf0", display: "flex", alignItems: "center", gap: 1 }}>
+              <span>🔒</span>
+              <SoftTypography variant="caption" color="warning" fontWeight="bold">
+                Has alcanzado el límite de {dataCaptureLimit} campo(s) de tu plan. Actualiza tu plan para agregar más campos.
+              </SoftTypography>
+            </SoftBox>
+          )}
 
           <Grid container spacing={2}>
             <Grid item xs={12} sm={8}>
@@ -144,10 +164,11 @@ function DefineCapturedData() {
                 value={newField}
                 onChange={(e) => setNewField(e.target.value)}
                 fullWidth
+                disabled={atLimit}
               />
             </Grid>
             <Grid item xs={12} sm={4}>
-              <SoftButton color="info" fullWidth onClick={handleAddField}>
+              <SoftButton color="info" fullWidth onClick={handleAddField} disabled={atLimit}>
                 Agregar Campo
               </SoftButton>
             </Grid>
@@ -217,8 +238,11 @@ function DefineCapturedData() {
             </Table>
           </SoftBox>
 
-          <SoftBox mt={4} display="flex" justifyContent="flex-end">
-            <SoftButton variant="gradient" color="info" onClick={handleContinue}>
+          <SoftBox mt={4} display="flex" justifyContent="flex-end" gap={2}>
+            <SoftButton variant="outlined" color="error" sx={{ fontWeight: "bold", px: 3 }} onClick={() => navigate("/profile")}>
+              Cancelar
+            </SoftButton>
+            <SoftButton variant="gradient" color="info" sx={{ fontWeight: "bold", px: 3 }} onClick={handleContinue}>
               Continuar al siguiente paso
             </SoftButton>
           </SoftBox>

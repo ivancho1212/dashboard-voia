@@ -6,13 +6,29 @@ import SoftTypography from "components/SoftTypography";
 import SoftButton from "components/SoftButton";
 import Icon from "@mui/material/Icon";
 
-const FilesSection = ({ files, fileErrors, handleFileChange, handleDeleteFile, handleRetryFile, ALLOWED_FILE_TYPES }) => (
+const FilesSection = ({ files, fileErrors, handleFileChange, handleDeleteFile, handleRetryFile, ALLOWED_FILE_TYPES, fileUploadLimit }) => {
+  const atLimit = fileUploadLimit != null && files.length >= fileUploadLimit;
+  return (
   <>
-    <SoftTypography variant="subtitle1" mb={1}>Archivos (PDF, DOCX, XLSX)</SoftTypography>
+    <SoftTypography variant="subtitle1" mb={1}>
+      Archivos (PDF, DOCX, XLSX)
+      {fileUploadLimit != null && (
+        <SoftTypography component="span" variant="caption" color={atLimit ? "error" : "text"} ml={1}>
+          {files.length}/{fileUploadLimit} {atLimit ? "— límite alcanzado" : ""}
+        </SoftTypography>
+      )}
+    </SoftTypography>
+    {atLimit && (
+      <SoftBox mb={1} p={1} sx={{ backgroundColor: "#fff8e1", borderRadius: 1, border: "1px solid #f0a500" }}>
+        <SoftTypography variant="caption" color="warning" fontWeight="bold">
+          🔒 Has alcanzado el límite de {fileUploadLimit} documento(s) de tu plan. Actualiza tu plan para subir más archivos.
+        </SoftTypography>
+      </SoftBox>
+    )}
     <SoftBox mb={2}>
-      <SoftButton variant="outlined" color="info" component="label" fullWidth>
+      <SoftButton variant="outlined" color="info" component="label" fullWidth disabled={atLimit}>
         Seleccionar Archivos (Max 5MB)
-        <input type="file" multiple hidden onChange={handleFileChange} accept={Object.keys(ALLOWED_FILE_TYPES).join(",")}/>
+        <input type="file" multiple hidden onChange={handleFileChange} accept={Object.keys(ALLOWED_FILE_TYPES).join(",")} disabled={atLimit}/>
       </SoftButton>
   <SoftBox mb={3}>
   {files.map((file, idx) => {
@@ -43,7 +59,8 @@ const FilesSection = ({ files, fileErrors, handleFileChange, handleDeleteFile, h
           </SoftBox>
     </SoftBox>
   </>
-);
+  );
+};
 
 FilesSection.propTypes = {
   files: PropTypes.array.isRequired,
@@ -52,6 +69,7 @@ FilesSection.propTypes = {
   handleDeleteFile: PropTypes.func.isRequired,
   handleRetryFile: PropTypes.func,
   ALLOWED_FILE_TYPES: PropTypes.object.isRequired,
+  fileUploadLimit: PropTypes.number,
 };
 
 export default FilesSection;

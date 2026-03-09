@@ -22,23 +22,16 @@ export default function SaveApplyButtons({
   const [openModal, setOpenModal] = useState(false);
   const [styleName, setStyleName] = useState("");
 
-  const isEditMode = !!style.id;
+  const isEditMode = !!style.id && typeof style.id === "number";
 
   const updateBotStyle = async (botId, styleId) => {
-    try {
-      const res = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
-      const bot = res.data;
-      const updatedBot = { ...bot, styleId };
-      await axios.put(`http://localhost:5006/api/Bots/${botId}`, updatedBot);
-    } catch (err) {
-      console.error("Error al actualizar estilo del bot:", err);
-      alert("Error al aplicar el estilo al bot.");
-    }
+    await axios.patch(`http://localhost:5006/api/Bots/${botId}/style`, { styleId }, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
   };
 
   const saveStyle = async (styleData, isUpdate = false) => {
     const apiUrl = "http://localhost:5006/api/BotStyles";
-    console.log("🚀 ENVIANDO AL BACKEND:", JSON.stringify(styleData, null, 2));
 
     try {
       setLoading(true);
@@ -75,7 +68,6 @@ export default function SaveApplyButtons({
 
   const handleSave = () => {
     if (isEditMode) {
-      console.log("STYLE EN handleSave:", style);
       const updatedStyle = {
         userId,
         name: style.name,
@@ -104,7 +96,6 @@ export default function SaveApplyButtons({
       alert("Por favor, ingresa un nombre para el estilo.");
       return;
     }
-    console.log("STYLE EN handleConfirmSave:", style);
     const newStyle = {
       userId,
       name: styleName,
@@ -151,10 +142,10 @@ export default function SaveApplyButtons({
     <>
       <SoftBox mt={4} display="flex" gap={2}>
         <SoftButton variant="contained" color="info" onClick={handleSave}>
-          {isEditMode ? "Actualizar" : "Guardar"}
+          Guardar
         </SoftButton>
         <SoftButton variant="outlined" color="info" onClick={handleApply} disabled={!style.id}>
-          Aplicar
+          Asignar al bot
         </SoftButton>
         <SoftButton variant="outlined" color="error" onClick={onCancel}>
           Cancelar

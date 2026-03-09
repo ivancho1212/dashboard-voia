@@ -17,6 +17,8 @@ const dataRoutes = [
     icon: <FaComments size={14} />,
     component: Conversations,
     noCollapse: true,
+    protected: true,
+    permission: "CanViewConversations",
   },
   {
     type: "collapse",
@@ -26,6 +28,8 @@ const dataRoutes = [
     icon: <FaFileAlt size={14} />,
     component: Documents,
     noCollapse: true,
+    protected: true,
+    permission: "CanViewUploadedDocuments",
   },
   {
     type: "collapse",
@@ -35,6 +39,8 @@ const dataRoutes = [
     icon: <FaFolderOpen size={14} />,
     component: Resources,
     noCollapse: true,
+    protected: true,
+    permission: "CanViewUploadedDocuments",
   },
 ];
 

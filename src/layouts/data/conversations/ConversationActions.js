@@ -1,8 +1,6 @@
 // src/layouts/data/conversations/ConversationActions.js
 
 import React, { useState, useCallback } from "react";
-import { useAuth } from "contexts/AuthContext";
-import { hasPermission } from "utils/permissions";
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -16,7 +14,6 @@ import PropTypes from "prop-types";
 import { moveConversationToTrash } from "services/conversationsService";
 
 function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus, conversationId, onMovedToTrash }) {
-  const { user } = useAuth();
   const [anchorEl, setAnchorEl] = useState(null);
   const open = Boolean(anchorEl);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -41,10 +38,6 @@ function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus, 
       </IconButton>
 
       <Menu anchorEl={anchorEl} open={open} onClose={handleClose}>
-        <MenuItem disabled>
-          Estado actual: {currentStatus.charAt(0).toUpperCase() + currentStatus.slice(1)}
-        </MenuItem>
-
         {statusOptions.map((option) => (
           <MenuItem
             key={option.value}
@@ -67,29 +60,28 @@ function ConversationActions({ onBlock, onStatusChange, blocked, currentStatus, 
           {blocked ? "Desbloquear Usuario" : "Bloquear Usuario"}
         </MenuItem>
 
-        {hasPermission(user, "CanDeleteConversation") && (
-          <MenuItem
-            onClick={() => {
-              setConfirmOpen(true);
-              handleClose();
-            }}
-          >
-            Eliminar conversación
-          </MenuItem>
-        )}
-        <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-          <DialogTitle>¿Estás seguro?</DialogTitle>
-          <DialogContent>¿Deseas eliminar esta conversación? Se moverá a la papelera.</DialogContent>
-          <DialogActions>
-            <Button onClick={() => setConfirmOpen(false)} color="primary">Cancelar</Button>
-            <Button onClick={async () => {
-              setConfirmOpen(false);
-              await moveConversationToTrash(conversationId);
-              if (onMovedToTrash) onMovedToTrash(conversationId);
-            }} color="error">Eliminar</Button>
-          </DialogActions>
-        </Dialog>
+        <MenuItem
+          onClick={() => {
+            handleClose();
+            setConfirmOpen(true);
+          }}
+        >
+          Eliminar conversación
+        </MenuItem>
       </Menu>
+
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>¿Estás seguro?</DialogTitle>
+        <DialogContent>¿Deseas eliminar esta conversación? Se moverá a la papelera.</DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)} color="primary">Cancelar</Button>
+          <Button onClick={async () => {
+            setConfirmOpen(false);
+            const result = await moveConversationToTrash(conversationId);
+            if (result !== null && onMovedToTrash) onMovedToTrash(conversationId);
+          }} color="error">Eliminar</Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

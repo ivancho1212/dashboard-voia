@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { getDocumentTypes } from "../../../services/documentTypeService";
-import { getUsers, updateUser } from "../../../services/userAdminService";
+import { getUsers, updateUser, patchUserStatus } from "../../../services/userAdminService";
 import { getRoles } from "../../../services/roleService";
 import {
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -25,33 +25,15 @@ const UserInfo = () => {
   const [confirmDialog, setConfirmDialog] = useState({ open: false, user: null, type: null });
   // Cambia el estado de un usuario a activo
   const handleEnable = async (user) => {
-    let validRoleId = Number(user.roleId);
-    if (!validRoleId && user.role && user.role.id) {
-      validRoleId = Number(user.role.id);
+    try {
+      await patchUserStatus(user.id, 'active');
+      setSnackbar({ open: true, message: 'Usuario habilitado correctamente.', severity: 'success' });
+      fetchUsers();
+    } catch (err) {
+      const data = err?.response?.data;
+      const msg = data?.message || data?.Message || JSON.stringify(data) || "Error al habilitar usuario";
+      setSnackbar({ open: true, message: msg, severity: 'error' });
     }
-    if (!validRoleId || !roles.some(r => r.id === validRoleId)) {
-      setSnackbar({ open: true, message: "El usuario no tiene un rol válido. No se puede habilitar.", severity: 'error' });
-      return;
-    }
-    const payload = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      country: user.country,
-      city: user.city,
-      address: user.address,
-      documentNumber: user.documentNumber,
-      documentPhotoUrl: user.documentPhotoUrl,
-      avatarUrl: user.avatarUrl,
-      isVerified: user.isVerified,
-      roleId: validRoleId,
-      documentTypeId: user.documentType?.id || user.documentTypeId,
-      isActive: true,
-      status: 'active',
-    };
-    await updateUser(user.id, payload);
-    fetchUsers();
   };
   const [roles, setRoles] = useState([]);
   const [roleFilter, setRoleFilter] = useState('all');
@@ -133,26 +115,28 @@ const UserInfo = () => {
       setSnackbar({ open: true, message: "Debes seleccionar un rol válido.", severity: 'error' });
       return;
     }
+    const selectedRole = roles.find(r => r.id === validRoleId);
     const payload = {
       ...editData,
       roleId: validRoleId,
+      roleName: selectedRole?.name || '',
       documentTypeId: editData.documentTypeId ? Number(editData.documentTypeId) : null,
     };
-    await updateUser(editUser.id, payload);
-    setEditUser(null);
-    fetchUsers();
+    try {
+      await updateUser(editUser.id, payload);
+      setEditUser(null);
+      fetchUsers();
+    } catch (err) {
+      const data = err?.response?.data;
+      const msg = data?.message || data?.Message
+        || (data?.errors ? JSON.stringify(data.errors) : null)
+        || JSON.stringify(data)
+        || "Error al guardar";
+      setSnackbar({ open: true, message: msg, severity: 'error' });
+    }
   };
 
-  const handleBlock = async (user) => {
-    // Determina el roleId válido
-    let validRoleId = Number(user.roleId);
-    if (!validRoleId && user.role && user.role.id) {
-      validRoleId = Number(user.role.id);
-    }
-    if (!validRoleId || !roles.some(r => r.id === validRoleId)) {
-      setSnackbar({ open: true, message: "El usuario no tiene un rol válido. No se puede bloquear/inactivar.", severity: 'error' });
-      return;
-    }
+  const handleBlock = (user) => {
     setConfirmDialog({ open: true, user, type: 'block' });
   };
 
@@ -209,34 +193,15 @@ const UserInfo = () => {
           <Button
             onClick={async () => {
               const user = confirmDialog.user;
-              let validRoleId = Number(user.roleId);
-              if (!validRoleId && user.role && user.role.id) {
-                validRoleId = Number(user.role.id);
+              const newStatus = confirmDialog.type === 'block' ? 'blocked' : 'inactive';
+              try {
+                await patchUserStatus(user.id, newStatus);
+                setSnackbar({ open: true, message: confirmDialog.type === 'block' ? 'Usuario bloqueado correctamente.' : 'Usuario inactivado correctamente.', severity: 'success' });
+              } catch (err) {
+                const data = err?.response?.data;
+                const msg = data?.message || data?.Message || JSON.stringify(data) || "Error al actualizar estado";
+                setSnackbar({ open: true, message: msg, severity: 'error' });
               }
-              if (!validRoleId || !roles.some(r => r.id === validRoleId)) {
-                setSnackbar({ open: true, message: "El usuario no tiene un rol válido.", severity: 'error' });
-                setConfirmDialog({ open: false, user: null, type: null });
-                return;
-              }
-              const payload = {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                country: user.country,
-                city: user.city,
-                address: user.address,
-                documentNumber: user.documentNumber,
-                documentPhotoUrl: user.documentPhotoUrl,
-                avatarUrl: user.avatarUrl,
-                isVerified: user.isVerified,
-                roleId: validRoleId,
-                documentTypeId: user.documentType?.id || user.documentTypeId,
-                isActive: false,
-                status: confirmDialog.type === 'block' ? 'blocked' : 'inactive',
-              };
-              await updateUser(user.id, payload);
-              setSnackbar({ open: true, message: confirmDialog.type === 'block' ? 'Usuario bloqueado correctamente.' : 'Usuario inactivado correctamente.', severity: 'success' });
               setConfirmDialog({ open: false, user: null, type: null });
               fetchUsers();
             }}
@@ -358,9 +323,9 @@ const UserInfo = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {users.map((user) => (
+            {users.map((user, idx) => (
               <TableRow
-                key={user.id}
+                key={user.id ?? idx}
                 style={
                   user.status === 'blocked'
                     ? { background: '#ffeaea', color: '#b71c1c' }
@@ -392,55 +357,49 @@ const UserInfo = () => {
                   {user.status === 'active' && (
                     <>
                       <Tooltip title="Editar">
-                        <IconButton
-                          color="primary"
-                          size="small"
-                          onClick={() => handleEdit(user)}
-                        >
+                        <IconButton color="primary" size="small" onClick={() => handleEdit(user)}>
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Bloquear">
-                        <IconButton
-                          color="warning"
-                          size="small"
-                          onClick={() => handleBlock(user)}
-                        >
+                        <IconButton color="warning" size="small" onClick={() => handleBlock(user)}>
                           <BlockIcon />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Inactivar">
-                        <IconButton
-                          color="error"
-                          size="small"
-                          onClick={() => handleDelete(user)}
-                        >
+                        <IconButton color="error" size="small" onClick={() => handleDelete(user)}>
                           <DeleteIcon />
                         </IconButton>
                       </Tooltip>
                     </>
                   )}
                   {user.status === 'blocked' && (
-                    <Tooltip title="Desbloquear">
-                      <IconButton
-                        color="success"
-                        size="small"
-                        onClick={() => handleEnable(user)}
-                      >
-                        <BlockIcon />
-                      </IconButton>
-                    </Tooltip>
+                    <>
+                      <Tooltip title="Editar">
+                        <IconButton color="primary" size="small" onClick={() => handleEdit(user)}>
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Desbloquear">
+                        <IconButton color="success" size="small" onClick={() => handleEnable(user)}>
+                          <BlockIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </>
                   )}
-                  {user.status === 'inactive' && (
-                    <Tooltip title="Habilitar">
-                      <IconButton
-                        color="success"
-                        size="small"
-                        onClick={() => handleEnable(user)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Tooltip>
+                  {(user.status === 'inactive' || !user.status) && (
+                    <>
+                      <Tooltip title="Editar">
+                        <IconButton color="primary" size="small" onClick={() => handleEdit(user)}>
+                          <EditIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Habilitar">
+                        <IconButton color="success" size="small" onClick={() => handleEnable(user)}>
+                          <DeleteIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </>
                   )}
                 </TableCell>
               </TableRow>

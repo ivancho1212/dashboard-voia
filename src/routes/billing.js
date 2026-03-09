@@ -15,6 +15,7 @@ const billingRoutes = [
     icon: <FaMoneyBillWave size={14} />,
     component: Billing,
     noCollapse: true,
+    protected: true,
   },
 ];
 

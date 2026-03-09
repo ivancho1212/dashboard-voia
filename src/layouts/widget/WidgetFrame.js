@@ -60,6 +60,7 @@ function WidgetFrame(props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [realToken, setRealToken] = useState(null);
+  const [widgetBlocked, setWidgetBlocked] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false); // Desactivar auto-refresh por defecto
   // Estado de visibilidad del chat - EN MÓVIL, ABRIR POR DEFECTO; EN WEB, CERRADO
   const [isOpen, setIsOpen] = useState(false); // Siempre empezar cerrado, luego isMobileView lo abre si es necesario
@@ -71,37 +72,50 @@ function WidgetFrame(props) {
   // Cancelación de carga anterior (Strict Mode / re-runs)
   const loadCancelRef = useRef(0);
 
-  // ✅ NUEVO: Effect para obtener JWT válido del backend cuando no hay secret en URL
+  // Valida la integración con el backend y obtiene un JWT.
+  // Siempre corre cuando botId está disponible — si hay urlSecret (script embebido) lo valida.
+  // En modo móvil NO ejecutar: el token viene del widgetAuthService en loadBotConfiguration.
   React.useEffect(() => {
-    if (!clientSecret && botId) {
-      // Primero intentar obtener token del backend
-      const apiBaseUrl = getApiBaseUrl();
-      
-      const generateBackendToken = async () => {
-        try {
-          const response = await axios.post(
-            `${apiBaseUrl}/BotIntegrations/generate-widget-token`,
-            { botId: botId },
-            { timeout: 5000, withCredentials: true }
-          );
-          
-          setClientSecret(response.data.token);
-        } catch (backendError) {
-          console.error('❌ [WidgetFrame] Error obteniendo token del backend:', backendError);
-          // Fallback: generar JWT en frontend
+    if (isMobileView) return;
+    if (!botId) return;
+
+    const apiBaseUrl = getApiBaseUrl();
+
+    const generateBackendToken = async () => {
+      try {
+        const body = { botId, allowedDomain: window.location.hostname || 'localhost' };
+        // Usar siempre el secret original del script (urlSecret), no el estado clientSecret
+        // que puede haber sido reemplazado por un JWT previo.
+        if (urlSecret) body.clientSecret = urlSecret;
+        const response = await axios.post(
+          `${apiBaseUrl}/BotIntegrations/generate-widget-token`,
+          body,
+          { timeout: 5000, withCredentials: true }
+        );
+        setClientSecret(response.data.token);
+      } catch (backendError) {
+        const status = backendError?.response?.status;
+        // 401 = script inválido/reemplazado o integración eliminada
+        // 402 = widget bloqueado por admin o suscripción inactiva
+        if (status === 401 || status === 402) {
+          setWidgetBlocked(true); // Bloquear en ambos casos
+          return;
+        }
+        // Error de red/servidor: fallback a JWT local solo si no hay script secret
+        if (!urlSecret) {
           try {
             const jwt = await generateWidgetJwtAsync(botId, "localhost");
             setClientSecret(jwt);
           } catch (jwtError) {
             console.error('❌ [WidgetFrame] Error generando JWT local:', jwtError);
-            setClientSecret(`test-secret-bot-${botId}`);
           }
         }
-      };
-      
-      generateBackendToken();
-    }
-  }, [botId, clientSecret]); // Ejecutar cuando botId cambie o clientSecret sea null
+      }
+    };
+
+    generateBackendToken();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botId]); // Ejecutar una sola vez cuando botId esté disponible; urlSecret es estable (prop)
 
   // useMemo para estilos, antes de cualquier return
   const styleToPass = useMemo(() => {
@@ -176,8 +190,8 @@ function WidgetFrame(props) {
         const stored = localStorage.getItem('widgetToken') || localStorage.getItem('jwt') || localStorage.getItem('token');
         if (stored && stored !== 'undefined') {
           finalToken = stored;
-          // Set early so child can consume it when mounting
-          setRealToken(stored);
+          // NO llamar setRealToken aquí — se llamará una sola vez con el token final.
+          // Llamarlo aquí causa un re-render extra que dispara un segundo useEffect en ChatWidget.
         }
       }
       
@@ -211,10 +225,11 @@ function WidgetFrame(props) {
       if (finalToken && !wasRejected && !isExpired) {
         try {
           botConfig = await getBotDataWithToken(botId, finalToken);
+          // Si la configuración se obtuvo con este token, notificar a ChatWidget UNA sola vez.
+          if (botConfig && !isCancelled()) setRealToken(finalToken);
         } catch (configError) {
           const status = configError?.response?.status;
           if (status === 401) {
-            // Token fue rechazado, marcarlo para no intentar de nuevo
             widgetAuthService.markTokenAsInvalid(finalToken);
           }
           botConfig = null; // Forzar fallback
@@ -236,6 +251,12 @@ function WidgetFrame(props) {
                 try { localStorage.setItem('widgetToken', generated); } catch(e) {}
               }
             } catch (genErr) {
+              // 402 = widget blocked by platform admin (subscription suspended / expired)
+              if (genErr?.response?.status === 402 || genErr?.response?.data?.widgetBlocked) {
+                if (!isCancelled()) setWidgetBlocked(true);
+                safeSetLoading(false);
+                return;
+              }
               console.error('❌ [WidgetFrame] Error generando token para fallback:', genErr.message);
             }
           }
@@ -280,6 +301,13 @@ function WidgetFrame(props) {
         };
       }
       
+      // Check if widget is blocked by platform admin
+      if (botConfig?.widgetBlocked === true) {
+        if (!isCancelled()) setWidgetBlocked(true);
+        safeSetLoading(false);
+        return;
+      }
+
       safeSetStyleConfig({
         ...botConfig,
         botId,
@@ -419,11 +447,16 @@ function WidgetFrame(props) {
     );
   }
 
+  // Widget blocked by platform admin (subscription suspended / expired / manual block)
+  if (widgetBlocked) {
+    return null; // Silently render nothing — the widget simply does not appear
+  }
+
   if (error) {
     return (
-      <div style={{ 
-        color: 'red', 
-        padding: 32, 
+      <div style={{
+        color: 'red',
+        padding: 32,
         fontFamily: 'Arial, sans-serif',
         textAlign: 'center',
         background: '#fff',
@@ -517,6 +550,7 @@ function WidgetFrame(props) {
         // Parámetros para modo móvil
         isMobileView={isMobileView}
         conversationId={conversationId}
+        allowMobileVersion={styleConfig?.allowMobileVersion === true}
       />
     );
 }

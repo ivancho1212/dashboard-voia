@@ -21,6 +21,7 @@ const supportRoutes = [
     icon: <FaTicketAlt size={14} />,
     component: MyTickets,
     noCollapse: true,
+    protected: true,
   },
   {
     type: "collapse",
@@ -30,6 +31,7 @@ const supportRoutes = [
     icon: <FaPlusCircle size={14} />,
     component: CreateTicket,
     noCollapse: true,
+    protected: true,
   },
   {
     key: "ticket-replies",
@@ -37,6 +39,7 @@ const supportRoutes = [
     name: "Respuestas al Ticket",
     icon: <FaReply size={14} />,
     component: TicketReplies,
+    protected: true,
   },
   {
     key: "support-admin",
@@ -44,6 +47,7 @@ const supportRoutes = [
     name: "Administrar Soporte",
     icon: <FaHeadset size={14} />,
     component: SupportAdmin,
+    protected: true,
   },
   {
     key: "assign-agents",
@@ -51,6 +55,7 @@ const supportRoutes = [
     name: "Asignar Agentes",
     icon: <FaUserCheck size={14} />,
     component: AssignAgents,
+    protected: true,
   },
   {
     key: "quick-replies",
@@ -58,6 +63,7 @@ const supportRoutes = [
     name: "Respuestas Rápidas",
     icon: <FaCommentDots size={14} />,
     component: QuickReplies,
+    protected: true,
   },
 ];
 

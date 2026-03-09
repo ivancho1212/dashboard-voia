@@ -6,19 +6,53 @@ import SoftButton from "components/SoftButton";
 import SoftInput from "components/SoftInput";
 import { getIaProviders } from "services/botIaProviderService";
 import { getModelConfigsByProvider } from "services/aiModelConfigService";
-import { getStyleTemplates } from "services/styleTemplateService";
+import { createBotTemplate } from "services/botTemplateService";
+
+
+const selectStyle = {
+  width: "100%",
+  padding: "10px",
+  borderRadius: "8px",
+  border: "1px solid #ccc",
+  marginTop: "6px",
+  fontSize: "14px",
+};
 
 function IaProviderForm({ onSubmit }) {
   const [providers, setProviders] = useState([]);
   const [models, setModels] = useState([]);
-  const [styles, setStyles] = useState([]);
-
   const [selectedProviderId, setSelectedProviderId] = useState("");
   const [selectedModelId, setSelectedModelId] = useState("");
-  const [defaultStyleId, setDefaultStyleId] = useState("");
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+
+  // Comportamiento
+  const [welcomeMessage, setWelcomeMessage] = useState("");
+  const [fallbackMessage, setFallbackMessage] = useState(
+    "No tengo información suficiente para responder eso. Por favor contáctanos directamente."
+  );
+  const [outOfScopeMessage, setOutOfScopeMessage] = useState(
+    "Esa pregunta está fuera de mi área. Te recomiendo contactar a nuestro equipo."
+  );
+  const [language, setLanguage] = useState("es");
+  const [strictRagMode, setStrictRagMode] = useState(false);
+  const [maxHistoryMessages, setMaxHistoryMessages] = useState(10);
+
+  // RAG
+  const [ragMinScore, setRagMinScore] = useState(0.65);
+  const [ragTopK, setRagTopK] = useState(5);
+  const [ragRerankEnabled, setRagRerankEnabled] = useState(true);
+  const [citationMode, setCitationMode] = useState("none");
+
+  // Operacional
+  const [blockedTopics, setBlockedTopics] = useState("");
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState("");
+
+  // Secciones expandibles
+  const [showBehavior, setShowBehavior] = useState(false);
+  const [showRag, setShowRag] = useState(false);
+  const [showOperational, setShowOperational] = useState(false);
 
   useEffect(() => {
     const fetchProviders = async () => {
@@ -45,18 +79,6 @@ function IaProviderForm({ onSubmit }) {
     fetchModels();
   }, [selectedProviderId]);
 
-  useEffect(() => {
-    const fetchStyles = async () => {
-      try {
-        const data = await getStyleTemplates();
-        setStyles(data);
-      } catch (error) {
-        console.error("Error al obtener estilos:", error);
-      }
-    };
-    fetchStyles();
-  }, []);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -70,26 +92,29 @@ function IaProviderForm({ onSubmit }) {
       description: description.trim(),
       iaProviderId: parseInt(selectedProviderId, 10),
       aiModelConfigId: parseInt(selectedModelId, 10),
-      defaultStyleId: defaultStyleId ? parseInt(defaultStyleId, 10) : null,
+      // Comportamiento
+      welcomeMessage: welcomeMessage.trim() || null,
+      fallbackMessage: fallbackMessage.trim() || null,
+      outOfScopeMessage: outOfScopeMessage.trim() || null,
+      language,
+      strictRagMode,
+      maxHistoryMessages: parseInt(maxHistoryMessages, 10),
+      // RAG
+      ragMinScore: parseFloat(ragMinScore),
+      ragTopK: parseInt(ragTopK, 10),
+      ragRerankEnabled,
+      citationMode,
+      // Operacional
+      blockedTopics: blockedTopics.trim() || null,
+      rateLimitPerMinute: rateLimitPerMinute !== "" ? parseInt(rateLimitPerMinute, 10) : null,
     };
 
     try {
-      const response = await fetch("http://localhost:5006/api/bottemplates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newTemplate),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Error al crear la plantilla.");
-      }
-
-      const data = await response.json();
+      const data = await createBotTemplate(newTemplate);
       onSubmit(newTemplate, data);
     } catch (error) {
       console.error("Error al enviar datos:", error);
-      alert("Error al crear la plantilla: " + error.message);
+      alert("Error al crear la plantilla: " + (error.response?.data?.message || error.message));
     }
   };
 
@@ -180,31 +205,186 @@ function IaProviderForm({ onSubmit }) {
         />
       </SoftBox>
 
-      {/* Estilo por defecto */}
-      <SoftBox mb={2}>
-        <SoftTypography variant="caption" color="text">
-          Estilo por defecto (opcional)
-        </SoftTypography>
-        <select
-          value={defaultStyleId}
-          onChange={(e) =>
-            setDefaultStyleId(e.target.value === "" ? null : e.target.value)
-          }
-          style={{
-            width: "100%",
-            padding: "10px",
-            borderRadius: "8px",
-            border: "1px solid #ccc",
-            marginTop: "6px",
-          }}
+      {/* Sección: Comportamiento */}
+      <SoftBox mb={2} mt={3} sx={{ borderTop: "1px solid #e0e0e0", pt: 2 }}>
+        <SoftTypography
+          variant="caption"
+          fontWeight="bold"
+          color="text"
+          onClick={() => setShowBehavior(!showBehavior)}
+          sx={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 1 }}
         >
-          <option value="">-- Selecciona un estilo --</option>
-          {styles.map((style) => (
-            <option key={style.id} value={style.id}>
-              {style.name} ({style.theme})
-            </option>
-          ))}
-        </select>
+          {showBehavior ? "▾" : "▸"} Comportamiento y mensajes (opcional)
+        </SoftTypography>
+        {showBehavior && (
+          <SoftBox mt={2} display="flex" flexDirection="column" gap={2}>
+            <SoftBox>
+              <SoftTypography variant="caption" color="text">Mensaje de bienvenida</SoftTypography>
+              <textarea
+                value={welcomeMessage}
+                onChange={(e) => setWelcomeMessage(e.target.value)}
+                placeholder="Hola, soy tu asistente virtual. ¿En qué puedo ayudarte?"
+                rows={2}
+                style={{ ...selectStyle, resize: "vertical" }}
+              />
+            </SoftBox>
+            <SoftBox>
+              <SoftTypography variant="caption" color="text">Mensaje de fallback (sin información RAG)</SoftTypography>
+              <textarea
+                value={fallbackMessage}
+                onChange={(e) => setFallbackMessage(e.target.value)}
+                rows={2}
+                style={{ ...selectStyle, resize: "vertical" }}
+              />
+            </SoftBox>
+            <SoftBox>
+              <SoftTypography variant="caption" color="text">Mensaje fuera de alcance</SoftTypography>
+              <textarea
+                value={outOfScopeMessage}
+                onChange={(e) => setOutOfScopeMessage(e.target.value)}
+                rows={2}
+                style={{ ...selectStyle, resize: "vertical" }}
+              />
+            </SoftBox>
+            <SoftBox display="flex" gap={2}>
+              <SoftBox flex={1}>
+                <SoftTypography variant="caption" color="text">Idioma</SoftTypography>
+                <select value={language} onChange={(e) => setLanguage(e.target.value)} style={selectStyle}>
+                  <option value="es">Español</option>
+                  <option value="en">English</option>
+                  <option value="pt">Português</option>
+                  <option value="fr">Français</option>
+                </select>
+              </SoftBox>
+              <SoftBox flex={1}>
+                <SoftTypography variant="caption" color="text">Mensajes de historial</SoftTypography>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={maxHistoryMessages}
+                  onChange={(e) => setMaxHistoryMessages(e.target.value)}
+                  style={selectStyle}
+                />
+              </SoftBox>
+            </SoftBox>
+            <SoftBox display="flex" alignItems="center" gap={2}>
+              <input
+                type="checkbox"
+                id="strictRagMode"
+                checked={strictRagMode}
+                onChange={(e) => setStrictRagMode(e.target.checked)}
+                style={{ width: 16, height: 16 }}
+              />
+              <label htmlFor="strictRagMode" style={{ fontSize: 13, color: "#344767" }}>
+                Modo RAG estricto (solo responde con info de documentos, previene alucinaciones)
+              </label>
+            </SoftBox>
+          </SoftBox>
+        )}
+      </SoftBox>
+
+      {/* Sección: RAG */}
+      <SoftBox mb={2} sx={{ borderTop: "1px solid #e0e0e0", pt: 2 }}>
+        <SoftTypography
+          variant="caption"
+          fontWeight="bold"
+          color="text"
+          onClick={() => setShowRag(!showRag)}
+          sx={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 1 }}
+        >
+          {showRag ? "▾" : "▸"} Configuración RAG (opcional)
+        </SoftTypography>
+        {showRag && (
+          <SoftBox mt={2} display="flex" flexDirection="column" gap={2}>
+            <SoftBox display="flex" gap={2}>
+              <SoftBox flex={1}>
+                <SoftTypography variant="caption" color="text">Score mínimo (0–1)</SoftTypography>
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={ragMinScore}
+                  onChange={(e) => setRagMinScore(e.target.value)}
+                  style={selectStyle}
+                />
+              </SoftBox>
+              <SoftBox flex={1}>
+                <SoftTypography variant="caption" color="text">Top K fragmentos</SoftTypography>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={ragTopK}
+                  onChange={(e) => setRagTopK(e.target.value)}
+                  style={selectStyle}
+                />
+              </SoftBox>
+            </SoftBox>
+            <SoftBox display="flex" gap={2} alignItems="center">
+              <SoftBox flex={1}>
+                <SoftTypography variant="caption" color="text">Modo de citación</SoftTypography>
+                <select value={citationMode} onChange={(e) => setCitationMode(e.target.value)} style={selectStyle}>
+                  <option value="none">Sin citas</option>
+                  <option value="inline">Inline (nombre del documento)</option>
+                </select>
+              </SoftBox>
+              <SoftBox flex={1} display="flex" alignItems="center" gap={1} mt={2}>
+                <input
+                  type="checkbox"
+                  id="ragRerank"
+                  checked={ragRerankEnabled}
+                  onChange={(e) => setRagRerankEnabled(e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                <label htmlFor="ragRerank" style={{ fontSize: 13, color: "#344767" }}>
+                  Reranking semántico
+                </label>
+              </SoftBox>
+            </SoftBox>
+          </SoftBox>
+        )}
+      </SoftBox>
+
+      {/* Sección: Operacional */}
+      <SoftBox mb={3} sx={{ borderTop: "1px solid #e0e0e0", pt: 2 }}>
+        <SoftTypography
+          variant="caption"
+          fontWeight="bold"
+          color="text"
+          onClick={() => setShowOperational(!showOperational)}
+          sx={{ cursor: "pointer", userSelect: "none", display: "flex", alignItems: "center", gap: 1 }}
+        >
+          {showOperational ? "▾" : "▸"} Control operacional (opcional)
+        </SoftTypography>
+        {showOperational && (
+          <SoftBox mt={2} display="flex" flexDirection="column" gap={2}>
+            <SoftBox>
+              <SoftTypography variant="caption" color="text">
+                Temas bloqueados (JSON array, ej: [&quot;política&quot;,&quot;competencia&quot;])
+              </SoftTypography>
+              <input
+                type="text"
+                value={blockedTopics}
+                onChange={(e) => setBlockedTopics(e.target.value)}
+                placeholder='["política","competencia"]'
+                style={selectStyle}
+              />
+            </SoftBox>
+            <SoftBox>
+              <SoftTypography variant="caption" color="text">Límite de mensajes por minuto (vacío = sin límite)</SoftTypography>
+              <input
+                type="number"
+                min={1}
+                value={rateLimitPerMinute}
+                onChange={(e) => setRateLimitPerMinute(e.target.value)}
+                placeholder="Ej: 20"
+                style={selectStyle}
+              />
+            </SoftBox>
+          </SoftBox>
+        )}
       </SoftBox>
 
       {/* Botón enviar */}

@@ -42,11 +42,9 @@ function SignIn() {
 
   // 👇 Handlers simulados para Google y Microsoft
   const handleGoogleLogin = () => {
-    console.log("Login con Google (falta backend)");
   };
 
   const handleMicrosoftLogin = () => {
-    console.log("Login con Microsoft (falta backend)");
   };
 
   return (

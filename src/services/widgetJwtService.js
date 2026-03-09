@@ -50,7 +50,6 @@ export const generateWidgetJwt = (botId, allowedDomain = "localhost") => {
     // JWT final
     const token = `${messageToSign}.${encodedSignature}`;
 
-    console.log(`✅ [WidgetJWT] Generado JWT válido para bot ${botId}`);
     return token;
   } catch (error) {
     console.error("❌ [WidgetJWT] Error generando JWT:", error);
@@ -150,7 +149,6 @@ export const generateWidgetJwtAsync = async (botId, allowedDomain = "localhost")
     // JWT final
     const token = `${messageToSign}.${encodedSignature}`;
 
-    console.log(`✅ [WidgetJWT] Generado JWT válido (async) para bot ${botId}`);
     return token;
   } catch (error) {
     console.error("❌ [WidgetJWT] Error generando JWT (async):", error);
@@ -173,7 +171,6 @@ export const decodeWidgetJwt = (token) => {
     const payloadStr = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
     const payload = JSON.parse(payloadStr);
 
-    console.log("📋 [WidgetJWT] Payload decodificado:", payload);
     return payload;
   } catch (error) {
     console.error("❌ [WidgetJWT] Error decodificando JWT:", error);

@@ -79,6 +79,19 @@ export default function App() {
   const isMobileChat = pathname.startsWith("/chat/mobile"); // Nueva ruta móvil
   const { user, isAuthenticated } = useAuth();
 
+  // Rutas visibles para cada rol
+  const COMERCIAL_ALLOWED_KEYS = ["dashboard", "user-profile", "data-conversations"];
+  const isRouteVisibleForUser = (r) => {
+    if (!r.icon) return false;
+    const roleName = user?.Role?.Name ?? user?.role?.name ?? user?.roleName ?? "";
+    if (roleName === "Comercial") {
+      return COMERCIAL_ALLOWED_KEYS.includes(r.key);
+    }
+    if (r.permission && !(user?.permissions?.includes(r.permission))) return false;
+    if (r.hiddenForRoles?.includes(roleName)) return false;
+    return true;
+  };
+
   // Rutas públicas (deben coincidir con landingRoutes y authRoutes)
   const publicPaths = [
     "/",
@@ -156,19 +169,8 @@ export default function App() {
         } else if (Component && typeof Component === "object") {
           element = Component;
         }
-        // Proteger todas las rutas de dashboard/administrativas (requieren sesión)
-        const isProtectedRoute =
-          route.route.startsWith("/admin") ||
-          route.route.startsWith("/config") ||
-          route.route.startsWith("/billing") ||
-          route.route.startsWith("/data") ||
-          route.route.startsWith("/profile") ||
-          route.route.startsWith("/dashboard") ||
-          route.route.startsWith("/bots") ||
-          route.route.startsWith("/plans") ||
-          route.route.startsWith("/support") ||
-          route.route.startsWith("/documentation") ||
-          route.route.startsWith("/notifications");
+        // Proteger rutas marcadas con protected: true
+        const isProtectedRoute = !!route.protected;
         if (element) {
           return (
             <Route
@@ -189,19 +191,7 @@ export default function App() {
             {route.children.map((child, idx) => {
               const ChildElement =
                 child.element && (typeof child.element === "function" ? <child.element /> : child.element);
-              // Proteger hijos administrativos
-              const isProtectedChild =
-                child.path?.startsWith("admin") ||
-                child.path?.startsWith("config") ||
-                child.path?.startsWith("billing") ||
-                child.path?.startsWith("data") ||
-                child.path?.startsWith("profile") ||
-                child.path?.startsWith("dashboard") ||
-                child.path?.startsWith("bots") ||
-                child.path?.startsWith("plans") ||
-                child.path?.startsWith("support") ||
-                child.path?.startsWith("documentation") ||
-                child.path?.startsWith("notifications");
+              const isProtectedChild = !!child.protected;
               return (
                 <Route
                   key={idx}
@@ -217,19 +207,7 @@ export default function App() {
       // Simple modern route
       if (route.path) {
         const Elem = route.element && typeof route.element === "function" ? <route.element /> : null;
-        // Proteger si es ruta de dashboard/administrativa
-        const isProtected =
-          route.path.startsWith("admin") ||
-          route.path.startsWith("config") ||
-          route.path.startsWith("billing") ||
-          route.path.startsWith("data") ||
-          route.path.startsWith("profile") ||
-          route.path.startsWith("dashboard") ||
-          route.path.startsWith("bots") ||
-          route.path.startsWith("plans") ||
-          route.path.startsWith("support") ||
-          route.path.startsWith("documentation") ||
-          route.path.startsWith("notifications");
+        const isProtected = !!route.protected;
         return <Route key={index} path={route.path} element={isProtected ? <PrivateRoute>{Elem}</PrivateRoute> : Elem} />;
       }
       return null;
@@ -256,12 +234,7 @@ export default function App() {
                 <Sidenav
                   color={sidenavColor}
                   brand={brand}
-                  routes={routes.filter(
-                    r =>
-                      r.icon &&
-                      (!r.permission || (user && user.permissions && user.permissions.includes(r.permission))) &&
-                      !BOT_INTERNAL_ROUTES.includes(r.route)
-                  )}
+                  routes={routes.filter(r => isRouteVisibleForUser(r) && !BOT_INTERNAL_ROUTES.includes(r.route))}
                   onMouseEnter={handleOnMouseEnter}
                   onMouseLeave={handleOnMouseLeave}
                 />
@@ -288,12 +261,7 @@ export default function App() {
               color={sidenavColor}
               brand={brand}
               brandName="VOIA"
-              routes={routes.filter(
-                r =>
-                  r.icon &&
-                  (!r.permission || (user && user.permissions && user.permissions.includes(r.permission))) &&
-                  !BOT_INTERNAL_ROUTES.includes(r.route)
-              )}
+              routes={routes.filter(r => isRouteVisibleForUser(r) && !BOT_INTERNAL_ROUTES.includes(r.route))}
               onMouseEnter={handleOnMouseEnter}
               onMouseLeave={handleOnMouseLeave}
             />

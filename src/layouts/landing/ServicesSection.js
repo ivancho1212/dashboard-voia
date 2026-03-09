@@ -6,7 +6,6 @@ import ServicesSwiper from "./services/ServicesSwiper";
 
 const ServicesSection = () => {
   useEffect(() => {
-    console.log("ServicesSection montada / visible");
   }, []);
 
   return (

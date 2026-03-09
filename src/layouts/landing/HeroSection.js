@@ -7,7 +7,6 @@ const HeroSection = ({ title, subtitle, backgroundImage }) => {
   const videoRef = useRef(null);
 
   useEffect(() => {
-    console.log("HeroSection montada / visible");
 
     // Adelantar un poco el video al montarse para evitar el frame negro inicial
     if (videoRef.current) {

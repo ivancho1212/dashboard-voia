@@ -31,6 +31,7 @@ const userRoutes = [
     icon: <FaUserCircle size={14} />,
     component: UserProfile,
     noCollapse: true,
+    protected: true,
   },
   {
     type: "collapse",
@@ -40,6 +41,7 @@ const userRoutes = [
     icon: <FaFileSignature size={14} />,
     component: Consents, // Ahora apunta a 'layouts/profile/consents'
     noCollapse: true,
+    protected: true,
   },
   {
     type: "collapse",
@@ -49,6 +51,7 @@ const userRoutes = [
     icon: <FaUsers size={14} />,
     component: AdminUserPanel,   // 👈 sin <>
     noCollapse: true,
+    permission: "CanViewUsers",
   },
   {
     name: "Usuarios Registrados",
@@ -57,6 +60,7 @@ const userRoutes = [
     icon: <FaUserCircle size={14} />,
     component: UserProfileList,  // 👈 sin <>
     noCollapse: true,
+    protected: true,
   },
   {
     name: "Bots Asociados",
@@ -65,6 +69,7 @@ const userRoutes = [
     icon: <FaRobot size={14} />,
     component: BotsAssociated,
     noCollapse: true,
+    protected: true,
   },
   {
     name: "Planes y Suscripciones",
@@ -73,6 +78,7 @@ const userRoutes = [
     icon: <FaFileInvoiceDollar size={14} />,
     component: PlanSuscriptionList,
     noCollapse: true,
+    protected: true,
   },
   {
     name: "Tokens",
@@ -81,6 +87,7 @@ const userRoutes = [
     icon: <FaCoins size={14} />, // o cualquier icono que quieras usar
     component: Tokens, // importado desde src/layouts/user/tokens/index.js
     noCollapse: true,
+    protected: true,
   },
   {
     name: "Pagos",
@@ -89,6 +96,7 @@ const userRoutes = [
     icon: <FaCreditCard size={14} />,
     component: Pagos,
     noCollapse: true,
+    protected: true,
   },
 ];
 

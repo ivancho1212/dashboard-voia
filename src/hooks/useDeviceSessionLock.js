@@ -18,15 +18,6 @@ export const useDeviceSessionLock = (conversationId, hubConnection, isMobileView
   const [isBlockedByOtherDevice, setIsBlockedByOtherDevice] = useState(false);
   const [blockingDevice, setBlockingDevice] = useState(null);
   const [blockMessage, setBlockMessage] = useState(null);
-  // LOG: Estado inicial
-  useEffect(() => {
-    console.log('[Hook] Estado inicial:', {
-      isBlockedByOtherDevice,
-      blockingDevice,
-      blockMessage,
-      conversationId
-    });
-  }, []);
   const fallbackTimeoutRef = useRef(null); // Para timeout de fallback
   const pollingIntervalRef = useRef(null); // Para polling fallback
 
@@ -44,19 +35,12 @@ export const useDeviceSessionLock = (conversationId, hubConnection, isMobileView
     // ✅ ESCUCHAR: Móvil se unió a esta conversación
     // � ACCIÓN: Bloquear web - Solo móvil puede estar activo
     hubConnection.on('MobileSessionStarted', (data) => {
-      console.log('📱 [Hook] MobileSessionStarted recibido:', data);
       
       if (data?.conversationId === conversationId) {
-        console.log('[Hook] Coincidencia conversationId:', data.conversationId, conversationId);
         // 🔒 BLOQUEAR WEB cuando móvil se conecta
         setIsBlockedByOtherDevice(true);
         setBlockingDevice('mobile');
         setBlockMessage('Conversación abierta en móvil. Por favor, continúa desde ahí.');
-        console.log('[Hook] Estado bloqueado por móvil:', {
-          isBlockedByOtherDevice: true,
-          blockingDevice: 'mobile',
-          blockMessage: 'Conversación abierta en móvil. Por favor, continúa desde ahí.'
-        });
         
         // 🆕 Establecer fallback: si no recibimos MobileSessionEnded en 6 minutos, desbloquear auto
         if (fallbackTimeoutRef.current) clearTimeout(fallbackTimeoutRef.current);
@@ -103,10 +87,8 @@ export const useDeviceSessionLock = (conversationId, hubConnection, isMobileView
     // ✅ ESCUCHAR: Móvil se cerró
     // 🔓 ACCIÓN: Desbloquear web
     hubConnection.on('MobileSessionEnded', (data) => {
-        console.log('📱 [Hook] MobileSessionEnded recibido:', data);
       
       if (data?.conversationId === conversationId) {
-        console.log('[Hook] Coincidencia conversationId:', data.conversationId, conversationId);
         // 🆕 Limpiar fallback timeout e interval si se recibe el evento
         if (fallbackTimeoutRef.current) {
           clearTimeout(fallbackTimeoutRef.current);
@@ -120,11 +102,6 @@ export const useDeviceSessionLock = (conversationId, hubConnection, isMobileView
         setIsBlockedByOtherDevice(false);
         setBlockingDevice(null);
         setBlockMessage(null);
-        console.log('[Hook] Estado desbloqueado por móvil:', {
-          isBlockedByOtherDevice: false,
-          blockingDevice: null,
-          blockMessage: null
-        });
       }
     });
 

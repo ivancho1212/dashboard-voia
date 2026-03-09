@@ -124,28 +124,15 @@ function SignUp() {
         name: form.name,
         email: form.email,
         password: form.password,
-        roleId: 2,
         documentTypeId: parseInt(form.documentTypeId, 10),
         phone: form.phone,
         address: form.address,
         documentNumber: form.documentNumber,
-        documentPhotoUrl: form.documentPhotoUrl,
-        avatarUrl: form.avatarUrl,
         isVerified: false,
-        recaptchaToken,
-        country: form.country,  // 🔹 nuevo
-        city: form.city,        // 🔹 nuevo
-
-        consents: [
-          {
-            consent_type: "terms_and_conditions",
-            granted: agreement ? 1 : 0,
-          },
-          {
-            consent_type: "privacy_policy",
-            granted: form.dataConsent ? 1 : 0,
-          },
-        ],
+        country: form.country,
+        city: form.city,
+        acceptTerms: agreement,
+        allowAiTraining: form.dataConsent || false,
       };
 
       const res = await register(newUser);
@@ -191,7 +178,6 @@ function SignUp() {
           onClose={() => setShowTermsModal(false)}
           onAccept={() => {
             setShowTermsModal(false);
-            console.log("Usuario aceptó términos con", socialProvider);
           }}
         />
 

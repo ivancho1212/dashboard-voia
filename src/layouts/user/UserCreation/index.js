@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { getRoles, createUser } from "../../../services/userAdminService";
+import { getRoleNames, createUser } from "../../../services/userAdminService";
 import { Grid, TextField, Select, MenuItem, FormControlLabel, Checkbox, Button } from "@mui/material";
 import SoftTypography from "components/SoftTypography";
 
@@ -15,8 +15,6 @@ const UserCreation = () => {
     city: "",
     address: "",
     documentNumber: "",
-    documentPhotoUrl: "",
-    avatarUrl: "",
     documentTypeId: "",
     isVerified: false,
     dataConsent: false,
@@ -27,7 +25,7 @@ const UserCreation = () => {
   const [userSuccess, setUserSuccess] = useState("");
 
   React.useEffect(() => {
-    getRoles().then(setRoles);
+    getRoleNames().then(setRoles);
   }, []);
 
   const handleNewUserChange = (e) => {
@@ -47,7 +45,15 @@ const UserCreation = () => {
       errors.name = "Debe ingresar tanto el nombre como el apellido.";
     }
     if (!emailRegex.test(newUser.email)) errors.email = "Correo electrónico inválido.";
-    if (newUser.password.length < 6) errors.password = "Mínimo 6 caracteres.";
+    if (newUser.password.length < 6) {
+      errors.password = "Mínimo 6 caracteres.";
+    } else if (!/[a-z]/.test(newUser.password)) {
+      errors.password = "Debe contener al menos una letra minúscula.";
+    } else if (!/[A-Z]/.test(newUser.password)) {
+      errors.password = "Debe contener al menos una letra mayúscula.";
+    } else if (!/[^a-zA-Z0-9]/.test(newUser.password)) {
+      errors.password = "Debe contener al menos un carácter especial (Ej: @, #, !).";
+    }
     if (newUser.confirmPassword !== newUser.password) {
       errors.confirmPassword = "Las contraseñas no coinciden.";
     }
@@ -67,30 +73,21 @@ const UserCreation = () => {
     setUserSuccess("");
     if (!validateNewUser()) return;
     try {
+      const selectedRole = roles.find(r => r.id === parseInt(newUser.roleId));
       const userPayload = {
         name: newUser.name,
         email: newUser.email,
         password: newUser.password,
-        roleId: parseInt(newUser.roleId),
+        roleName: selectedRole?.name || "",
         documentTypeId: parseInt(newUser.documentTypeId),
         phone: newUser.phone,
         address: newUser.address,
         documentNumber: newUser.documentNumber,
-        documentPhotoUrl: newUser.documentPhotoUrl,
-        avatarUrl: newUser.avatarUrl,
         isVerified: newUser.isVerified,
         country: newUser.country,
         city: newUser.city,
-        consents: [
-          {
-            consent_type: "terms_and_conditions",
-            granted: true,
-          },
-          {
-            consent_type: "privacy_policy",
-            granted: newUser.dataConsent ? 1 : 0,
-          },
-        ],
+        acceptTerms: true,
+        allowAiTraining: newUser.dataConsent,
       };
       await createUser(userPayload);
       setUserSuccess("Usuario registrado exitosamente");
@@ -104,8 +101,6 @@ const UserCreation = () => {
         city: "",
         address: "",
         documentNumber: "",
-        documentPhotoUrl: "",
-        avatarUrl: "",
         documentTypeId: "",
         isVerified: false,
         dataConsent: false,
@@ -113,26 +108,17 @@ const UserCreation = () => {
       });
       setUserFormErrors({});
     } catch (err) {
-      // Mostrar errores de Identity de forma clara
-      if (err && err.errors && Array.isArray(err.errors)) {
-        const errorList = err.errors.map(e => e.description).join("\n");
-        setUserError(errorList);
-      } else if (err && err.message) {
-        // Si el mensaje es un JSON, intenta extraer los errores
-        try {
-          const parsed = JSON.parse(err.message);
-          if (parsed.errors && Array.isArray(parsed.errors)) {
-            const errorList = parsed.errors.map(e => e.description).join("\n");
-            setUserError(errorList);
-            return;
-          }
-          // Manejo de error de clave foránea o base de datos
-          if (parsed.details && parsed.details.includes("Cannot add or update a child row: a foreign key constraint fails")) {
-            setUserError("El tipo de documento seleccionado no es válido. Por favor, selecciona uno existente.");
-            return;
-          }
-        } catch {}
-        setUserError("No se pudo registrar el usuario. Verifica los datos ingresados.");
+      const data = err?.response?.data;
+      const errorsField = data?.errors ?? data?.Errors;
+      if (Array.isArray(errorsField)) {
+        // IdentityError array: [{code, description}]
+        const msgs = errorsField.map(e => e.description || e.Description).filter(Boolean).join(" | ");
+        setUserError(msgs || "No se pudo registrar el usuario");
+      } else if (errorsField && typeof errorsField === "object") {
+        // ASP.NET model validation: { FieldName: ["msg"] }
+        setUserError(Object.values(errorsField).flat().join(" | "));
+      } else if (data?.message || data?.Message) {
+        setUserError(data.message || data.Message);
       } else {
         setUserError("No se pudo registrar el usuario");
       }
@@ -370,6 +356,7 @@ const UserCreation = () => {
           <TextField
             placeholder="Email"
             name="email"
+            autoComplete="off"
             value={newUser.email}
             onChange={handleNewUserChange}
             fullWidth
@@ -401,7 +388,8 @@ const UserCreation = () => {
           <TextField
             placeholder="Contraseña"
             name="password"
-            type="password"
+            type="text"
+            autoComplete="off"
             value={newUser.password}
             onChange={handleNewUserChange}
             fullWidth
@@ -434,71 +422,14 @@ const UserCreation = () => {
           <TextField
             placeholder="Confirmar contraseña"
             name="confirmPassword"
-            type="password"
+            type="text"
+            autoComplete="off"
             value={newUser.confirmPassword}
             onChange={handleNewUserChange}
             fullWidth
             size="small"
             error={!!userFormErrors.confirmPassword}
             helperText={userFormErrors.confirmPassword}
-            InputProps={{
-              style: {
-                fontSize: 13,
-                textAlign: 'left',
-                padding: '14px 16px',
-                color: '#495057',
-              },
-            }}
-            sx={{
-              '& .MuiInputBase-input': {
-                fontSize: 13,
-                padding: '14px 12px',
-                color: '#495057',
-              },
-              '& .MuiInputBase-input::placeholder': {
-                color: '#b0b0b0',
-                opacity: 1,
-              },
-            }}
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField
-            placeholder="URL Foto Documento"
-            name="documentPhotoUrl"
-            value={newUser.documentPhotoUrl}
-            onChange={handleNewUserChange}
-            fullWidth
-            size="small"
-            InputProps={{
-              style: {
-                fontSize: 13,
-                textAlign: 'left',
-                padding: '14px 16px',
-                color: '#495057',
-              },
-            }}
-            sx={{
-              '& .MuiInputBase-input': {
-                fontSize: 13,
-                padding: '14px 12px',
-                color: '#495057',
-              },
-              '& .MuiInputBase-input::placeholder': {
-                color: '#b0b0b0',
-                opacity: 1,
-              },
-            }}
-          />
-        </Grid>
-        <Grid item xs={12} md={4}>
-          <TextField
-            placeholder="URL Avatar"
-            name="avatarUrl"
-            value={newUser.avatarUrl}
-            onChange={handleNewUserChange}
-            fullWidth
-            size="small"
             InputProps={{
               style: {
                 fontSize: 13,

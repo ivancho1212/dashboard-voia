@@ -8,6 +8,7 @@ import CloudIcon from "@mui/icons-material/Cloud";
 import PaletteIcon from "@mui/icons-material/Palette";
 import MemoryIcon from "@mui/icons-material/Memory";
 import CheckIcon from "@mui/icons-material/Check";
+import LockIcon from "@mui/icons-material/Lock";
 
 // Función para capitalizar texto
 function capitalizar(texto) {
@@ -15,12 +16,12 @@ function capitalizar(texto) {
   return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
 }
 
-function MyBotCard({ template, onSelectTemplate }) {
+function MyBotCard({ template, onSelectTemplate, locked }) {
   if (!template) return null;
   return (
     <Card
       sx={{
-        backgroundColor: "#fff",
+        backgroundColor: locked ? "#f5f5f5" : "#fff",
         borderRadius: "20px",
         padding: 3,
         boxShadow: "0px 10px 30px rgba(0,0,0,0.05)",
@@ -31,12 +32,31 @@ function MyBotCard({ template, onSelectTemplate }) {
         minHeight: 280,
         maxHeight: 330,
         transition: "box-shadow 0.3s ease-in-out, transform 0.3s ease-in-out",
-        "&:hover": {
-          boxShadow: "0 12px 25px rgba(0,0,0,0.1)",
-          transform: "translateY(-4px)",
-        },
+        opacity: locked ? 0.7 : 1,
+        ...(!locked && {
+          "&:hover": {
+            boxShadow: "0 12px 25px rgba(0,0,0,0.1)",
+            transform: "translateY(-4px)",
+          },
+        }),
       }}
     >
+      {/* Overlay de bloqueo */}
+      {locked && (
+        <SoftBox
+          sx={{
+            position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+            borderRadius: "20px", backgroundColor: "rgba(255,255,255,0.5)",
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", zIndex: 2,
+          }}
+        >
+          <LockIcon sx={{ fontSize: 36, color: "#f0a500", mb: 0.5 }} />
+          <SoftTypography variant="caption" fontWeight="bold" color="warning" textAlign="center" px={2}>
+            Adquiere un plan para usar esta plantilla
+          </SoftTypography>
+        </SoftBox>
+      )}
       {/* Título */}
       <SoftTypography
         variant="h5"
@@ -128,26 +148,31 @@ function MyBotCard({ template, onSelectTemplate }) {
         </SoftBox>
 
         {/* Botón con tooltip */}
-        <Tooltip title="Seleccionar este bot">
-          <IconButton
-            onClick={() => onSelectTemplate(template)}
-            sx={{
-              backgroundColor: "info.main",
-              width: 50,
-              height: 50,
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 0,
-              "&:hover": {
-                backgroundColor: "info.dark",
-                boxShadow: "0 0 10px rgba(0,0,0,0.4)",
-              },
-            }}
-          >
-            <CheckIcon sx={{ fontSize: "2.6rem", color: "#fff" }} />
-          </IconButton>
+        <Tooltip title={locked ? "Necesitas un plan activo" : "Seleccionar este bot"}>
+          <span>
+            <IconButton
+              onClick={() => !locked && onSelectTemplate && onSelectTemplate(template)}
+              disabled={locked}
+              sx={{
+                backgroundColor: locked ? "#ccc" : "info.main",
+                width: 50,
+                height: 50,
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: 0,
+                ...(!locked && {
+                  "&:hover": {
+                    backgroundColor: "info.dark",
+                    boxShadow: "0 0 10px rgba(0,0,0,0.4)",
+                  },
+                }),
+              }}
+            >
+              {locked ? <LockIcon sx={{ fontSize: "1.6rem", color: "#fff" }} /> : <CheckIcon sx={{ fontSize: "2.6rem", color: "#fff" }} />}
+            </IconButton>
+          </span>
         </Tooltip>
       </SoftBox>
     </Card>
@@ -156,7 +181,8 @@ function MyBotCard({ template, onSelectTemplate }) {
 
 MyBotCard.propTypes = {
   template: PropTypes.object.isRequired,
-  onSelectTemplate: PropTypes.func.isRequired,
+  onSelectTemplate: PropTypes.func,
+  locked: PropTypes.bool,
 };
 
 export default MyBotCard;

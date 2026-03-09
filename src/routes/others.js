@@ -16,6 +16,7 @@ const otherRoutes = [
     icon: <FaBook size="12px" />,
     component: Documentation,
     noCollapse: true,
+    protected: true,
   },
   {
     type: "collapse",
@@ -25,6 +26,7 @@ const otherRoutes = [
     icon: <FaBell size="12px" />,
     component: Notifications,
     noCollapse: true,
+    protected: true,
   },
 ];
 

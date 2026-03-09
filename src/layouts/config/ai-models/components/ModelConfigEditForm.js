@@ -11,6 +11,8 @@ function ModelConfigEditForm({ initialData, onSave, onCancel }) {
     temperature: initialData.temperature?.toString() || "0.70",
     frequencyPenalty: initialData.frequencyPenalty?.toString() || "0.00",
     presencePenalty: initialData.presencePenalty?.toString() || "0.00",
+    maxTokens: initialData.maxTokens?.toString() || "1024",
+    topP: initialData.topP?.toString() || "1.00",
   });
 
   useEffect(() => {
@@ -20,6 +22,8 @@ function ModelConfigEditForm({ initialData, onSave, onCancel }) {
         temperature: initialData.temperature?.toString() || "0.70",
         frequencyPenalty: initialData.frequencyPenalty?.toString() || "0.00",
         presencePenalty: initialData.presencePenalty?.toString() || "0.00",
+        maxTokens: initialData.maxTokens?.toString() || "1024",
+        topP: initialData.topP?.toString() || "1.00",
       });
     }
   }, [initialData]);
@@ -38,6 +42,8 @@ function ModelConfigEditForm({ initialData, onSave, onCancel }) {
       temperature: parseFloat(form.temperature) || 0.7,
       frequencyPenalty: parseFloat(form.frequencyPenalty) || 0.0,
       presencePenalty: parseFloat(form.presencePenalty) || 0.0,
+      maxTokens: parseInt(form.maxTokens) || 1024,
+      topP: parseFloat(form.topP) || 1.0,
     };
 
     if (!payload.modelName) {
@@ -107,6 +113,37 @@ function ModelConfigEditForm({ initialData, onSave, onCancel }) {
           name="presencePenalty"
           placeholder="Ej: 0.00"
           value={form.presencePenalty}
+          onChange={handleChange}
+          type="number"
+          step="0.01"
+          fullWidth
+        />
+      </SoftBox>
+
+      {/* Max Tokens */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Max Tokens (tokens máximos en la respuesta)
+        </SoftTypography>
+        <SoftInput
+          name="maxTokens"
+          placeholder="Ej: 1024"
+          value={form.maxTokens}
+          onChange={handleChange}
+          type="number"
+          fullWidth
+        />
+      </SoftBox>
+
+      {/* Top P */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Top P (0.0 - 1.0)
+        </SoftTypography>
+        <SoftInput
+          name="topP"
+          placeholder="Ej: 1.00"
+          value={form.topP}
           onChange={handleChange}
           type="number"
           step="0.01"

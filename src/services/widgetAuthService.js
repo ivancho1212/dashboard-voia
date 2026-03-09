@@ -52,19 +52,16 @@ class WidgetAuthService {
     return this.invalidTokens.has(token);
   }
 
-  async getWidgetToken(botId) {
+  async getWidgetToken(botId, clientSecret = null) {
     try {
-      const response = await axios.post(`${API_URL}/BotIntegrations/generate-widget-token`, {
-        botId: botId,
-        allowedDomain: 'localhost' // Para desarrollo
-      }, {
-        headers: {
-          "Content-Type": "application/json"
-        }
+      const body = { botId, allowedDomain: window.location.hostname || 'localhost' };
+      if (clientSecret) body.clientSecret = clientSecret;
+
+      const response = await axios.post(`${API_URL}/BotIntegrations/generate-widget-token`, body, {
+        headers: { "Content-Type": "application/json" }
       });
 
-      const tokenData = response.data;
-      return tokenData.token;
+      return response.data.token;
     } catch (error) {
       throw error;
     }

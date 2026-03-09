@@ -161,6 +161,8 @@ function normalizeMessage(msg) {
     fromName: msg.fromName,
     fromAvatarUrl: msg.fromAvatarUrl,
     replyToText: msg.replyToText,
+    replyToMessageId: msg.replyToMessageId ?? msg.ReplyToMessageId ?? null,
+    replyToImageUrl: msg.replyToImageUrl ?? null,
     id,
     tempId,
     status: msg.status ?? "sent",

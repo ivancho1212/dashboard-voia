@@ -1,33 +1,92 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { getPermissions, getRoles, createRole, updateRole, deleteRole } from "../../../services/userAdminService";
 import { TableContainer, Paper, Table, TableHead, TableRow, TableCell, TableBody, TextField, Button, Checkbox, IconButton, Grid } from "@mui/material";
 import SoftTypography from "components/SoftTypography";
 
 const permissionLabels = {
-  ver_dashboard: 'Ver Dashboard',
-  panel_usuarios: 'Panel de Usuarios',
-  usuarios_registrados: 'Usuarios Registrados',
-  bots_asociados: 'Bots Asociados',
-  planes_suscripciones: 'Planes y Suscripciones',
-  tokens_usuario: 'Tokens de Usuario',
-  pagos_usuario: 'Pagos de Usuario',
-  administrar_planes: 'Administrar Planes',
-  administrar_bots: 'Administrar Bots',
-  entrenamiento_bot: 'Entrenamiento de Bot',
-  datos_captados_bot: 'Datos Captados del Bot',
-  estilos_bot: 'Estilos del Bot',
-  integracion_bot: 'Integración del Bot',
-  vista_previa_bot: 'Vista Previa del Bot',
-  historial_uso_bot: 'Historial de Uso del Bot',
-  conversaciones: 'Conversaciones',
-  documentos: 'Documentos',
-  recursos: 'Recursos',
-  proveedor_ia: 'Proveedor de IA',
-  facturacion: 'Facturación',
-  administrar_soporte: 'Administrar Soporte',
-  asignar_agentes_soporte: 'Asignar Agentes de Soporte',
-  respuestas_rapidas_soporte: 'Respuestas Rápidas de Soporte',
+  // Usuarios
+  CanViewUsers: 'Ver usuarios', CanEditUsers: 'Editar usuarios', CanDeleteUsers: 'Eliminar usuarios',
+  // Bots
+  CanViewBots: 'Ver bots', CanEditBots: 'Editar bots', CanDeleteBots: 'Eliminar bots',
+  CanViewBotProfiles: 'Ver perfiles bot', CanCreateBotProfiles: 'Crear perfiles bot',
+  CanUpdateBotProfiles: 'Editar perfiles bot', CanDeleteBotProfiles: 'Eliminar perfiles bot',
+  CanViewBotStyles: 'Ver estilos bot', CanUpdateBotStyles: 'Editar estilos bot',
+  CanViewBotActions: 'Ver acciones bot', CanCreateBotActions: 'Crear acciones bot',
+  CanUpdateBotActions: 'Editar acciones bot', CanDeleteBotActions: 'Eliminar acciones bot',
+  CanViewBotInstallationSettings: 'Ver config. instalación', CanEditBotInstallationSettings: 'Editar config. instalación',
+  CanViewBotCustomPrompts: 'Ver prompts custom', CanEditBotCustomPrompts: 'Editar prompts custom', CanDeleteBotCustomPrompts: 'Eliminar prompts custom',
+  CanViewBotDataCaptureFields: 'Ver campos captación',
+  CanViewBotIntegrations: 'Ver integraciones', CanEditBotIntegrations: 'Editar integraciones',
+  CanViewBotTemplates: 'Ver plantillas bot', CanViewBotTemplatePrompts: 'Ver prompts plantilla', CanEditBotTemplatePrompts: 'Editar prompts plantilla',
+  CanEditBotTrainingConfigs: 'Editar config. training', CanViewBotTrainingConfigs: 'Ver config. training',
+  CanViewBotIaProviders: 'Ver prov. IA', CanEditBotIaProviders: 'Editar prov. IA',
+  // IA y modelos
+  CanViewAiModelConfigs: 'Ver config. IA', CanEditAiModelConfigs: 'Editar config. IA', CanDeleteAiModelConfigs: 'Eliminar config. IA',
+  // Training y documentos
+  CanUploadFiles: 'Subir archivos',
+  CanViewTrainingCustomTexts: 'Ver textos training',
+  CanViewTrainingUrls: 'Ver URLs training', CanDeleteTrainingUrls: 'Eliminar URLs training',
+  CanViewUploadedDocuments: 'Ver documentos', CanDeleteUploads: 'Eliminar uploads',
+  CanViewKnowledgeChunks: 'Ver chunks RAG',
+  CanEditTemplateTrainingSessions: 'Editar sesiones training',
+  datos_captados_bot: 'Datos captados bot',
+  // Conversaciones
+  CanViewConversations: 'Ver conversaciones', CanEditConversations: 'Editar conversaciones', CanDeleteConversations: 'Eliminar conversaciones',
+  CanViewConversationTags: 'Ver etiquetas', CanEditConversationTags: 'Editar etiquetas', CanDeleteConversationTags: 'Eliminar etiquetas',
+  // Roles y permisos
+  CanManageRoles: 'Gestionar roles', CanManagePermissions: 'Gestionar permisos',
+  ViewRolePermissions: 'Ver permisos rol', AssignPermissionToRole: 'Asignar permisos', RevokePermissionFromRole: 'Revocar permisos',
+  // Suscripciones
+  CanViewSubscriptions: 'Ver suscripciones', CanUpdateSubscriptions: 'Editar suscripciones', CanDeleteSubscriptions: 'Eliminar suscripciones',
+  // Soporte
+  CanViewSupportTickets: 'Ver tickets', CanCreateSupportTickets: 'Crear tickets', CanUpdateSupportTickets: 'Editar tickets', CanDeleteSupportTickets: 'Eliminar tickets',
+  CanViewSupportResponses: 'Ver resp. soporte', CanCreateSupportResponses: 'Crear resp. soporte', CanUpdateSupportResponses: 'Editar resp. soporte', CanDeleteSupportResponses: 'Eliminar resp. soporte',
+  // Estilo y plantillas
+  CanViewStyleTemplates: 'Ver plantillas estilo', CanCreateStyleTemplates: 'Crear plantillas estilo', CanUpdateStyleTemplates: 'Editar plantillas estilo', CanDeleteStyleTemplates: 'Eliminar plantillas estilo',
+  // Imágenes generadas
+  CanViewGeneratedImages: 'Ver imágenes IA', CanCreateGeneratedImages: 'Crear imágenes IA', CanUpdateGeneratedImages: 'Editar imágenes IA', CanDeleteGeneratedImages: 'Eliminar imágenes IA',
+  // Logs y preferencias
+  CanViewTokenUsageLogs: 'Ver logs tokens', CanEditTokenUsageLogs: 'Editar logs tokens', CanDeleteTokenUsageLogs: 'Eliminar logs tokens',
+  CanViewUserPreferences: 'Ver preferencias',
+  // Misc
+  Admin: 'Admin completo',
 };
+
+const toLabel = (name) => permissionLabels[name] || name.replace(/^Can/, '').replace(/([A-Z])/g, ' $1').trim();
+
+const PERMISSION_GROUPS = [
+  { label: 'Usuarios', keys: ['CanViewUsers','CanEditUsers','CanDeleteUsers'] },
+  { label: 'Bots', keys: ['CanViewBots','CanEditBots','CanDeleteBots'] },
+  { label: 'Estilos y perfiles', keys: ['CanViewBotStyles','CanUpdateBotStyles','CanViewBotProfiles','CanCreateBotProfiles','CanUpdateBotProfiles','CanDeleteBotProfiles'] },
+  { label: 'Conversaciones', keys: ['CanViewConversations','CanEditConversations','CanDeleteConversations','CanViewConversationTags','CanEditConversationTags','CanDeleteConversationTags'] },
+  { label: 'Datos captados', keys: ['datos_captados_bot','CanViewBotDataCaptureFields'] },
+  { label: 'Training y documentos', keys: ['CanUploadFiles','CanViewUploadedDocuments','CanDeleteUploads','CanViewTrainingCustomTexts','CanViewTrainingUrls','CanDeleteTrainingUrls','CanViewBotTrainingConfigs','CanEditBotTrainingConfigs','CanEditTemplateTrainingSessions','CanViewKnowledgeChunks'] },
+  { label: 'Prompts y plantillas', keys: ['CanViewBotCustomPrompts','CanEditBotCustomPrompts','CanDeleteBotCustomPrompts','CanViewBotTemplates','CanViewBotTemplatePrompts','CanEditBotTemplatePrompts'] },
+  { label: 'Acciones e integraciones', keys: ['CanViewBotActions','CanCreateBotActions','CanUpdateBotActions','CanDeleteBotActions','CanViewBotIntegrations','CanEditBotIntegrations','CanViewBotInstallationSettings','CanEditBotInstallationSettings'] },
+  { label: 'Proveedores IA y modelos', keys: ['CanViewBotIaProviders','CanEditBotIaProviders','CanViewAiModelConfigs','CanEditAiModelConfigs','CanDeleteAiModelConfigs'] },
+  { label: 'Suscripciones', keys: ['CanViewSubscriptions','CanUpdateSubscriptions','CanDeleteSubscriptions'] },
+  { label: 'Soporte', keys: ['CanViewSupportTickets','CanCreateSupportTickets','CanUpdateSupportTickets','CanDeleteSupportTickets','CanViewSupportResponses','CanCreateSupportResponses','CanUpdateSupportResponses','CanDeleteSupportResponses'] },
+  { label: 'Estilos globales', keys: ['CanViewStyleTemplates','CanCreateStyleTemplates','CanUpdateStyleTemplates','CanDeleteStyleTemplates'] },
+  { label: 'Imágenes IA', keys: ['CanViewGeneratedImages','CanCreateGeneratedImages','CanUpdateGeneratedImages','CanDeleteGeneratedImages'] },
+  { label: 'Roles y permisos', keys: ['CanManageRoles','CanManagePermissions','ViewRolePermissions','AssignPermissionToRole','RevokePermissionFromRole'] },
+  { label: 'Logs y preferencias', keys: ['CanViewTokenUsageLogs','CanEditTokenUsageLogs','CanDeleteTokenUsageLogs','CanViewUserPreferences'] },
+  { label: 'Admin', keys: ['Admin'] },
+];
+
+const groupPermissions = (permissions) => {
+  const byName = Object.fromEntries(permissions.map(p => [p.name, p]));
+  const grouped = [];
+  const used = new Set();
+  for (const group of PERMISSION_GROUPS) {
+    const perms = group.keys.map(k => byName[k]).filter(Boolean);
+    if (perms.length) { grouped.push({ label: group.label, perms }); perms.forEach(p => used.add(p.name)); }
+  }
+  const rest = permissions.filter(p => !used.has(p.name));
+  if (rest.length) grouped.push({ label: 'Otros', perms: rest });
+  return grouped;
+};
+
+const PREVIEW_COUNT = 5;
 
 const RoleManagement = () => {
   const [roles, setRoles] = useState([]);
@@ -35,7 +94,10 @@ const RoleManagement = () => {
   const [newRole, setNewRole] = useState({ name: "", permissions: [] });
   const [editRolePerms, setEditRolePerms] = useState([]);
   const [editingRoleId, setEditingRoleId] = useState(null);
+  const [expandedRoles, setExpandedRoles] = useState({});
   const [loading, setLoading] = useState(true);
+
+  const toggleExpand = (roleId) => setExpandedRoles(prev => ({ ...prev, [roleId]: !prev[roleId] }));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -163,34 +225,27 @@ const RoleManagement = () => {
           />
         </Grid>
       </Grid>
-      <TableContainer component={Paper} sx={{ mb: 3, borderRadius: 2, boxShadow: 1, maxWidth: '100vw', overflowX: 'auto' }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              {permissions.map((perm) => (
-                <TableCell key={perm.id} align="center" sx={{ fontWeight: 'bold', minWidth: 100, borderBottom: 0, px: 0.5, py: 0.1 }}>
-                  <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>{permissionLabels[perm.key] || perm.name}</span>
-                </TableCell>
-              ))}
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            <TableRow>
-              {permissions.map((perm) => (
-                <TableCell key={perm.id} align="center" sx={{ borderTop: 0, px: 0.5, py: 0 }}>
+      <Paper sx={{ mb: 3, borderRadius: 2, boxShadow: 1, p: 2 }}>
+        {groupPermissions(permissions).map(({ label, perms }) => (
+          <div key={label} style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#8392ab', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4, borderBottom: '1px solid #e9ecef', paddingBottom: 2 }}>{label}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+              {perms.map((perm) => (
+                <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: 4, width: '25%', cursor: 'pointer', padding: '2px 8px 2px 0' }}>
                   <Checkbox
                     checked={newRole.permissions.includes(perm.id)}
                     onChange={() => handleNewRolePermChange(perm.id)}
                     size="small"
                     color="primary"
-                    sx={{ mt: 0, mb: 3, p: 0 }}
+                    sx={{ p: 0.3 }}
                   />
-                </TableCell>
+                  <span style={{ fontSize: 12, color: '#495057', lineHeight: 1.3 }}>{toLabel(perm.name)}</span>
+                </label>
               ))}
-            </TableRow>
-          </TableBody>
-        </Table>
-      </TableContainer>
+            </div>
+          </div>
+        ))}
+      </Paper>
       <Grid container justifyContent="flex-end" mb={2}>
         <Button variant="contained" color="primary" onClick={handleCreateRole} sx={{ minWidth: 180, color: '#fff' }}>CREAR ROL</Button>
       </Grid>
@@ -209,26 +264,27 @@ const RoleManagement = () => {
               <React.Fragment key={role.id}>
                 <TableRow>
                   <TableCell sx={{ textAlign: 'center', fontWeight: 500 }}>{role.name}</TableCell>
-                  <TableCell sx={{ textAlign: 'center' }}>
-                    {permissions
-                      .filter((perm) => role.permissions.includes(perm.id))
-                      .map((perm) => (
-                        <span key={perm.id} style={{
-                          display: 'inline-block',
-                          background: '#e0e7ef',
-                          color: '#344767',
-                          borderRadius: 12,
-                          padding: '2px 10px',
-                          fontSize: 12,
-                          margin: '2px 4px',
-                        }}>
-                          {permissionLabels[perm.key] || perm.name}
-                        </span>
-                      ))
-                    }
-                    {permissions.filter((perm) => role.permissions.includes(perm.id)).length === 0 && (
-                      <span style={{ color: '#b0b0b0', fontSize: 12 }}>Sin permisos</span>
-                    )}
+                  <TableCell>
+                    {(() => {
+                      const assigned = permissions.filter(p => role.permissions.includes(p.id));
+                      if (assigned.length === 0) return <span style={{ color: '#b0b0b0', fontSize: 12 }}>Sin permisos</span>;
+                      const expanded = expandedRoles[role.id];
+                      const visible = expanded ? assigned : assigned.slice(0, PREVIEW_COUNT);
+                      return (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '3px 4px' }}>
+                          {visible.map(perm => (
+                            <span key={perm.id} style={{ background: '#e0e7ef', color: '#344767', borderRadius: 12, padding: '2px 10px', fontSize: 12 }}>
+                              {toLabel(perm.name)}
+                            </span>
+                          ))}
+                          {assigned.length > PREVIEW_COUNT && (
+                            <button onClick={() => toggleExpand(role.id)} style={{ border: 'none', background: 'none', color: '#1a73e8', fontSize: 12, cursor: 'pointer', padding: '2px 6px', fontWeight: 500 }}>
+                              {expanded ? '▲ Menos' : `+${assigned.length - PREVIEW_COUNT} más`}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell sx={{ textAlign: 'center' }}>
                     <IconButton onClick={() => {
@@ -245,36 +301,27 @@ const RoleManagement = () => {
                 {editingRoleId === role.id && (
                   <TableRow>
                     <TableCell colSpan={3} sx={{ background: '#f9f9f9' }}>
-                      <Table size="small">
-                        <TableHead>
-                          <TableRow>
-                            {permissions.map((perm) => (
-                              <TableCell key={perm.id} align="center" sx={{ fontWeight: 'bold', minWidth: 100, borderBottom: 0, px: 0.5, py: 0.1 }}>
-                                <span style={{ fontSize: 12, fontWeight: 500, lineHeight: 1 }}>{permissionLabels[perm.key] || perm.name}</span>
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          <TableRow>
-                            {permissions.map((perm) => (
-                              <TableCell key={perm.id} align="center" sx={{ borderTop: 0, px: 0.5, py: 0 }}>
-                                <Checkbox
-                                  checked={editRolePerms.includes(perm.id)}
-                                  onChange={() => {
-                                    setEditRolePerms((prev) => prev.includes(perm.id)
-                                      ? prev.filter((p) => p !== perm.id)
-                                      : [...prev, perm.id]);
-                                  }}
-                                  size="small"
-                                  color="primary"
-                                  sx={{ mt: 0, mb: 3, p: 0 }}
-                                />
-                              </TableCell>
-                            ))}
-                          </TableRow>
-                        </TableBody>
-                      </Table>
+                      <div style={{ marginBottom: 12 }}>
+                        {groupPermissions(permissions).map(({ label, perms }) => (
+                          <div key={label} style={{ marginBottom: 10 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#8392ab', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4, borderBottom: '1px solid #e9ecef', paddingBottom: 2 }}>{label}</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+                              {perms.map((perm) => (
+                                <label key={perm.id} style={{ display: 'flex', alignItems: 'center', gap: 4, width: '25%', cursor: 'pointer', padding: '2px 8px 2px 0' }}>
+                                  <Checkbox
+                                    checked={editRolePerms.includes(perm.id)}
+                                    onChange={() => setEditRolePerms(prev => prev.includes(perm.id) ? prev.filter(p => p !== perm.id) : [...prev, perm.id])}
+                                    size="small"
+                                    color="primary"
+                                    sx={{ p: 0.3 }}
+                                  />
+                                  <span style={{ fontSize: 12, color: '#495057', lineHeight: 1.3 }}>{toLabel(perm.name)}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                       <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
                         <Button 
                           variant="contained" 

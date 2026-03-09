@@ -6,7 +6,6 @@ import { getConversationHistory, getMessagesByConversationId } from "services/co
 import { createHubConnection } from "services/signalr";
 
 const ConversationHistory = ({ conversationId, userName }) => {
-  console.log('[ConversationHistory] Render', { conversationId, userName });
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -17,7 +16,6 @@ const ConversationHistory = ({ conversationId, userName }) => {
   const signalRConnection = useRef(null);
 
   useEffect(() => {
-    console.log('[ConversationHistory] useEffect - conversationId:', conversationId);
     if (!conversationId) {
       console.warn('[ConversationHistory] conversationId no definido');
       return;
@@ -28,8 +26,6 @@ const ConversationHistory = ({ conversationId, userName }) => {
 
     getConversationHistory(conversationId)
       .then((data) => {
-        console.log('[ConversationHistory] getConversationHistory result:', data);
-        console.log('[ConversationHistory] typeof data:', typeof data, '| Array.isArray:', Array.isArray(data));
         let msgs = [];
         if (Array.isArray(data)) {
           msgs = data;
@@ -38,15 +34,12 @@ const ConversationHistory = ({ conversationId, userName }) => {
         } else if (data && Array.isArray(data.History)) {
           msgs = data.History;
         }
-        console.log('[ConversationHistory] mensajes recibidos:', Array.isArray(msgs) ? msgs.length : 'no array');
         if (msgs.length > 0) {
           if (isMounted) setMessages(msgs);
           setLoading(false);
         } else {
           getMessagesByConversationId(conversationId)
             .then((fallbackMsgs) => {
-              console.log('[ConversationHistory] getMessagesByConversationId result:', fallbackMsgs);
-              console.log('[ConversationHistory] fallbackMsgs typeof:', typeof fallbackMsgs, '| Array.isArray:', Array.isArray(fallbackMsgs));
               if (isMounted) setMessages(Array.isArray(fallbackMsgs) ? fallbackMsgs : []);
               setLoading(false);
             })
@@ -75,22 +68,15 @@ const ConversationHistory = ({ conversationId, userName }) => {
     let connection;
     (async () => {
       try {
-        console.log('[ConversationHistory] 🔄 Iniciando conexión SignalR...');
         connection = await createHubConnection();
         signalRConnection.current = connection;
         
-        console.log('[ConversationHistory] 🔌 Conectando a SignalR...');
         await connection.start();
-        console.log('[ConversationHistory] ✅ SignalR conectado');
         
-        console.log('[ConversationHistory] 🚪 Intentando unirse al grupo (JoinRoom)...', conversationId);
         await connection.invoke("JoinRoom", Number(conversationId));
-        console.log('[ConversationHistory] ✅ Unido exitosamente al grupo de conversación', conversationId);
         
         // Registrar listener para ReceiveMessage
         connection.on("ReceiveMessage", (msg) => {
-          console.log('[ConversationHistory] 📨 ReceiveMessage recibido:', msg);
-          console.log('[ConversationHistory] 📨 conversationId del mensaje:', msg.conversationId, '| conversationId actual:', conversationId);
           
           // ✅ Verificar que el mensaje es para esta conversación
           if (msg.conversationId && msg.conversationId !== Number(conversationId)) {
@@ -103,6 +89,7 @@ const ConversationHistory = ({ conversationId, userName }) => {
           // Normalizar formato
           const normalized = {
             id: msg.id ?? msg.Id,
+            conversationId: Number(conversationId),
             from: msg.from ?? msg.From ?? msg.sender ?? msg.Sender ?? (msg.UserId || msg.PublicUserId ? "user" : null),
             text: msg.text ?? msg.messageText ?? msg.MessageText ?? msg.Text ?? "",
             timestamp: msg.timestamp ?? msg.createdAt ?? msg.CreatedAt ?? new Date().toISOString(),
@@ -115,41 +102,33 @@ const ConversationHistory = ({ conversationId, userName }) => {
             images: msg.images ?? null,
           };
           
-          console.log('[ConversationHistory] 📨 Mensaje normalizado:', normalized);
           
           // Evitar duplicados por id
           setMessages((prev) => {
             if (prev.some((m) => m.id === normalized.id)) {
-              console.log('[ConversationHistory] ⚠️ Mensaje duplicado ignorado, id:', normalized.id);
               return prev;
             }
-            console.log('[ConversationHistory] ✅ Mensaje agregado a la lista');
             return [...prev, normalized];
           });
         });
         
         // Registrar listeners para otros eventos (para evitar warnings en consola)
         connection.on("InitialConversations", (data) => {
-          console.log('[ConversationHistory] InitialConversations recibido:', data);
         });
         
         connection.on("ReceiveTyping", (convId, userId) => {
-          console.log('[ConversationHistory] ReceiveTyping:', convId, userId);
         });
         
         connection.on("ReceiveStopTyping", (convId, userId) => {
-          console.log('[ConversationHistory] ReceiveStopTyping:', convId, userId);
         });
         
         connection.on("NewConversationOrMessage", (data) => {
-          console.log('[ConversationHistory] NewConversationOrMessage recibido:', data);
         });
         
         connection.on("Heartbeat", (convId) => {
           // No loggeamos heartbeats para no saturar la consola
         });
         
-        console.log('[ConversationHistory] ✅ Todos los event listeners registrados');
         
       } catch (e) {
         console.error('[ConversationHistory] ❌ Error conectando a SignalR:', e);
@@ -160,7 +139,6 @@ const ConversationHistory = ({ conversationId, userName }) => {
     return () => {
       isMounted = false;
       if (signalRConnection.current) {
-        console.log('[ConversationHistory] 🔌 Desconectando SignalR...');
         signalRConnection.current.stop();
         signalRConnection.current = null;
       }
@@ -186,7 +164,7 @@ const ConversationHistory = ({ conversationId, userName }) => {
       {messages.length === 0 ? (
         <div style={{ color: "#888" }}>No hay mensajes en esta conversación.</div>
       ) : (
-        <MessageList messages={messages} messageRefs={messageRefs} />
+        <MessageList messages={messages} messageRefs={messageRefs} conversationId={conversationId} />
       )}
     </div>
   );

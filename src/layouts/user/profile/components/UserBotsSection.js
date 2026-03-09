@@ -13,7 +13,6 @@ function UserBotsSection() {
         const res = await axios.get("http://localhost:5006/api/Users/me", {
           withCredentials: true, // si usas cookies/jwt
         });
-        console.log("API Response for /api/Users/me:", res.data); // Add this line
         setBots(res.data.bots || []); // Extract bots from response
       } catch (err) {
         console.error("Error cargando bots:", err);

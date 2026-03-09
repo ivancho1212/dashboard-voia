@@ -3,6 +3,7 @@ import PropTypes from "prop-types";
 import { TransitionGroup, CSSTransition } from "react-transition-group";
 import MessageBubble from "./MessageBubble";
 
+
 const MessageList = ({
   messages,
   messageRefs,
@@ -14,23 +15,72 @@ const MessageList = ({
   primaryColor,
   secondaryColor,
   isMobileView,
+  onJumpToReply,
+  highlightedMessageId,
+  conversationId,
 }) => (
   <>
     <TransitionGroup style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
       {messages
         .filter((msg) => !msg?.meta?.internalOnly)
         .map((msg, index) => {
-          const nodeRef = messageRefs.current[index];
+          const msgId = String(msg.id || msg.tempId || index);
+          if (!messageRefs.current[msgId]) {
+            messageRefs.current[msgId] = React.createRef();
+          }
+          const nodeRef = messageRefs.current[msgId];
+
+          // Construir resolvedReplyTo usando replyToImageUrl (guardado en el mensaje)
+          // con fallback a búsqueda en el array si el campo aún no está cacheado
+          let resolvedReplyTo = null;
+          if (msg.replyToMessageId || msg.replyToText) {
+            if (msg.replyToImageUrl) {
+              resolvedReplyTo = { imageUrl: msg.replyToImageUrl, text: null, fileName: null, fileType: null };
+            } else if (msg.replyToMessageId) {
+              const original = messages.find(
+                (m) =>
+                  String(m.id) === String(msg.replyToMessageId) ||
+                  String(m.tempId) === String(msg.replyToMessageId)
+              );
+              if (original) {
+                const imgFile =
+                  (original.file?.fileType?.startsWith("image/") && original.file.fileUrl ? original.file : null) ||
+                  (original.images?.length > 0 && original.images[0].fileUrl ? original.images[0] : null) ||
+                  original.multipleFiles?.find((f) => f?.fileType?.startsWith("image/") && f.fileUrl) ||
+                  null;
+                const firstFile = original.file || original.multipleFiles?.[0] || original.images?.[0] || null;
+                resolvedReplyTo = {
+                  imageUrl: imgFile?.fileUrl || null,
+                  text: original.text || null,
+                  fileName: firstFile?.fileName || null,
+                  fileType: firstFile?.fileType || null,
+                };
+              }
+            }
+            // Si no se pudo resolver el original pero hay replyToText, igual pasar para fallback en MessageBubble
+            if (!resolvedReplyTo && msg.replyToText) {
+              resolvedReplyTo = { imageUrl: null, text: null, fileName: null, fileType: null };
+            }
+          }
+
           // Asegura que timestamp sea string
           const safeMsg = {
             ...msg,
             timestamp:
               typeof msg.timestamp === "string"
                 ? msg.timestamp
-                : (msg.timestamp ? msg.timestamp.toISOString() : undefined)
+                : msg.timestamp
+                ? msg.timestamp.toISOString()
+                : undefined,
           };
           // Usa uniqueKey para archivos (id/tempId vacíos del servidor), o tempId/id/text/index
-          const key = msg.uniqueKey || msg.tempId || msg.id || (msg.multipleFiles?.[0]?.fileUrl ?? msg.file?.fileUrl) || msg.text || `msg-${index}`;
+          const key =
+            msg.uniqueKey ||
+            msg.tempId ||
+            msg.id ||
+            (msg.multipleFiles?.[0]?.fileUrl ?? msg.file?.fileUrl) ||
+            msg.text ||
+            `msg-${index}`;
           return (
             <CSSTransition key={key} timeout={300} classNames="fade" nodeRef={nodeRef}>
               <MessageBubble
@@ -41,6 +91,10 @@ const MessageList = ({
                 fontFamily={fontFamily}
                 openImageModal={openImageModal}
                 isMobileView={isMobileView}
+                onJumpToReply={onJumpToReply}
+                highlightedMessageId={highlightedMessageId}
+                resolvedReplyTo={resolvedReplyTo}
+                conversationId={conversationId}
               />
             </CSSTransition>
           );
@@ -82,6 +136,9 @@ MessageList.propTypes = {
   primaryColor: PropTypes.string,
   secondaryColor: PropTypes.string,
   isMobileView: PropTypes.bool,
+  onJumpToReply: PropTypes.func,
+  highlightedMessageId: PropTypes.string,
+  conversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 const TypingDots = ({ color = "#000" }) => (

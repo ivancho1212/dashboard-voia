@@ -11,7 +11,7 @@ const dashboardRoutes = [
     icon: <SpaceShipIcon size="12px" color="dark" />,
     component: Dashboard,
     noCollapse: true,
-    permission: "CanViewDashboard", // <-- Asocia el permiso necesario
+    protected: true,
   },
 ];
 

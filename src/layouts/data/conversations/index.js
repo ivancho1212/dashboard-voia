@@ -48,6 +48,11 @@ import {
   blockUserByConversation,
 } from "services/conversationsService";
 import { useAuth } from "contexts/AuthContext";
+import {
+  restoreConversation,
+  deleteConversationPermanently,
+  getTrashConversations,
+} from "services/conversationsService";
 
 // 🔧 Helper: Normalizar timestamp con todas las variantes del backend + fix de timezone
 function normalizeTimestamp(timestamp) {
@@ -79,36 +84,119 @@ function normalizeTimestamp(timestamp) {
   }
 }
 
-function Conversations() {
-  // Mostrar papelera y actualizar lista tras eliminar
-  const handleShowTrash = async () => {
-    // Solo permitir ver la papelera si el usuario es el admin (id === '1')
-    if (userId !== '1') return;
-    setShowTrash(true);
-    await fetchTrash();
-  };
+// 🔧 Helper: Ordenar conversaciones con prioridad inteligente
+// Prioridad: 1) Online (heartbeat activo) 2) No leídos  3) Más recientes
+const CONV_HEARTBEAT_THRESHOLD = 45 * 1000;
+function sortConversations(a, b) {
+  const now = Date.now();
+  const aOnline = a.lastHeartbeatTime && (now - new Date(a.lastHeartbeatTime).getTime() < CONV_HEARTBEAT_THRESHOLD);
+  const bOnline = b.lastHeartbeatTime && (now - new Date(b.lastHeartbeatTime).getTime() < CONV_HEARTBEAT_THRESHOLD);
+  const aUnread = (a.unreadCount || 0) > 0;
+  const bUnread = (b.unreadCount || 0) > 0;
+  // 0–3: online+unread=3, online=2, unread=1, ninguno=0
+  const aPriority = (aOnline ? 2 : 0) + (aUnread ? 1 : 0);
+  const bPriority = (bOnline ? 2 : 0) + (bUnread ? 1 : 0);
+  if (bPriority !== aPriority) return bPriority - aPriority;
+  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+}
 
-  // Cuando se elimina una conversación, actualizar la lista principal
-  const handleMovedToTrash = (conversationId) => {
-    setConversationList((prev) => prev.filter((c) => c.id !== conversationId));
-    // Opcional: recargar papelera si está abierta
-    if (showTrash) fetchTrash();
-  };
+// ─── Helpers: persistir IDs eliminados en localStorage ────────────────────────
+const VOIA_TRASH_IDS_KEY = "voia_trash_ids";
+
+function getLocalTrashIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(VOIA_TRASH_IDS_KEY) || "[]")); }
+  catch (e) { return new Set(); }
+}
+function addLocalTrashId(id) {
+  const ids = getLocalTrashIds();
+  ids.add(String(id));
+  localStorage.setItem(VOIA_TRASH_IDS_KEY, JSON.stringify([...ids]));
+}
+function removeLocalTrashId(id) {
+  const ids = getLocalTrashIds();
+  ids.delete(String(id));
+  localStorage.setItem(VOIA_TRASH_IDS_KEY, JSON.stringify([...ids]));
+}
+function clearLocalTrashIds() {
+  localStorage.removeItem(VOIA_TRASH_IDS_KEY);
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
+function Conversations() {
   // Estado para mostrar papelera
   const [showTrash, setShowTrash] = useState(false);
   const [trashConversations, setTrashConversations] = useState([]);
 
-  // Función para cargar conversaciones en papelera (simulado, reemplaza por tu API real)
+  // Cargar conversaciones de la papelera desde la API
   const fetchTrash = async () => {
-    const all = await getConversationsWithLastMessage();
-    setTrashConversations(all.filter(c => c.status === 'trash'));
+    const data = await getTrashConversations();
+    setTrashConversations(data);
   };
 
-  // Función para vaciar papelera (solo userId 1)
+  // Mostrar papelera (requiere permiso)
+  const handleShowTrash = async () => {
+    // Limpiar tabs abiertos de la vista de conversaciones antes de entrar al basurero
+    setOpenTabs([]);
+    setActiveTab(null);
+    setShowTrash(true);
+    await fetchTrash();
+  };
+
+  // Cuando se mueve al basurero: quitar de lista y cerrar el tab si estaba abierto
+  const handleMovedToTrash = (conversationId) => {
+    const convIdStr = String(conversationId);
+    addLocalTrashId(convIdStr); // ✅ Persistir para sobrevivir recargas
+    setConversationList((prev) => prev.filter((c) => String(c.id) !== convIdStr));
+    setOpenTabs((prev) => {
+      const updated = prev.filter((t) => String(t.id) !== convIdStr);
+      setActiveTab((currentActive) => {
+        if (String(currentActive) === convIdStr) {
+          return updated[0]?.id || null;
+        }
+        return currentActive;
+      });
+      return updated;
+    });
+    if (showTrash) fetchTrash();
+  };
+
+  // Restaurar conversación desde la papelera
+  const handleRestoreConversation = async (conversationId) => {
+    await restoreConversation(conversationId);
+    removeLocalTrashId(conversationId); // ✅ Quitar del filtro local
+    setTrashConversations((prev) => prev.filter((c) => String(c.id) !== String(conversationId)));
+    await fetchConversations();
+  };
+
+  // Abrir conversación desde la papelera en el ChatPanel (solo lectura del historial)
+  const handleSelectTrashConversation = (convId) => {
+    const conv = trashConversations.find((c) => String(c.id) === String(convId));
+    if (!conv) return;
+    const normalized = {
+      id: String(conv.id),
+      alias: `Sesión ${conv.sessionNumber ?? conv.id}`,
+      lastMessage: conv.lastMessage || "",
+      updatedAt: conv.updatedAt || new Date().toISOString(),
+      status: conv.status || "trash",
+      blocked: false,
+      isWithAI: false,
+      unreadCount: 0,
+    };
+    handleSelectConversation(normalized);
+  };
+
+  // Eliminar conversación permanentemente
+  const handleDeleteConversationPermanently = async (conversationId) => {
+    await deleteConversationPermanently(conversationId);
+    removeLocalTrashId(conversationId); // ✅ Ya no necesita estar en el filtro local
+    setTrashConversations((prev) => prev.filter((c) => String(c.id) !== String(conversationId)));
+  };
+
+  // Vaciar papelera: eliminar permanentemente todas las conversaciones en papelera
   const handleEmptyTrash = async () => {
-    if (userId !== '1') return;
+    await Promise.all(trashConversations.map((c) => deleteConversationPermanently(c.id)));
+    clearLocalTrashIds(); // ✅ Limpiar todo el filtro local
     setTrashConversations([]);
-    // TODO: Llama a tu endpoint real para vaciar la papelera
   };
   const tabContainerRef = useRef(null);
   const tabRefs = useRef({});
@@ -170,6 +258,12 @@ function Conversations() {
   const [replyToMessage, setReplyToMessage] = useState(null);
   const [highlightedIds, setHighlightedIds] = useState([]);
   const iaPausedMapRef = useRef({});
+  // Rastrear mensajes no leídos de conversaciones nuevas que aún no están en la lista
+  // (porque "newconversation" es async y llega tarde respecto a "newconversationormessage")
+  const pendingFirstMessageUnreadRef = useRef({});
+  // Rastrear el último mensaje de conversaciones que llegaron por "newconversationormessage"
+  // antes de que "newconversation" haya agregado la conv a la lista
+  const pendingLastMessageRef = useRef({});
 
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const [loadingConversationId, setLoadingConversationId] = useState(null);
@@ -181,8 +275,7 @@ function Conversations() {
   const [blockDialogIsBlocked, setBlockDialogIsBlocked] = useState(false);
   const [blockDialogLoading, setBlockDialogLoading] = useState(false);
 
-  const { user, isAuthenticated } = useAuth();
-  const userId = user?.id ?? user?.userId ?? user?.sub;
+  const { isAuthenticated } = useAuth();
   const theme = useTheme();
 
   // TabsBar implemented with dnd-kit (sortable)
@@ -220,10 +313,10 @@ function Conversations() {
         role="button"
         aria-pressed={activeTab === tab.id}
       >
-        <Tooltip title={tab.alias || `Usuario ${String(tab.id).slice(-4)}`} arrow>
+        <Tooltip title={`Sesión ${(conversationList.find(c => c.id === tab.id) ?? trashConversations.find(c => String(c.id) === tab.id))?.sessionNumber ?? tab.id}`} arrow>
           <Box display="flex" alignItems="center" sx={{ maxWidth: { xs: 140, sm: 160, md: 180, lg: 200 }, flexShrink: 0, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
             <Box component="span" sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff', fontSize: '0.80rem' }}>
-              {tab.alias || `Usuario ${String(tab.id).slice(-4)}`}
+              {`Sesión ${(conversationList.find(c => c.id === tab.id) ?? trashConversations.find(c => String(c.id) === tab.id))?.sessionNumber ?? tab.id}`}
             </Box>
             <IconButton size="small" onClick={(e) => {
               e.stopPropagation();
@@ -336,9 +429,7 @@ function Conversations() {
   };
 
   const handleUpdateConversationStatus = async (conversationId, newStatus) => {
-    console.log(`🔄 [StatusChange] Cambiando estado de conv=${conversationId} a "${newStatus}"...`);
     const result = await updateConversationStatus(conversationId, newStatus);
-    console.log(`🔄 [StatusChange] Resultado API:`, result);
     if (result) {
       setConversationList((prevList) =>
         prevList.map((item) => (item.id == conversationId ? { ...item, status: newStatus } : item))
@@ -346,7 +437,6 @@ function Conversations() {
       setOpenTabs((prevTabs) =>
         prevTabs.map((item) => (item.id == conversationId ? { ...item, status: newStatus } : item))
       );
-      console.log(`✅ [StatusChange] Estado local actualizado a "${newStatus}" para conv=${conversationId}`);
     } else {
       console.warn(`⚠️ [StatusChange] API devolvió null/false para conv=${conversationId}. Estado NO actualizado.`);
     }
@@ -366,10 +456,10 @@ function Conversations() {
       try {
         // SignalR JS recibe nombres en minúsculas; registrar en minúsculas para que los handlers se invoquen
         connection.on("initialconversations", (data) => {
-          console.log('📥 [InitialConversations] Recibido con', data?.length || 0, 'conversaciones');
           if (Array.isArray(data)) {
+            const localTrashIds = getLocalTrashIds();
+            data = data.filter((conv) => !localTrashIds.has(String(conv.id))); // ✅ Excluir papelera local
             setConversationList((prevList) => {
-              console.log('📥 [InitialConversations] prevList tiene', prevList.length, 'conversaciones');
               
               // Crear mapa de conversaciones del backend
               const backendMap = new Map();
@@ -390,10 +480,6 @@ function Conversations() {
                   const useExisting = new Date(prevUpdatedAt) > new Date(backendUpdatedAt);
                   
                   if (prevConv.id === '738') {
-                    console.log('📥 [InitialConversations] Procesando 738:');
-                    console.log('  - prevUpdatedAt (NORMALIZADO):', prevUpdatedAt);
-                    console.log('  - backendUpdatedAt (NORMALIZADO):', backendUpdatedAt);
-                    console.log('  - useExisting:', useExisting);
                   }
                   
                   backendMap.delete(prevConv.id); // Marcar como procesado
@@ -403,12 +489,18 @@ function Conversations() {
                   const backendUnread = backend.unreadCount || backend.unreadAdminMessages || 0;
                   const maxUnread = Math.max(frontendUnread, backendUnread);
                   
-                  console.log(`🔄 [InitialConversations] Conv ${prevConv.id}: frontend=${frontendUnread}, backend=${backendUnread}, max=${maxUnread}`);
                   
                   if (useExisting) {
-                    return { ...prevConv, unreadCount: maxUnread };
+                    // Always use backend sessionNumber (authoritative) even when keeping prevConv data
+                    return { ...prevConv, unreadCount: maxUnread, sessionNumber: backend.sessionNumber ?? prevConv.sessionNumber };
                   } else {
-                    return { ...backend, updatedAt: backendUpdatedAt, unreadCount: maxUnread };
+                    return {
+                      ...backend,
+                      updatedAt: backendUpdatedAt,
+                      unreadCount: maxUnread,
+                      // Preservar activeMobileSession de prevConv si el backend no lo envía
+                      activeMobileSession: backend.activeMobileSession ?? prevConv.activeMobileSession,
+                    };
                   }
                 }
                 // Conversación solo en prevList: mantener
@@ -423,19 +515,9 @@ function Conversations() {
                 });
               });
               
-              // Ordenar: más recientes primero
-              const sorted = merged.sort((a, b) => {
-                const timeA = new Date(a.updatedAt).getTime();
-                const timeB = new Date(b.updatedAt).getTime();
-                return timeB - timeA;
-              });
-              
-              console.log('📥 [InitialConversations] Top 5 después de merge:', sorted.slice(0, 5).map(c => ({ id: c.id, updatedAt: c.updatedAt })));
-              const pos738 = sorted.findIndex(c => c.id === '738');
-              if (pos738 !== -1) {
-                console.log(`📥 [InitialConversations] Conversación 738 quedó en posición: ${pos738 + 1}`);
-              }
-              return sorted;
+              // Ordenar: online primero, luego no leídos, luego más recientes
+              // sessionNumber viene del backend — preservar en el merge
+              return merged.sort(sortConversations);
             });
           }
         });
@@ -447,36 +529,38 @@ function Conversations() {
           setTypingState((prev) => ({ ...prev, [convId]: { isTyping: true, sender } }));
         });
         connection.on("newconversation", (conv) => {
-          console.log("🆕 Nueva conversación recibida:", conv);
-          // Convertir id a string para evitar errores de tipo
-          // ✅ CRÍTICO: Usar fecha actual como updatedAt para garantizar que aparezca primero
-          const convStr = { 
-            ...conv, 
+          const convStr = {
+            ...conv,
             id: String(conv.id),
-            updatedAt: new Date().toISOString() // Forzar fecha actual para nuevas conversaciones
+            updatedAt: new Date().toISOString()
           };
-          // Cargar mensajes de la conversación recién creada
+          const convIdStr = convStr.id;
+
+          // ✅ Agregar la conversación a la lista INMEDIATAMENTE (sin esperar el fetch async)
+          // para que newconversationormessage pueda incrementar unreadCount correctamente.
+          setConversationList((prevList) => {
+            if (prevList.some((c) => String(c.id) === convIdStr)) return prevList;
+            // Consumir cualquier unread y lastMessage acumulados antes de que la conv existiera en la lista
+            const pendingUnread = pendingFirstMessageUnreadRef.current[convIdStr] || 0;
+            const pendingLastMsg = pendingLastMessageRef.current[convIdStr] || "";
+            if (pendingUnread > 0) delete pendingFirstMessageUnreadRef.current[convIdStr];
+            if (pendingLastMsg) delete pendingLastMessageRef.current[convIdStr];
+            const newConv = { ...convStr, lastMessage: pendingLastMsg || conv.lastMessage || "", unreadCount: pendingUnread };
+            return [newConv, ...prevList].sort(sortConversations);
+          });
+
+          // Luego actualizar lastMessage y cargar mensajes en background
           import("services/conversationsService").then(({ getMessagesByConversationId }) => {
-            getMessagesByConversationId(convStr.id).then((msgs) => {
-              // Actualizar mensajes en el estado
-              setMessages((prev) => ({ ...prev, [convStr.id]: msgs || [] }));
-              // Actualizar el último mensaje en la conversación
+            getMessagesByConversationId(convIdStr).then((msgs) => {
+              setMessages((prev) => ({ ...prev, [convIdStr]: msgs || [] }));
               const lastMsg = msgs && msgs.length > 0 ? msgs[msgs.length - 1].text : "";
-              setConversationList((prevList) => {
-                // Evitar duplicados por id
-                let updated;
-                if (prevList.some((c) => String(c.id) === String(convStr.id))) {
-                  updated = prevList.map(c => c.id === convStr.id ? { ...c, lastMessage: lastMsg, updatedAt: new Date().toISOString() } : c);
-                } else {
-                  updated = [{ ...convStr, lastMessage: lastMsg }, ...prevList];
-                }
-                // ✅ Reordenar: conversaciones más recientes primero
-                return updated.sort((a, b) => {
-                  const timeA = new Date(a.updatedAt).getTime();
-                  const timeB = new Date(b.updatedAt).getTime();
-                  return timeB - timeA;
-                });
-              });
+              if (lastMsg) {
+                setConversationList((prevList) =>
+                  prevList
+                    .map((c) => String(c.id) === convIdStr ? { ...c, lastMessage: lastMsg } : c)
+                    .sort(sortConversations)
+                );
+              }
             });
           });
         });
@@ -494,20 +578,34 @@ function Conversations() {
         });
 
         connection.on("heartbeat", (conversationId) => {
-          console.log(`❤️ Heartbeat recibido para conversación ${conversationId}`);
           const convId = String(conversationId);
           setConversationList(prevList =>
-            prevList.map(conv =>
-              conv.id === convId
-                ? { ...conv, lastHeartbeatTime: new Date().toISOString() }
-                : conv
-            )
+            prevList
+              .map(conv =>
+                conv.id === convId
+                  ? { ...conv, lastHeartbeatTime: new Date().toISOString() }
+                  : conv
+              )
+              .sort(sortConversations)
+          );
+        });
+
+        // ✅ Sesión móvil cerrada por inactividad: limpiar heartbeat y estado en la lista
+        connection.on("mobilesessionended", (data) => {
+          const convId = String(data?.conversationId ?? data);
+          setConversationList(prevList =>
+            prevList
+              .map(conv =>
+                conv.id === convId
+                  ? { ...conv, lastHeartbeatTime: null, activeMobileSession: false, blocked: false, status: "closed" }
+                  : conv
+              )
+              .sort(sortConversations)
           );
         });
 
         // ✅ Escuchar señal de que el widget se cerró y apagar punto verde inmediatamente
         connection.on("heartbeatstopped", (conversationId) => {
-          console.log(`💤 HeartbeatStopped recibido para conversación ${conversationId}`);
           const convId = String(conversationId);
           setConversationList(prevList =>
             prevList.map(conv =>
@@ -520,26 +618,27 @@ function Conversations() {
 
         // ✅ Escuchar cambios de estado de conversación (pendiente, resuelta, cerrada, etc.)
         connection.on("conversationstatuschanged", (conversationId, newStatus) => {
-          console.log(`🔄 ConversationStatusChanged recibido: conv=${conversationId}, status=${newStatus}`);
           const convId = String(conversationId);
-          setConversationList(prevList =>
-            prevList.map(conv =>
-              conv.id === convId
-                ? { ...conv, status: newStatus }
-                : conv
-            )
-          );
-          setOpenTabs(prevTabs =>
-            prevTabs.map(item =>
-              item.id === convId
-                ? { ...item, status: newStatus }
-                : item
-            )
-          );
+          if (newStatus === "trash") {
+            // Eliminar de la lista y de los tabs abiertos
+            addLocalTrashId(convId);
+            setConversationList(prevList => prevList.filter(conv => conv.id !== convId));
+            setOpenTabs(prevTabs => prevTabs.filter(item => item.id !== convId));
+          } else {
+            setConversationList(prevList =>
+              prevList.map(conv =>
+                conv.id === convId ? { ...conv, status: newStatus } : conv
+              )
+            );
+            setOpenTabs(prevTabs =>
+              prevTabs.map(item =>
+                item.id === convId ? { ...item, status: newStatus } : item
+              )
+            );
+          }
         });
 
         connection.on("newconversationormessage", (msg) => {
-          console.log('📨 [NewConversationOrMessage] Evento recibido:', msg);
           
           const convId = String(msg.conversationId);
           const newMsg = { ...msg };
@@ -578,14 +677,6 @@ function Conversations() {
 
           setMessages((prev) => {
             const existing = prev[convId] || [];
-            // 📎 DEBUG: Log mensaje recibido
-            console.log('📨 [SignalR] Mensaje recibido para conversación', convId, ':', {
-              id: newMsg.id,
-              text: newMsg.text?.substring(0, 30),
-              hasFiles: newMsg.files?.length > 0,
-              hasImages: newMsg.images?.length > 0,
-              fromRole: newMsg.fromRole
-            });
             
             // Fusionar por id, priorizando mensajes únicos
             const allMessages = [...existing, newMsg];
@@ -607,14 +698,9 @@ function Conversations() {
                 const hasExistingFiles = existingMsg.files?.length > 0 || existingMsg.images?.length > 0;
                 
                 if (hasNewFiles && !hasExistingFiles) {
-                  console.log('📎 [SignalR] Preservando archivos del mensaje nuevo:', {
-                    newFiles: normalizedMsg.files?.length || 0,
-                    newImages: normalizedMsg.images?.length || 0
-                  });
                   // Priorizar mensaje con archivos
                   uniqueMap.set(key, normalizedMsg);
                 } else {
-                  console.log('🔄 [SignalR] Manteniendo mensaje existente (ya tiene archivos o más completo)');
                 }
               } else {
                 uniqueMap.set(key, normalizedMsg);
@@ -635,27 +721,30 @@ function Conversations() {
 
           setConversationList((prevList) => {
             const currentTimestamp = new Date().toISOString();
-            console.log('📋 [NewConversationOrMessage] Actualizando lista para convId:', convId);
-            console.log('📋 Fecha actual para updatedAt:', currentTimestamp);
-            
+
             // Buscar la conversación antes de actualizar
             const targetConv = prevList.find(c => `${c.id}` === convId);
-            console.log('📋 Conversación ANTES de actualizar:', targetConv ? { id: targetConv.id, updatedAt: targetConv.updatedAt, unreadCount: targetConv.unreadCount } : 'NO ENCONTRADA');
-            
+
             // ✅ Solo incrementar unreadCount si es mensaje del usuario público
             const shouldIncrementUnread = newMsg.fromRole === "user";
-            console.log('🔵 [UnreadCount] fromRole:', newMsg.fromRole, '| shouldIncrement:', shouldIncrementUnread, '| current:', targetConv?.unreadCount || 0);
-            console.log('🔵 [UnreadCount] mensaje completo:', { id: newMsg.id, text: newMsg.text?.substring(0, 30), fromRole: newMsg.fromRole, from: newMsg.from });
-            
+
+            // Si la conversación NO está en la lista todavía (porque "newconversation" aún no procesó el async),
+            // acumular el conteo pendiente para que "newconversation" lo aplique al agregar la conv.
+            if (!targetConv && shouldIncrementUnread) {
+              pendingFirstMessageUnreadRef.current[convId] = (pendingFirstMessageUnreadRef.current[convId] || 0) + 1;
+              // También guardar el último mensaje para mostrarlo cuando se agregue la conv
+              pendingLastMessageRef.current[convId] = newMsg.text || (hasImages || hasFiles ? "📷 Imagen o Archivo" : "Nuevo Mensaje");
+              return prevList; // Sin cambios por ahora
+            }
+
             const updated = prevList.map((conv) => {
               if (`${conv.id}` === convId) {
                 const newUnreadCount = shouldIncrementUnread ? (conv.unreadCount || 0) + 1 : conv.unreadCount;
-                console.log(`🔵 [UnreadCount UPDATE] Conv ${convId}: ${conv.unreadCount || 0} → ${newUnreadCount}`);
-                return { 
-                  ...conv, 
+                return {
+                  ...conv,
                   unreadCount: newUnreadCount,
-                  updatedAt: currentTimestamp, 
-                  lastMessage: newMsg.text || (hasImages || hasFiles ? "📷 Imagen o Archivo" : "Nuevo Mensaje") 
+                  updatedAt: currentTimestamp,
+                  lastMessage: newMsg.text || (hasImages || hasFiles ? "📷 Imagen o Archivo" : "Nuevo Mensaje")
                 };
               }
               return conv;
@@ -663,21 +752,14 @@ function Conversations() {
             
             // Verificar que se actualizó
             const updatedTarget = updated.find(c => `${c.id}` === convId);
-            console.log('📋 Conversación DESPUÉS de actualizar:', updatedTarget ? { id: updatedTarget.id, updatedAt: updatedTarget.updatedAt, unreadCount: updatedTarget.unreadCount } : 'NO ENCONTRADA');
             
-            // ✅ Reordenar: conversaciones más recientes primero
-            const sorted = updated.sort((a, b) => {
-              const timeA = new Date(a.updatedAt).getTime();
-              const timeB = new Date(b.updatedAt).getTime();
-              return timeB - timeA;
-            });
+            // ✅ Reordenar: online primero, luego no leídos, luego más recientes
+            const sorted = updated.sort(sortConversations);
             
             // Mostrar top 5 después de ordenar
-            console.log('📋 TOP 5 después de ordenar:', sorted.slice(0, 5).map(c => ({ id: c.id, updatedAt: c.updatedAt })));
             
             // Encontrar posición de la conversación actualizada
             const position = sorted.findIndex(c => `${c.id}` === convId);
-            console.log(`📋 Conversación ${convId} está en posición: ${position + 1}`);
             
             return sorted;
           });
@@ -685,7 +767,6 @@ function Conversations() {
 
         // ✅ CRÍTICO: Escuchar evento "ReceiveMessage" para mensajes en tiempo real
         connection.on("receivemessage", (msg) => {
-            console.log('📨 [ReceiveMessage] Mensaje recibido en tiempo real:', msg);
             
             const convId = String(msg.conversationId);
             const newMsg = { ...msg };
@@ -739,10 +820,6 @@ function Conversations() {
                 );
                 
                 if (optimisticIndex !== -1) {
-                  console.log('🔄 [ReceiveMessage] Reemplazando mensaje optimista con mensaje definitivo del servidor', {
-                    optimisticId: existing[optimisticIndex].id,
-                    definitiveId: newMsg.id
-                  });
                   // Reemplazar el mensaje optimista con el definitivo
                   const updated = [...existing];
                   updated[optimisticIndex] = { ...newMsg, __replaced: true };
@@ -758,7 +835,6 @@ function Conversations() {
               
               // Evitar duplicados por id
               if (existing.some(m => String(m.id) === String(newMsg.id))) {
-                console.log('⚠️ [ReceiveMessage] Mensaje duplicado ignorado, id:', newMsg.id);
                 return prev;
               }
               
@@ -777,34 +853,23 @@ function Conversations() {
                 return timeA - timeB;
               });
               
-              // Log para debugging
-              console.log('📊 [ReceiveMessage] Orden de mensajes:', merged.map(m => ({
-                id: m.id,
-                from: m.fromRole,
-                text: m.text?.substring(0, 30) + '...',
-                timestamp: m.timestamp
-              })));
-              
               // Actualizar cache
               try {
                 messageCache.current.set(convId, merged);
               } catch (e) {}
               
-              console.log('✅ [ReceiveMessage] Mensaje agregado a conversación', convId, '- Total mensajes:', merged.length);
               return { ...prev, [convId]: merged };
             });
 
             // Actualizar último mensaje en la lista de conversaciones (SIN incrementar unreadCount)
             setConversationList((prevList) => {
               const targetConv = prevList.find(c => `${c.id}` === convId);
-              console.log('📨 [ReceiveMessage] Actualizando lastMessage SIN tocar unreadCount:', targetConv ? { id: targetConv.id, unreadCount: targetConv.unreadCount } : 'NO ENCONTRADA');
               
               // ✅ IMPORTANTE: NO incrementamos unreadCount aquí - solo en newconversationormessage
               // Esto evita el doble conteo cuando ambos eventos se disparan para el mismo mensaje
               
               const updated = prevList.map((conv) => {
                 if (`${conv.id}` === convId) {
-                  console.log(`📨 [ReceiveMessage] Conv ${convId}: Manteniendo unreadCount en ${conv.unreadCount || 0}`);
                   return { 
                     ...conv, 
                     // ✅ Mantener unreadCount sin cambios - solo actualizar mensaje y timestamp
@@ -815,42 +880,33 @@ function Conversations() {
                 return conv;
               });
               
-              console.log('📨 [ReceiveMessage] lastMessage actualizado, unreadCount preservado');
               
-              // ✅ Reordenar: conversaciones más recientes primero
-              return updated.sort((a, b) => {
-                const timeA = new Date(a.updatedAt).getTime();
-                const timeB = new Date(b.updatedAt).getTime();
-                return timeB - timeA;
-              });
+              // ✅ Reordenar: online primero, luego no leídos, luego más recientes
+              return updated.sort(sortConversations);
             });
           });
 
           connection.on("updateconversation", (conv) => {
             if (!conv || !conv.id) return;
             const convId = String(conv.id);
-            console.log('[UpdateConversation] recibido:', conv);
             setConversationList((prevList) => {
               const updated = prevList.map((c) =>
                 c.id === convId
-                  ? { 
-                      ...c, 
-                      lastMessage: conv.lastMessage, 
-                      updatedAt: new Date().toISOString(), 
-                      status: conv.status, 
-                      blocked: conv.blocked, 
+                  ? {
+                      ...c,
+                      lastMessage: conv.lastMessage,
+                      updatedAt: new Date().toISOString(),
+                      status: conv.status,
+                      blocked: conv.blocked,
+                      activeMobileSession: conv.activeMobileSession ?? c.activeMobileSession,
                       isWithAI: conv.isWithAI,
                       // Limpiar heartbeat si la conversación ya no está activa
                       lastHeartbeatTime: (conv.status === "inactiva" || conv.status === "cerrada" || conv.status === "resuelta") ? null : c.lastHeartbeatTime
                     }
                   : c
               );
-              // ✅ Reordenar: conversaciones más recientes primero
-              return updated.sort((a, b) => {
-                const timeA = new Date(a.updatedAt).getTime();
-                const timeB = new Date(b.updatedAt).getTime();
-                return timeB - timeA;
-              });
+              // ✅ Reordenar: online primero, luego no leídos, luego más recientes
+              return updated.sort(sortConversations);
             });
             // Fusionar el mensaje recibido por socket con los del backend, evitando duplicados
             if (conv.lastMessage) {
@@ -858,13 +914,11 @@ function Conversations() {
                 const existing = prev[convId] || [];
                 // Si el array está vacío, espera a que el backend lo llene y luego fusiona
                 if (existing.length === 0) {
-                  console.log('[UpdateConversation] Mensajes aún no cargados, esperando backend.');
                   return prev;
                 }
                 // Evitar duplicados por texto y timestamp
                 const alreadyExists = existing.some(m => m.text === conv.lastMessage && m.timestamp === conv.updatedAt);
                 if (alreadyExists) {
-                  console.log('[UpdateConversation] Mensaje ya existe en el chat:', conv.lastMessage);
                   return prev;
                 }
                 const newMsg = {
@@ -875,7 +929,6 @@ function Conversations() {
                   fromRole: 'user',
                   __fromUpdateConversation: true
                 };
-                console.log('[UpdateConversation] Fusionando mensaje al chat:', newMsg);
                 // Normalizar timestamps y ordenar
                 const normalized = [...existing, newMsg].map(m => ({
                   ...m,
@@ -905,10 +958,8 @@ function Conversations() {
               const now = Math.floor(Date.now() / 1000);
               
               if (payload.exp && payload.exp < now) {
-                console.log('🔄 [SignalR] Token expirado durante reconexión, intentando refresh...');
                 import('services/authService').then(({ refreshAccessToken }) => {
                   refreshAccessToken()
-                    .then(() => console.log('✅ [SignalR] Token renovado durante reconexión'))
                     .catch(() => {
                       console.error('❌ [SignalR] Refresh falló durante reconexión');
                       connection.stop().catch(() => {});
@@ -922,7 +973,6 @@ function Conversations() {
         });
         
         connection.onreconnected((connectionId) => {
-          console.log('✅ [SignalR] Reconectado exitosamente. ConnectionId:', connectionId);
           setIsConnected(true);
           // Reiniciar la conexión admin
           connection.invoke("JoinAdmin").catch((err) => {
@@ -944,10 +994,8 @@ function Conversations() {
                 const now = Math.floor(Date.now() / 1000);
                 
                 if (payload.exp && payload.exp < now) {
-                  console.log('🔄 [SignalR] Token expirado al cerrar conexión, intentando refresh...');
                   import('services/authService').then(({ refreshAccessToken }) => {
                     refreshAccessToken()
-                      .then(() => console.log('✅ [SignalR] Token renovado tras cierre'))
                       .catch(() => console.warn('⚠️ [SignalR] Refresh falló tras cierre — la próxima interacción redirigirá al login'));
                   });
                 }
@@ -960,7 +1008,6 @@ function Conversations() {
 
         if (connection.state === "Disconnected") {
           await connection.start();
-          console.log("SignalR connection started. State:", connection.state);
           if (connection.state === "Connected") {
             await connection.invoke("JoinAdmin");
             setIsConnected(true);
@@ -968,17 +1015,31 @@ function Conversations() {
         }
       } catch (error) {
         console.error("❌ Error al conectar con SignalR:", error);
-        
-        // Verificar si el error es por autenticación
+
+        // Verificar si el error es por autenticación (401)
         if (error.message && (error.message.includes('401') || error.message.includes('Unauthorized'))) {
-          console.error('❌ [SignalR] Error de autenticación detectado');
-          setLoadError('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
-          setTimeout(() => {
-            localStorage.removeItem('token');
-            localStorage.removeItem('refreshToken');
-            localStorage.removeItem('user');
-            window.location.href = '/authentication/sign-in';
-          }, 2000);
+          console.warn('🔄 [SignalR] Error 401 al conectar — intentando refresh de token antes de redirigir...');
+          try {
+            const { refreshAccessToken } = await import('services/authService');
+            await refreshAccessToken();
+            // El accessTokenFactory leerá el nuevo token de localStorage en el próximo start()
+            if (connection.state === "Disconnected") {
+              await connection.start();
+              if (connection.state === "Connected") {
+                await connection.invoke("JoinAdmin");
+                setIsConnected(true);
+              }
+            }
+          } catch (refreshErr) {
+            console.error('❌ [SignalR] Refresh falló, redirigiendo al login...');
+            setLoadError('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
+            setTimeout(() => {
+              localStorage.removeItem('token');
+              localStorage.removeItem('refreshToken');
+              localStorage.removeItem('user');
+              window.location.href = '/authentication/sign-in';
+            }, 2000);
+          }
         }
       }
     };
@@ -986,7 +1047,6 @@ function Conversations() {
     setupSignalR();
 
     return () => {
-      console.log('🧹 [Cleanup] Limpiando conexión SignalR y estados...');
       const conn = connectionRef.current;
       if (!conn) return;
       connectionRef.current = null;
@@ -998,6 +1058,7 @@ function Conversations() {
         conn.off("newconversationormessage");
         conn.off("heartbeat");
         conn.off("heartbeatstopped");
+        conn.off("mobilesessionended");
         conn.off("conversationstatuschanged");
         conn.off("updateconversation");
         conn.off("receivemessage");
@@ -1006,7 +1067,6 @@ function Conversations() {
       // ✅ CRÍTICO: Detener conexión sin importar el estado para evitar memory leaks
       try {
         if (conn.state !== "Disconnected") {
-          console.log('🔌 [Cleanup] Deteniendo conexión SignalR...');
           conn.stop().catch((err) => {
             console.warn('⚠️ [Cleanup] Error al detener SignalR:', err);
           });
@@ -1018,7 +1078,6 @@ function Conversations() {
       messageCache.current.clear();
       messageCursor.current.clear();
       visibleCounts.current.clear();
-      console.log('✅ [Cleanup] Limpieza completa');
     };
   }, []);
 
@@ -1037,7 +1096,6 @@ function Conversations() {
       // Cerrar conexión SignalR si existe
       const conn = connectionRef.current;
       if (conn && (conn.state === "Connected" || conn.state === "Connecting")) {
-        console.log('🔌 [FetchConversations] Cerrando conexión SignalR por falta de token');
         conn.stop().catch(() => {});
       }
       return;
@@ -1054,7 +1112,6 @@ function Conversations() {
         try {
           const { refreshAccessToken } = await import('services/authService');
           await refreshAccessToken();
-          console.log('✅ [FetchConversations] Token renovado, continuando...');
           // Token renovado, continuar con la petición
         } catch (refreshErr) {
           console.error('❌ [FetchConversations] No se pudo renovar token expirado:', refreshErr?.message);
@@ -1064,7 +1121,6 @@ function Conversations() {
           // Cerrar conexión SignalR
           const conn = connectionRef.current;
           if (conn && (conn.state === "Connected" || conn.state === "Connecting")) {
-            console.log('🔌 [FetchConversations] Cerrando conexión SignalR por token expirado');
             conn.stop().catch(() => {});
           }
           
@@ -1086,40 +1142,47 @@ function Conversations() {
     setLoadingList(true);
     setLoadError(null);
     try {
-      console.log('📥 [FetchConversations] Iniciando...');
       const data = await getConversationsWithLastMessage();
       const raw = Array.isArray(data) ? data : (data?.conversations || data?.data || []);
-      const fetchedConversations = (Array.isArray(raw) ? raw : []).map((conv) => ({ 
-        ...conv, 
-        id: String(conv.id), 
+      // DEBUG: log unread counts from backend to diagnose badge issue
+      if (process.env.NODE_ENV === 'development') {
+        const unreadSummary = (Array.isArray(raw) ? raw : []).map(c => ({
+          id: c.id ?? c.Id,
+          unreadAdminMessages: c.unreadAdminMessages ?? c.UnreadAdminMessages ?? c.unreadCount ?? c.UnreadCount,
+        })).filter(x => x.unreadAdminMessages > 0);
+        if (unreadSummary.length > 0) console.log('[fetchConversations] unread from backend:', unreadSummary);
+      }
+      const localTrashIds = getLocalTrashIds(); // ✅ IDs movidos a papelera localmente
+      const fetchedConversations = (Array.isArray(raw) ? raw : [])
+        .filter((conv) => !localTrashIds.has(String(conv.id))) // ✅ Excluir eliminados localmente
+        .map((conv) => ({
+        ...conv,
+        id: String(conv.id),
         updatedAt: normalizeTimestamp(conv.lastMessage?.timestamp || conv.updatedAt)
       }));
-      
-      console.log('📥 [FetchConversations] Obtenidas', fetchedConversations.length, 'conversaciones del backend');
-      
+
+
+      // ✅ Leer conteos no leídos guardados en localStorage (persisten entre recargas)
+      let storedUnread = {};
+      try { storedUnread = JSON.parse(localStorage.getItem("voia_admin_unread") || "{}"); } catch (e) {}
+
       setConversationList(prevList => {
-        console.log('📥 [FetchConversations] prevList tiene', prevList.length, 'conversaciones');
-        
+
         const merged = fetchedConversations.map(conv => {
           // No sobrescribir updatedAt si existe en prevList y es más reciente
           const existing = prevList.find(c => String(c.id) === String(conv.id));
           const existingNormalized = existing ? normalizeTimestamp(existing.updatedAt) : null;
           const convNormalized = normalizeTimestamp(conv.updatedAt);
           const useExisting = existingNormalized && new Date(existingNormalized) > new Date(convNormalized);
-          
+
           // ✅ CRÍTICO: Preservar unreadCount del frontend si es mayor
-          const frontendUnread = existing?.unreadCount || 0;
+          // También usar localStorage como fallback cuando prevList está vacío (primera carga/recarga)
+          const frontendUnread = Math.max(existing?.unreadCount || 0, storedUnread[conv.id] || 0);
           const backendUnread = conv.unreadCount || conv.unreadAdminMessages || 0;
           const maxUnread = Math.max(frontendUnread, backendUnread);
           
-          console.log(`🔄 [FetchConversations] Conv ${conv.id}: frontend=${frontendUnread}, backend=${backendUnread}, max=${maxUnread}`);
           
           if (conv.id === '738') {
-            console.log('📥 [FetchConversations] Procesando 738:');
-            console.log('  - Backend updatedAt (NORMALIZADO):', convNormalized);
-            console.log('  - Existing updatedAt (NORMALIZADO):', existingNormalized);
-            console.log('  - useExisting:', useExisting);
-            console.log('  - Frontend unreadCount:', frontendUnread, '| Backend unreadCount:', backendUnread, '| Max:', maxUnread);
           }
           
           if (useExisting) {
@@ -1133,19 +1196,13 @@ function Conversations() {
           if (!merged.some(c => c.id === conv.id)) merged.push(conv);
         });
         
-        // ✅ Ordenar conversaciones: más recientes primero
-        const sorted = merged.sort((a, b) => {
-          const timeA = new Date(a.updatedAt).getTime();
-          const timeB = new Date(b.updatedAt).getTime();
-          return timeB - timeA; // Descendente: más recientes primero
-        });
-        
-        console.log('📥 [FetchConversations] Top 5 después de merge:', sorted.slice(0, 5).map(c => ({ id: c.id, updatedAt: c.updatedAt })));
+        // ✅ Ordenar: online primero, luego no leídos, luego más recientes
+        const sorted = merged.sort(sortConversations);
+
         const pos738 = sorted.findIndex(c => c.id === '738');
         if (pos738 !== -1) {
-          console.log(`📥 [FetchConversations] Conversación 738 quedó en posición: ${pos738 + 1}`);
         }
-        
+
         return sorted;
       });
       
@@ -1213,15 +1270,33 @@ function Conversations() {
     fetchData();
   }, [isAuthenticated]);
 
+  // Re-fetch conversations after SignalR connects to ensure unread counts are fresh from DB.
+  // The REST fetch and initialconversations SignalR event may race; a 1.5s delayed re-fetch
+  // guarantees both have settled and unread badge counts reflect the actual DB state.
+  useEffect(() => {
+    if (!isConnected) return;
+    const timer = setTimeout(() => { fetchConversations(); }, 1500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
+
+  // ✅ Persistir conteos no leídos en localStorage para sobrevivir recargas de página
+  useEffect(() => {
+    if (conversationList.length === 0) return;
+    try {
+      const counts = {};
+      conversationList.forEach(c => { if (c.unreadCount > 0) counts[c.id] = c.unreadCount; });
+      localStorage.setItem("voia_admin_unread", JSON.stringify(counts));
+    } catch (e) {}
+  }, [conversationList]);
+
   const handleSelectConversation = async (conv) => {
     const idStr = `${conv.id}`;
     
     // ✅ CRÍTICO: Unirse al grupo de SignalR para recibir mensajes en tiempo real
     if (connectionRef.current?.state === "Connected") {
       try {
-        console.log(`🚪 [handleSelectConversation] Uniéndose al grupo de conversación ${idStr}`);
         await connectionRef.current.invoke("JoinRoom", Number(idStr));
-        console.log(`✅ [handleSelectConversation] Unido exitosamente al grupo ${idStr}`);
       } catch (error) {
         console.error(`❌ [handleSelectConversation] Error al unirse al grupo ${idStr}:`, error);
       }
@@ -1248,12 +1323,18 @@ function Conversations() {
       prevList.map((c) => (c.id === idStr ? { ...c, unreadCount: 0 } : c))
     );
     setOpenTabs((prev) => prev.map((tab) => (tab.id === idStr ? { ...tab, unreadCount: 0 } : tab)));
-    
+
+    // ✅ Eliminar del localStorage para que no reaparezca tras recargar
+    try {
+      const stored = JSON.parse(localStorage.getItem("voia_admin_unread") || "{}");
+      delete stored[idStr];
+      localStorage.setItem("voia_admin_unread", JSON.stringify(stored));
+    } catch (e) {}
+
     // ✅ CRÍTICO: Marcar mensajes como leídos en el backend
     if (conv.unreadCount > 0) {
       try {
         await markMessagesAsRead(conv.id);
-        console.log(`✅ [handleSelectConversation] Mensajes marcados como leídos para conversación ${idStr}`);
       } catch (error) {
         console.warn(`⚠️ [handleSelectConversation] Error marcando mensajes como leídos:`, error);
       }
@@ -1406,14 +1487,11 @@ function Conversations() {
           const MAX_INITIAL = 25;
           let initialLimit = unread > 0 ? Math.min(Math.max(unread, MIN_INITIAL), MAX_INITIAL) : DEFAULT_INITIAL;
           const grouped = await getMessagesGrouped(conv.id, null, initialLimit);
-  console.debug("🔎 [getMessagesGrouped] request:", { conversationId: conv.id, initialLimit });
-  console.debug("🔎 [getMessagesGrouped] payload for conv", conv.id, grouped);
         // Server now provides days newest-first (orderedNewestFirst=true). Do not reverse on client.
   if (grouped && Array.isArray(grouped.days) && grouped.days.length > 0) {
           // Debug: log counts per day to help troubleshoot missing dividers / all-loaded behavior
           try {
             const counts = grouped.days.map(d => ({ date: d.date, label: d.label, count: Array.isArray(d.messages) ? d.messages.length : 0 }));
-            console.debug("🔎 [getMessagesGrouped] days summary:", counts);
           } catch (e) { /* ignore */ }
           const flattened = [];
           grouped.days.forEach((day) => {
@@ -1468,7 +1546,6 @@ function Conversations() {
 
           // Debug: report flattened window shape (first/last items, days order)
           try {
-            console.debug(`🔍 [handleSelectConversation] conv=${conv.id} grouped.orderedNewestFirst=${!!grouped.orderedNewestFirst} daysOrder=`, grouped.days.map(d => d.date));
             console.debug(`🔍 [handleSelectConversation] conv=${conv.id} flattened count=${flattened.length}`, {
               first: flattened[0],
               last: flattened[flattened.length - 1],
@@ -1479,13 +1556,6 @@ function Conversations() {
           setMessages((prev) => {
             const existing = prev[idStr] || [];
             const map = new Map();
-            
-            // 📎 DEBUG: Log estado antes del merge
-            console.log(`🗺 [Historial] Merge para conv ${idStr}:`, {
-              historicos: flattened.length,
-              existentes: existing.length,
-              existentesConArchivos: existing.filter(m => m.files?.length > 0 || m.images?.length > 0).length
-            });
             
             // 📦 PRIORIDAD: Preservar archivos de mensajes SignalR si el historial no los tiene
             flattened.forEach((histMsg) => {
@@ -1503,10 +1573,6 @@ function Conversations() {
                 const signalRHasFiles = signalRMsg.files?.length > 0 || signalRMsg.images?.length > 0;
                 
                 if (!histHasFiles && signalRHasFiles) {
-                  console.log(`📦 [Merge] Preservando archivos de SignalR para mensaje ${key}:`, {
-                    signalRFiles: signalRMsg.files?.length || 0,
-                    signalRImages: signalRMsg.images?.length || 0
-                  });
                   // Combinar datos del historial con archivos de SignalR
                   map.set(key, {
                     ...histMsg,
@@ -1531,16 +1597,6 @@ function Conversations() {
               };
             });
             
-            console.log(`🗺 [Historial] Mensajes finales para conv ${idStr}:`, {
-              total: normalized.length,
-              conArchivos: normalized.filter(m => m.files?.length > 0 || m.images?.length > 0).length,
-              archivosEjemplo: normalized.slice(0, 3).map(m => ({ 
-                id: m.id, 
-                files: m.files?.length || 0, 
-                images: m.images?.length || 0 
-              }))
-            });
-            
             // Sort ascending (oldest first) by normalized timestamp
             const merged = normalized.sort((a, b) => {
               const timeA = new Date(a.timestamp).getTime();
@@ -1563,7 +1619,6 @@ function Conversations() {
             try {
               const first = merged[0];
               const last = merged[merged.length - 1];
-              console.debug(`🗂️ [handleSelectConversation] conv=${conv.id} mergedCount=${merged.length} firstTs=${first?.timestamp || first?.Timestamp} lastTs=${last?.timestamp || last?.Timestamp}`);
               console.debug(`🗂️ [handleSelectConversation] conv=${conv.id} desiredVisible=${desiredVisible} visibleSliceCount=${visibleSlice.length}`, {
                 visibleFirst: visibleSlice[0],
                 visibleLast: visibleSlice[visibleSlice.length - 1],
@@ -1579,7 +1634,6 @@ function Conversations() {
         } else {
           // Fallback: use the paged endpoint if grouped not available
           const paged = await getMessagesPaginated(conv.id, null, initialLimit);
-          console.log("🔎 [getMessagesPaginated fallback] payload for conv", conv.id, paged);
           if (paged && Array.isArray(paged.messages) && paged.messages.length > 0) {
             const normalized = paged.messages.map((msg) => {
               const id = msg.id ?? msg.Id ?? `${idStr}-${Date.now()}`;
@@ -1723,9 +1777,7 @@ function Conversations() {
     try {
       const before = cursor.nextBefore;
   // Use grouped endpoint so we load a window already grouped by day (includes files)
-  console.debug("🔃 [loadMoreOlderMessages] requesting grouped for conv", conversationId, { before });
   const grouped = await getMessagesGrouped(conversationId, before, 50);
-  console.debug("🔃 [loadMoreOlderMessages] response grouped:", grouped && grouped.days ? grouped.days.map(d => ({ date: d.date, label: d.label, count: (d.messages||[]).length })) : grouped);
       if (!grouped || !Array.isArray(grouped.days) || grouped.days.length === 0) {
         messageCursor.current.set(idStr, { hasMore: false, nextBefore: null });
         return 0;
@@ -1761,8 +1813,6 @@ function Conversations() {
 
       // Debug: show what older window contained
       try {
-        console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} incomingDays=`, grouped.days.map(d => ({ date: d.date, count: (d.messages||[]).length })));
-        console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} flattened count=${flattened.length}`, { first: flattened[0], last: flattened[flattened.length - 1] });
       } catch (e) { /* ignore */ }
 
       // Prepend flattened window to cache preserving existing messages
@@ -1795,8 +1845,6 @@ function Conversations() {
           const newVisible = Math.min(merged.length, currentVisible + addedMessages);
           const first = merged[0];
           const last = merged[merged.length - 1];
-          console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} mergedCount=${merged.length} addedMessages=${addedMessages} currentVisible=${currentVisible} newVisible=${newVisible}`);
-          console.debug(`🔃 [loadMoreOlderMessages] conv=${conversationId} merged first/last:`, { first, last });
         } catch (e) { /* ignore */ }
         // update cursor
         if (grouped.hasMore) {
@@ -1906,7 +1954,6 @@ function Conversations() {
         const parsed = Number(replyToMessageId);
         safeReplyToId = Number.isFinite(parsed) && !Number.isNaN(parsed) ? parsed : null;
       }
-      console.debug(`🛰️ [AdminMessage.invoke] conv=${conversationId} textLen=${String(text || '').length} safeReplyToId=${safeReplyToId}`, { replyToMessageId, replyToText });
       await connection.invoke("AdminMessage", Number(conversationId), text, safeReplyToId, replyToText);
       setReplyToMessage(null);
     } catch (err) {
@@ -1952,7 +1999,6 @@ function Conversations() {
               : conv
           )
         );
-        console.log(`✅ Usuario ${shouldBlock ? "bloqueado" : "desbloqueado"} en ${affectedIds.length} conversación(es)`);
       }
     } catch (err) {
       console.error("❌ Error al bloquear/desbloquear usuario:", err);
@@ -1962,7 +2008,8 @@ function Conversations() {
     }
   };
 
-  const selectedConversation = conversationList.find((conv) => conv.id === activeTab);
+  const selectedConversation = conversationList.find((conv) => conv.id === activeTab)
+    || trashConversations.find((conv) => String(conv.id) === String(activeTab));
   const selectedMessages = messages[activeTab] || [];
 
   return (
@@ -1989,17 +2036,17 @@ function Conversations() {
       <SoftBox px={2} pt={loadError ? 0 : 2}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={4} lg={4}>
-            {showTrash && userId === '1' ? (
-              <>
-                <Button variant="text" color="info" sx={{ mb: 1 }} onClick={() => setShowTrash(false)}>
-                  Volver
-                </Button>
+            {showTrash ? (
+              <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column", borderRadius: 0, overflow: "auto" }}>
                 <TrashView
                   conversations={trashConversations}
+                  onRestore={handleRestoreConversation}
+                  onDelete={handleDeleteConversationPermanently}
                   onEmptyTrash={handleEmptyTrash}
-                  userId={userId}
+                  onOpen={handleSelectTrashConversation}
+                  onBack={async () => { setOpenTabs([]); setActiveTab(null); setShowTrash(false); await fetchConversations(); }}
                 />
-              </>
+              </Card>
             ) : (
               <Card sx={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column", borderRadius: 0 }}>
                 <SoftBox p={2} sx={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
@@ -2056,7 +2103,7 @@ function Conversations() {
                     ref={chatPanelRef}
                     conversationId={Number(activeTab)}
                     messages={selectedMessages}
-                    userName={`Sesión ${selectedConversation.id}`}
+                    userName={`Sesión ${selectedConversation.sessionNumber ?? selectedConversation.id}`}
                     isTyping={typingState[activeTab]?.isTyping ?? false}
                     typingSender={typingState[activeTab]?.sender}
                     typingConversationId={activeTab}
@@ -2066,7 +2113,7 @@ function Conversations() {
                     onStatusChange={(newStatus) => handleUpdateConversationStatus(activeTab, newStatus)}
                     onBlock={() => handleBlockUser(activeTab)}
                     status={selectedConversation?.status || "activa"}
-                    blocked={selectedConversation?.blocked || false}
+                    blocked={!!(selectedConversation?.blocked && !selectedConversation?.activeMobileSession)}
                     replyTo={replyToMessage}
                     onReply={handleReply}
                     onCancelReply={() => setReplyToMessage(null)}
@@ -2078,6 +2125,7 @@ function Conversations() {
                     connection={connectionRef.current}
                     currentUser={{ id: "admin" }}
                     onLoadMoreOlderMessages={loadMoreOlderMessages}
+                    onMovedToTrash={handleMovedToTrash}
                   />
                 ) : (
                   <SoftBox display="flex" justifyContent="center" alignItems="center" height="100%">

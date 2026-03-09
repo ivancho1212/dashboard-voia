@@ -24,12 +24,51 @@ import StyleList from "./components/StyleList";
 
 import Loader from "components/Loader";
 import { useAuth } from "contexts/AuthContext";
+import usePlanFeatures from "hooks/usePlanFeatures";
+import { hasRole } from "services/authService";
+
+const BASE_STYLES = [
+  {
+    id: "base-light",
+    name: "Claro",
+    theme: "light",
+    primary_color: "#000000",
+    secondary_color: "#ffffff",
+    font_family: "Arial",
+    avatar_url: "",
+    position: "bottom-right",
+    custom_css: "",
+    title: "",
+    allow_image_upload: true,
+    allow_file_upload: true,
+    header_background_color: "#ffffff",
+    isBase: true,
+  },
+  {
+    id: "base-dark",
+    name: "Oscuro",
+    theme: "dark",
+    primary_color: "#ffffff",
+    secondary_color: "#1a1a1a",
+    font_family: "Arial",
+    avatar_url: "",
+    position: "bottom-right",
+    custom_css: "",
+    title: "",
+    allow_image_upload: true,
+    allow_file_upload: true,
+    header_background_color: "#1a1a1a",
+    isBase: true,
+  },
+];
 
 function BotStylePage() {
   const { id: botId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const location = useLocation();
+  const { features: planFeatures } = usePlanFeatures();
+  const isSuperAdmin = hasRole("Super Admin");
 
   // Protección: solo acceso por flujo guiado
   useEffect(() => {
@@ -44,6 +83,7 @@ function BotStylePage() {
   const [selectedStyle, setSelectedStyle] = useState(null);
 
   const [styles, setStyles] = useState([]);
+  const [ownStyles, setOwnStyles] = useState([]);
   const [botStyleId, setBotStyleId] = useState(null);
   const [styleEditing, setStyleEditing] = useState(null);
 
@@ -75,36 +115,31 @@ function BotStylePage() {
     setLoading(true);
     setLoadingMessage("Cargando estilos...");
     try {
-      console.log("🔹 fetchBotAndStyles: iniciando carga de datos para user:", user.id);
 
       const botRes = await axios.get(`http://localhost:5006/api/Bots/${botId}`);
       const botData = botRes.data;
-      console.log("📌 Bot individual cargado:", botData);
 
       const botStyleId = botData.styleId ?? botData.style_id;
       setBotStyleId(botStyleId);
 
       // Obtener todos los bots del usuario
       const bots = await getBotsByUserId(user.id);
-      console.log("📌 Bots obtenidos desde getBotsByUserId:", bots);
 
       setUserBots(bots);
 
       const userStyles = await getBotStylesByUser(user.id);
-      console.log("📌 Estilos obtenidos:", userStyles);
 
       let currentBotStyle = null;
       if (botStyleId && !userStyles.find((s) => s.id === botStyleId)) {
         currentBotStyle = await getBotStyleById(botStyleId);
-        console.log("📌 Estilo del bot actual cargado individualmente:", currentBotStyle);
       }
 
       const combined = [...(currentBotStyle ? [currentBotStyle] : []), ...userStyles];
       const uniqueStyles = Array.from(new Map(combined.map((s) => [s.id, s])).values());
 
-      setStyles(uniqueStyles);
+      setOwnStyles(uniqueStyles);
+      setStyles([...BASE_STYLES, ...uniqueStyles]);
 
-      console.log("✅ fetchBotAndStyles finalizó con éxito. Styles:", uniqueStyles);
     } catch (error) {
       console.error("❌ Error al cargar estilos o datos del bot:", error);
     } finally {
@@ -175,11 +210,10 @@ function BotStylePage() {
         await axios.put(`http://localhost:5006/api/BotStyles/${newStyle.id}`, newStyle);
         alert("Estilo actualizado con éxito.");
       } else {
-        const response = await createBotStyle(newStyle);
-        const created = response.data;
+        const created = await createBotStyle(newStyle);
 
-        await axios.put(`http://localhost:5006/api/Bots/${botId}`, {
-          style_id: created.id,
+        await axios.patch(`http://localhost:5006/api/Bots/${botId}/style`, {
+          styleId: created.id,
         });
 
         setBotStyleId(created.id);
@@ -197,21 +231,61 @@ function BotStylePage() {
 
   const onApplyStyle = async (styleId) => {
     if (!user?.id) return;
+
+    // Estilo base: crear copia en BD y aplicar directo al bot actual
+    if (typeof styleId === "string" && styleId.startsWith("base-")) {
+      const baseStyle = BASE_STYLES.find((s) => s.id === styleId);
+      if (!baseStyle) return;
+      try {
+        setLoading(true);
+        setLoadingMessage("Aplicando estilo base...");
+        const created = await createBotStyle({
+          userId: user.id,
+          name: baseStyle.name,
+          theme: baseStyle.theme,
+          primaryColor: baseStyle.primary_color,
+          secondaryColor: baseStyle.secondary_color,
+          fontFamily: baseStyle.font_family,
+          avatarUrl: baseStyle.avatar_url || "",
+          position: baseStyle.position,
+          customCss: baseStyle.custom_css || "",
+          headerBackgroundColor: baseStyle.header_background_color,
+          title: baseStyle.title || "",
+          allowImageUpload: allowCustomTheme ? (baseStyle.allow_image_upload ?? true) : false,
+          allowFileUpload: allowCustomTheme ? (baseStyle.allow_file_upload ?? true) : false,
+        });
+        await axios.patch(`http://localhost:5006/api/Bots/${botId}/style`, { styleId: created.id });
+        setBotStyleId(created.id);
+        await fetchBotAndStyles();
+        // For free plan: open editor so user can set widget name and avatar
+        if (!allowCustomTheme) {
+          const normalized = normalizeStyle(created);
+          setStyleEditing(normalized);
+          setViewMode("edit");
+          setActiveTab(1);
+        } else {
+          alert("Estilo base aplicado. Puedes personalizarlo desde Editar.");
+        }
+      } catch (err) {
+        console.error("Error aplicando estilo base:", err);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       setLoading(true);
       setLoadingMessage("Preparando selección de bot...");
 
       // Obtener todos los bots del usuario
       let bots = await getBotsByUserId(user.id);
-      console.log("📌 Bots desde getBotsByUserId:", bots);
 
       // Traer también el bot actual por ID
       const currentBot = await axios.get(`http://localhost:5006/api/Bots/${botId}`).then(res => res.data);
-      console.log("📌 Bot actual:", currentBot);
 
       // Mergear y eliminar duplicados por ID
       const mergedBots = Array.from(new Map([...bots, currentBot].map(b => [b.id, b])).values());
-      console.log("📌 Bots iniciales para modal:", mergedBots);
 
       // Filtrar bots elegibles: usar primero la info que ya viene con los bots
       // para evitar N llamadas. Solo hacemos la comprobación por id si no hay datos.
@@ -246,7 +320,6 @@ function BotStylePage() {
           ineligible.push(b);
         }
       }
-      console.log('📌 Bots elegibles:', eligible, 'No elegibles:', ineligible);
 
       if (eligible.length === 0) {
         alert("Ninguno de tus bots ha completado la etapa de captura de datos. No es posible asignar este estilo todavía.");
@@ -282,12 +355,15 @@ function BotStylePage() {
       setLoading(true);
       setLoadingMessage("Eliminando estilo...");
 
-      await axios.delete(`http://localhost:5006/api/BotStyles/${style.id}`);
-
+      // If this style is currently applied to the bot, dissociate first (avoid FK constraint)
       if (style.id === botStyleId) {
-        await axios.put(`http://localhost:5006/api/Bots/${botId}`, { styleId: 1 });
-        setBotStyleId(1);
+        await axios.patch(`http://localhost:5006/api/Bots/${botId}/style`, { styleId: null });
+        setBotStyleId(null);
       }
+
+      await axios.delete(`http://localhost:5006/api/BotStyles/${style.id}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
 
       await fetchBotAndStyles();
       alert("Estilo eliminado exitosamente.");
@@ -309,6 +385,15 @@ function BotStylePage() {
     navigate("/bots/integration");
   };
 
+  // Plan FREE: only show Claro/Oscuro base themes — no custom styles visible
+  const allowCustomTheme = isSuperAdmin || planFeatures.allowCustomTheme;
+  const atStyleLimit = !allowCustomTheme && ownStyles.length >= 1;
+  // Free plan: if a style is applied show only that style; otherwise show base themes (Claro/Oscuro)
+  const appliedOwnStyle = botStyleId ? ownStyles.filter(s => s.id === botStyleId) : [];
+  const displayedStyles = !allowCustomTheme
+    ? (appliedOwnStyle.length > 0 ? appliedOwnStyle : BASE_STYLES)
+    : styles;
+
   return (
     <DashboardLayout>
       <DashboardNavbar />
@@ -319,17 +404,29 @@ function BotStylePage() {
           <>
             <Tabs value={activeTab} onChange={onTabChange}>
               <Tab label="Lista de Estilos" />
-              <Tab label={viewMode === "edit" ? "Editar Estilo" : "Crear Estilo"} />
+              <Tab
+                label={viewMode === "edit" ? "Editar Estilo" : "Crear Estilo"}
+                disabled={atStyleLimit && viewMode !== "edit"}
+              />
             </Tabs>
 
             <SoftBox mt={3}>
               {activeTab === 0 && (
                 <>
+                  {activeTab === 0 && viewMode === "list" && atStyleLimit && allowCustomTheme && (
+                    <SoftBox mb={2} p={1.5} sx={{ border: "1.5px dashed #f0a500", borderRadius: 2, backgroundColor: "#fffbf0", display: "flex", alignItems: "center", gap: 1 }}>
+                      <span>🔒</span>
+                      <SoftTypography variant="caption" color="warning" fontWeight="bold">
+                        Has alcanzado el límite de 1 estilo de tu plan. Actualiza tu plan para crear más estilos.
+                      </SoftTypography>
+                    </SoftBox>
+                  )}
                   {activeTab === 0 && viewMode === "list" && (
                     <StyleList
-                      styles={styles}
+                      styles={displayedStyles}
                       botStyleId={botStyleId}
-                      userBots={userBots}          // ✅ PASAR LOS BOTS
+                      userBots={userBots}
+                      allowCustomTheme={allowCustomTheme}
                       onViewStyle={onViewStyle}
                       onApplyStyle={onApplyStyle}
                       onEditStyle={onEditStyle}
@@ -381,6 +478,8 @@ function BotStylePage() {
                       onCancel={onBackToList}
                       setLoading={setLoading}
                       setLoadingMessage={setLoadingMessage}
+                      allowCustomTheme={allowCustomTheme}
+                      allowWidgetUploads={allowCustomTheme}
                     />
                   ) : (
                     <SoftTypography variant="body2" color="text">
@@ -402,9 +501,12 @@ function BotStylePage() {
           </>
         )}
         {activeTab === 0 && viewMode === "list" && (
-          <SoftBox mt={4} display="flex" justifyContent="flex-start">
-            <SoftButton variant="gradient" color="info" onClick={handleContinue}>
-              Continuar
+          <SoftBox mt={4} display="flex" gap={2} justifyContent="flex-end">
+            <SoftButton variant="outlined" color="error" sx={{ fontWeight: "bold", px: 3 }} onClick={() => navigate("/profile")}>
+              Cancelar
+            </SoftButton>
+            <SoftButton variant="gradient" color="info" sx={{ fontWeight: "bold", px: 3 }} onClick={handleContinue}>
+              Continuar al siguiente paso
             </SoftButton>
           </SoftBox>
         )}

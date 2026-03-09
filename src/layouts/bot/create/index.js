@@ -113,21 +113,23 @@ function BotCreate({ onCancel }) {
             />
           </Grid>
           <Grid item xs={12}>
-            <SoftBox display="flex" gap={2}>
+            <SoftBox display="flex" justifyContent="flex-end" gap={2}>
+              <SoftButton
+                variant="outlined"
+                color="error"
+                sx={{ fontWeight: "bold", px: 3 }}
+                onClick={onCancel}
+              >
+                Cancelar
+              </SoftButton>
               <SoftButton
                 variant="gradient"
                 color="info"
+                sx={{ fontWeight: "bold", px: 3 }}
                 onClick={handleSubmit}
                 disabled={loading}
               >
                 {loading ? "Creando..." : "Crear Bot"}
-              </SoftButton>
-              <SoftButton
-                variant="outlined"
-                color="secondary"
-                onClick={onCancel}
-              >
-                Cancelar
               </SoftButton>
             </SoftBox>
           </Grid>

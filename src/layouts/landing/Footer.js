@@ -40,7 +40,6 @@ const slugify = (text) =>
 
 const Footer = () => {
   useEffect(() => {
-    console.log("Footer montado");
   }, []);
 
   return (

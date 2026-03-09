@@ -2,6 +2,7 @@ import { getDashboardRoutesForUser } from "./dashboard";
 import botRoutes from "./bot";
 import userRoutes from "./user";
 import planRoutes from "./plan";
+import teamRoutes from "./team";
 import billingRoutes from "./billing";
 import supportRoutes from "./support";
 import dataRoutes from "./data";
@@ -20,6 +21,7 @@ export function getAllRoutesForUser(user) {
     ...landingRoutes,
     ...dashboardRoutes,
     ...userRoutes,
+    ...teamRoutes,
     ...planRoutes,
     ...configRoutes,
     ...botRoutes,

@@ -243,21 +243,72 @@ const Plans = () => {
                   </SoftBox>
                   {/* Contenido debajo del precio */}
                   <SoftBox sx={{ flex: 1, width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', px: 3, py: 2 }}>
-                    <SoftTypography variant="body2" color="text.primary" mb={2} sx={{ fontSize: 14, textAlign: 'left' }}>
-                      {plan.description || "Este plan ofrece características útiles."}
+                    <SoftTypography variant="body2" color="text.secondary" mb={2.5} sx={{ fontSize: 13, textAlign: 'left', fontStyle: 'italic' }}>
+                      {plan.description || "Ideal para comenzar a automatizar tu atención al cliente."}
                     </SoftTypography>
-                    <ul style={{ paddingLeft: 0, margin: 0, marginBottom: 18, listStyle: 'none', width: '100%' }}>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Máx Tokens:</b> {plan.maxTokens}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Límite de Bots:</b> {plan.botsLimit ?? "Ilimitado"}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Tamaño máx. archivo (MB):</b> {plan.fileUploadLimit ?? "-"}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Campos de captura de datos:</b> {plan.dataCaptureLimit ?? "-"}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Proveedores IA:</b> {aiProvidersText}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Custom Styles:</b> {plan.customStyles ? "Sí" : "No"}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Analytics:</b> {plan.analyticsDashboard ? "Sí" : "No"}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Priority Support:</b> {plan.prioritySupport ? "Sí" : "No"}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>API Ext:</b> {plan.integrationApi ? "Sí" : "No"}</li>
-                      <li style={{ fontSize: 14, color: '#444', marginBottom: 6, textAlign: 'left' }}><b>Activo:</b> {plan.isActive ? "Sí" : "No"}</li>
+
+                    {/* Métricas destacadas */}
+                    <SoftBox display="flex" gap={1.5} mb={2.5} width="100%" flexWrap="wrap">
+                      <SoftBox sx={{ flex: 1, minWidth: 80, background: '#f0fafa', borderRadius: 2, p: 1, textAlign: 'center' }}>
+                        <SoftTypography variant="h6" fontWeight="bold" sx={{ color: '#00bcd4', fontSize: 18, lineHeight: 1.2 }}>
+                          {plan.botsLimit ?? "∞"}
+                        </SoftTypography>
+                        <SoftTypography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                          {plan.botsLimit === 1 ? "asistente" : "asistentes"}
+                        </SoftTypography>
+                      </SoftBox>
+                      <SoftBox sx={{ flex: 1, minWidth: 80, background: '#f0fafa', borderRadius: 2, p: 1, textAlign: 'center' }}>
+                        <SoftTypography variant="h6" fontWeight="bold" sx={{ color: '#00bcd4', fontSize: 18, lineHeight: 1.2 }}>
+                          {plan.maxTokens ? (plan.maxTokens >= 1000 ? `${Math.round(plan.maxTokens / 1000)}K` : plan.maxTokens) : "∞"}
+                        </SoftTypography>
+                        <SoftTypography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                          tokens/mes
+                        </SoftTypography>
+                      </SoftBox>
+                      {plan.fileUploadLimit != null && (
+                        <SoftBox sx={{ flex: 1, minWidth: 80, background: '#f0fafa', borderRadius: 2, p: 1, textAlign: 'center' }}>
+                          <SoftTypography variant="h6" fontWeight="bold" sx={{ color: '#00bcd4', fontSize: 18, lineHeight: 1.2 }}>
+                            {plan.fileUploadLimit}
+                          </SoftTypography>
+                          <SoftTypography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
+                            documentos
+                          </SoftTypography>
+                        </SoftBox>
+                      )}
+                    </SoftBox>
+
+                    {/* Lista de características */}
+                    <ul style={{ paddingLeft: 0, margin: 0, marginBottom: 12, listStyle: 'none', width: '100%' }}>
+                      {[
+                        { label: `${plan.dataCaptureLimit ?? "Ilimitados"} campos de captura de datos`, enabled: true },
+                        { label: "Respuestas con inteligencia artificial", enabled: !!plan.allowAiWidget },
+                        { label: "Aprendizaje desde documentos (RAG)", enabled: !!plan.allowVectorSearch },
+                        { label: "Entrenamiento con páginas web", enabled: !!plan.allowTrainingUrls },
+                        { label: "Panel de analíticas", enabled: !!plan.analyticsDashboard },
+                        { label: "Personalización visual del widget", enabled: !!plan.customStyles },
+                        { label: "Versión móvil incluida", enabled: plan.allowMobileVersion !== false },
+                        { label: "API de integración externa", enabled: !!plan.integrationApi },
+                        { label: "Soporte prioritario", enabled: !!plan.prioritySupport },
+                      ].map((feat, i) => (
+                        <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: feat.enabled ? '#333' : '#bbb', marginBottom: 7 }}>
+                          <span style={{ fontSize: 15, flexShrink: 0, color: feat.enabled ? '#00bcd4' : '#ccc' }}>
+                            {feat.enabled ? "✓" : "✗"}
+                          </span>
+                          <span style={{ textDecoration: feat.enabled ? 'none' : 'line-through' }}>
+                            {feat.label}
+                          </span>
+                        </li>
+                      ))}
                     </ul>
+
+                    {/* Proveedores IA si hay */}
+                    {aiProvidersText && aiProvidersText !== "-" && aiProvidersText !== "[]" && (
+                      <SoftBox sx={{ background: '#f5f5f5', borderRadius: 2, px: 1.5, py: 0.8, mb: 1, width: '100%' }}>
+                        <SoftTypography variant="caption" color="text.secondary" sx={{ fontSize: 12 }}>
+                          🤖 Proveedores IA: <b>{aiProvidersText}</b>
+                        </SoftTypography>
+                      </SoftBox>
+                    )}
                   </SoftBox>
                   {/* Botón siempre abajo */}
                   <SoftBox sx={{ width: '100%', display: 'flex', justifyContent: 'center', pb: 3, px: 3 }}>

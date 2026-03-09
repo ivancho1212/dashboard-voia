@@ -7,7 +7,6 @@ const AboutViaSection = () => {
   const [hovered, setHovered] = useState(null);
 
   useEffect(() => {
-    console.log("AboutViaSection montada / visible");
   }, []);
 
   return (

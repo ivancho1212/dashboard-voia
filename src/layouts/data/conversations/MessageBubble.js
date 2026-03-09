@@ -4,7 +4,7 @@ import DOMPurify from "dompurify";
 import { buildFileUrl, downloadImagesAsZip } from "utils/fileHelpers";
 
 const MessageBubble = React.forwardRef(
-  ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen, isAIActive }, ref) => {
+  ({ msg, onReply, onJumpToReply, isHighlighted, setViewerOpen, isAIActive, conversationId }, ref) => {
     const { fromRole, fromName, text, timestamp, files = [], replyTo } = msg;
     // ✅ CORRECTO: Usuario público → IZQUIERDA, Bot/Admin → DERECHA (como en el widget)
     const isRight = fromRole === "admin" || fromRole === "bot";
@@ -42,7 +42,8 @@ const MessageBubble = React.forwardRef(
     // Fetch image as blob and convert to blob URL
     const fetchImageAsBlob = async (fileUrl) => {
       try {
-        const fullUrl = `${getBackendUrl()}${fileUrl}/inline`;
+        const cid = conversationId || msg.conversationId || "";
+        const fullUrl = getBackendUrl() + fileUrl + "/inline?cid=" + cid;
         // 🔹 CORS FIX: No incluir credenciales para URLs públicas de archivos
         const fetchOptions = {};
         if (!fullUrl.includes('/api/files/chat/') && !fullUrl.includes('/uploads/')) {
@@ -68,7 +69,6 @@ const MessageBubble = React.forwardRef(
 
       const loadBlobs = async () => {
         setBlobsLoading(true);
-        console.log(`🖼️ [MessageBubble] Loading blobs for ${imageFiles.length} images:`, imageFiles.map(f => f.fileUrl));
         const newBlobUrls = { ...imageBlobUrls };
         
         for (const file of imageFiles) {
@@ -77,7 +77,6 @@ const MessageBubble = React.forwardRef(
           
           const result = await fetchImageAsBlob(file.fileUrl);
           if (result) {
-            console.log(`🖼️ [MessageBubble] Blob loaded for ${file.fileUrl}:`, result.blobUrl);
             newBlobUrls[result.fileUrl] = result.blobUrl;
           } else {
             console.warn(`🖼️ [MessageBubble] Blob FAILED for ${file.fileUrl}, will use fallback URL`);
@@ -115,21 +114,12 @@ const MessageBubble = React.forwardRef(
       console.error(`🖼️ [MessageBubble] Image load error for ${fileUrl}`, e.target.src);
       const directUrl = buildFileUrl(fileUrl);
       if (e.target.src !== directUrl) {
-        console.log(`🖼️ [MessageBubble] Retrying with direct URL: ${directUrl}`);
         e.target.src = directUrl;
       } else {
         setImageLoadErrors(prev => ({ ...prev, [fileUrl]: true }));
       }
     };
 
-    // 🔍 DEBUG: Log file data on render
-    if (files.length > 0) {
-      console.log(`🖼️ [MessageBubble] msg.id=${msg.id} files:`, files.map(f => ({
-        fileName: f.fileName, fileType: f.fileType, fileUrl: f.fileUrl
-      })));
-      console.log(`🖼️ [MessageBubble] imageFiles:`, imageFiles.length, 
-        `nonImageFiles:`, files.filter(f => !f.fileType?.startsWith("image/")).length);
-    }
 
   const hasImage = imageFiles.length > 0;
 
@@ -308,8 +298,8 @@ const MessageBubble = React.forwardRef(
                 src={buildFileUrl(replyTo.fileUrl)}
                 alt="imagen respondida"
                 style={{
-                  maxWidth: "80px",
-                  maxHeight: "80px",
+                  maxWidth: "160px",
+                  maxHeight: "120px",
                   borderRadius: "6px",
                   objectFit: "cover",
                 }}
@@ -708,6 +698,7 @@ MessageBubble.propTypes = {
   isHighlighted: PropTypes.bool,
   setViewerOpen: PropTypes.func,
   isAIActive: PropTypes.bool.isRequired,
+  conversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
 };
 
 export default React.memo(MessageBubble);

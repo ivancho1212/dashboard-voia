@@ -53,7 +53,6 @@ export async function getBotsWithScript() {
 
 export async function getBotIntegrationsByUserId(userId) {
   // Este método ya no se necesita, pero lo mantenemos para compatibilidad
-  console.log("ℹ️ getBotIntegrationsByUserId ya no se usa, usar getBotIntegrationByBotId");
   return [];
 }
 
@@ -65,6 +64,17 @@ export async function deleteBotIntegration(integrationId) {
     },
   });
   return response.data;
+}
+
+export async function checkDomainAvailability(domain, botId = null) {
+  const token = localStorage.getItem("token");
+  const params = { domain };
+  if (botId) params.botId = botId;
+  const response = await axios.get(`${API_URL}/check-domain`, {
+    params,
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data; // { taken: bool, sameUser?: bool, botName?: string, ownerName?: string }
 }
 
 export async function deleteBotIntegrationByBotId(botId) {

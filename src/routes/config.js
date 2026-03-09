@@ -17,6 +17,8 @@ const configRoutes = [
     icon: <FaBrain size={14} />,
     component: AIModels,
     noCollapse: true,
+    protected: true,
+    permission: "CanViewAiModelConfigs",
   },
 
 

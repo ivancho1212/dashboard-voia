@@ -16,7 +16,6 @@ const LazySection = ({ id, children, minHeight }) => {
                 ([entry]) => {
                     if (entry.isIntersecting) {
                         setVisible(true);
-                        console.log(`LazySection visible: ${id}`);
                         // Deja de observar una vez que el elemento es visible
                         observer.unobserve(entry.target);
                     }
@@ -33,7 +32,6 @@ const LazySection = ({ id, children, minHeight }) => {
         } else if (id !== "hero") {
             // Fallback para navegadores que no soportan IntersectionObserver
             setVisible(true);
-            console.log(`LazySection visible (fallback): ${id}`);
         }
 
         // Limpieza: desconecta el observer si el componente se desmonta

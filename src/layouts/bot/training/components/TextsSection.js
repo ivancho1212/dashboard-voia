@@ -7,11 +7,19 @@ import SoftButton from "components/SoftButton";
 import SoftInput from "components/SoftInput";
 import Icon from "@mui/material/Icon";
 
-const TextsSection = ({ texts, currentText, setCurrentText, handleAddText, handleDeleteText, setTexts }) => (
+const TextsSection = ({ texts, currentText, setCurrentText, handleAddText, handleDeleteText, setTexts, disabled }) => (
   <>
     <SoftTypography variant="subtitle1" mb={1}>Escribe o describe lo que consideres</SoftTypography>
     <SoftBox mb={2}>
-      {/* Always show the input textarea for adding new texts */}
+      {disabled ? (
+        <SoftBox mb={2} p={1.5} sx={{ border: "1.5px dashed #f0a500", borderRadius: 2, backgroundColor: "#fffbf0", display: "flex", alignItems: "center", gap: 1 }}>
+          <span>🔒</span>
+          <SoftTypography variant="caption" color="warning" fontWeight="bold">
+            Entrenamiento por texto disponible en planes superiores
+          </SoftTypography>
+        </SoftBox>
+      ) : (
+      <>
       <SoftBox component="textarea"
         rows={5}
         placeholder="Pega aquí fragmentos de texto relevantes..."
@@ -22,6 +30,8 @@ const TextsSection = ({ texts, currentText, setCurrentText, handleAddText, handl
       <SoftBox sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, mb: 2 }}>
         <SoftButton variant="gradient" color="info" onClick={handleAddText} sx={{ mt: 0, minWidth: 120, px: 2, whiteSpace: 'nowrap' }}>Añadir Texto</SoftButton>
       </SoftBox>
+      </>
+      )}
 
       {/* Render added texts as read-only, non-resizable boxes */}
       {texts.length > 0 && texts.map((text, idx) => (
@@ -50,6 +60,7 @@ TextsSection.propTypes = {
   handleAddText: PropTypes.func.isRequired,
   handleDeleteText: PropTypes.func.isRequired,
   setTexts: PropTypes.func.isRequired,
+  disabled: PropTypes.bool,
 };
 
 export default TextsSection;

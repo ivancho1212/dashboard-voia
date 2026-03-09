@@ -1,5 +1,5 @@
 import axios from "./axiosConfig";
-import { logClaims, hasRole } from "services/authService";
+import { hasRole } from "services/authService";
 
 const BASE_URL = "http://localhost:5006"; // ⚠️ Solo para desarrollo
 
@@ -12,18 +12,49 @@ function _ensureToken() {
   return token;
 }
 
-// ✅ Mover conversación a papelera (soft delete)
+// ✅ Mover conversación a papelera (soft delete: status = "trash")
 export async function moveConversationToTrash(conversationId) {
   try {
-    if (!_ensureToken() === null) {
-      // _ensureToken already logs missing token; continue to attempt request anyway
-    }
     const response = await axios.patch(
       `${BASE_URL}/api/Conversations/${conversationId}/move-to-trash`
     );
     return response.data;
   } catch (error) {
     return null;
+  }
+}
+
+// ✅ Restaurar conversación desde la papelera
+export async function restoreConversation(conversationId) {
+  try {
+    const response = await axios.patch(
+      `${BASE_URL}/api/Conversations/${conversationId}/restore`
+    );
+    return response.data;
+  } catch (error) {
+    return null;
+  }
+}
+
+// ✅ Eliminar conversación permanentemente (hard delete)
+export async function deleteConversationPermanently(conversationId) {
+  try {
+    const response = await axios.delete(
+      `${BASE_URL}/api/Conversations/${conversationId}`
+    );
+    return response.data;
+  } catch (error) {
+    return null;
+  }
+}
+
+// ✅ Obtener conversaciones en la papelera
+export async function getTrashConversations() {
+  try {
+    const response = await axios.get(`${BASE_URL}/api/Conversations/trash`);
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    return [];
   }
 }
 
@@ -70,7 +101,6 @@ export async function updateConversationStatus(conversationId, newStatus) {
       `${BASE_URL}/api/Conversations/${conversationId}/status`,
       { status: newStatus } // El cuerpo coincide con el UpdateStatusDto
     );
-    console.log('✅ [updateConversationStatus] Respuesta:', response.data);
     return response.data;
   } catch (error) {
     console.error('❌ [updateConversationStatus] Error:', error?.response?.status, error?.response?.data || error?.message);
@@ -90,7 +120,6 @@ export async function blockUserByConversation(conversationId, block = true, reas
       `${BASE_URL}/api/Conversations/${conversationId}/block-user`,
       { block, reason }
     );
-    console.log(`✅ [blockUserByConversation] Usuario ${block ? 'bloqueado' : 'desbloqueado'}:`, response.data);
     return response.data;
   } catch (error) {
     console.error('❌ [blockUserByConversation] Error:', error?.response?.status, error?.response?.data || error?.message);
@@ -139,11 +168,6 @@ export async function getMessagesGrouped(conversationId, before = null, limit = 
 export async function markMessagesAsRead(conversationId) {
   try {
     if (!_ensureToken()) return null;
-
-    if (!hasRole('Admin')) {
-      return null;
-    }
-
     const response = await axios.post(`${BASE_URL}/api/Messages/mark-read/${conversationId}`);
     return response.data;
   } catch (error) {
@@ -189,6 +213,7 @@ export async function getMessagesByConversationId(conversationId) {
         timestamp,
         fromRole,
         fromName,
+        replyToMessageId: replyTo || null,
         replyTo: replyTo
           ? {
               id: replyTo,
@@ -227,22 +252,27 @@ export async function getConversationsWithLastMessage() {
   try {
     const response = await axios.get(`${BASE_URL}/api/Conversations/with-last-message`);
 
-    const conversations = Array.isArray(response.data) ? response.data : [];
+    const conversations = (Array.isArray(response.data) ? response.data : [])
+      .filter((c) => c.status?.toLowerCase() !== "trash");
 
     return conversations.map((c) => ({
       id: `${c.id}`,
+      botId: c.botId ?? c.BotId ?? null,
       alias: c.alias,
+      sessionNumber: c.sessionNumber ?? c.SessionNumber ?? null,
       lastMessage: c.lastMessage
         ? c.lastMessage.type === "text"
-          ? c.lastMessage.content // Use content for text
+          ? c.lastMessage.content
           : c.lastMessage.type === "image"
-          ? "📷 Imagen" // Consistent naming
-          : `📎 Archivo: ${c.lastMessage.content}` // Use content for file name
+          ? "📷 Imagen"
+          : `📎 Archivo: ${c.lastMessage.content}`
         : "Conversación iniciada",
-      updatedAt: c.lastMessage?.timestamp || c.updatedAt || new Date().toISOString(), // Use timestamp from lastMessage
+      updatedAt: c.lastMessage?.timestamp || c.updatedAt || new Date().toISOString(),
       status: c.status,
       blocked: c.blocked || false,
+      activeMobileSession: c.activeMobileSession ?? c.ActiveMobileSession ?? false,
       isWithAI: c.isWithAI,
+      unreadCount: c.unreadCount ?? c.unreadAdminMessages ?? c.UnreadCount ?? c.UnreadAdminMessages ?? 0,
     }));
   } catch (error) {
     return [];

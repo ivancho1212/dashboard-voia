@@ -9,3 +9,8 @@ export const getRoles = async () => {
   });
   return response.data;
 };
+
+export const getRoleNames = async () => {
+  const response = await axios.get(`${API_BASE_URL}/Roles/names`);
+  return response.data;
+};

@@ -22,12 +22,10 @@ export const getCsrfToken = async () => {
   try {
     // Retornar token en caché si aún es válido
     if (cachedCsrfToken && csrfTokenExpiry && Date.now() < csrfTokenExpiry) {
-      console.log('✅ [CSRF] Token en caché aún válido');
       return cachedCsrfToken;
     }
 
     // Obtener nuevo token del backend
-    console.log('🔄 [CSRF] Obteniendo nuevo token del backend...');
     const response = await axios.get(`${API_URL}/auth/csrf-token`, {
       timeout: 3000,
       withCredentials: true // Permitir cookies
@@ -41,7 +39,6 @@ export const getCsrfToken = async () => {
     cachedCsrfToken = response.data.token;
     csrfTokenExpiry = Date.now() + TOKEN_VALIDITY_MS;
 
-    console.log('✅ [CSRF] Token obtenido:', cachedCsrfToken.substring(0, 20) + '...');
     return cachedCsrfToken;
   } catch (error) {
     console.warn('⚠️  [CSRF] Error obteniendo token del backend:', error.message);
@@ -108,7 +105,6 @@ export const addCsrfToConfig = async (config = {}) => {
         config.headers = {};
       }
       config.headers[CSRF_HEADER_NAME] = token;
-      console.log('✅ [CSRF] Token agregado a config');
     } else {
       console.debug('[CSRF] No hay token CSRF disponible, continuando sin él');
     }

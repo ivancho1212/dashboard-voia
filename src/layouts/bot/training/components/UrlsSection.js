@@ -7,13 +7,22 @@ import SoftButton from "components/SoftButton";
 import SoftInput from "components/SoftInput";
 import Icon from "@mui/material/Icon";
 
-const UrlsSection = ({ urls, currentUrl, setCurrentUrl, handleAddUrl, handleDeleteUrl }) => (
+const UrlsSection = ({ urls, currentUrl, setCurrentUrl, handleAddUrl, handleDeleteUrl, disabled }) => (
   <>
     <SoftTypography variant="subtitle1" mb={1}>Páginas Web</SoftTypography>
+    {disabled ? (
+      <SoftBox mb={2} p={1.5} sx={{ border: "1.5px dashed #f0a500", borderRadius: 2, backgroundColor: "#fffbf0", display: "flex", alignItems: "center", gap: 1 }}>
+        <span>🔒</span>
+        <SoftTypography variant="caption" color="warning" fontWeight="bold">
+          Entrenamiento por URL disponible en planes superiores
+        </SoftTypography>
+      </SoftBox>
+    ) : (
     <SoftBox display="flex" mb={2}>
       <SoftInput placeholder="https://ejemplo.com/info" value={currentUrl} onChange={(e) => setCurrentUrl(e.target.value)} fullWidth />
       <SoftButton variant="gradient" color="info" onClick={handleAddUrl} sx={{ ml: 1, flexShrink: 0 }}>Añadir</SoftButton>
     </SoftBox>
+    )}
     <SoftBox mt={1}>
       {urls.map((url, idx) => (
         <SoftBox key={`url-${url.url || url}-${idx}`} p={1} mb={1} sx={{ border: "1px solid", borderColor: "grey.300", borderRadius: "8px" }}>
@@ -33,6 +42,7 @@ UrlsSection.propTypes = {
   setCurrentUrl: PropTypes.func.isRequired,
   handleAddUrl: PropTypes.func.isRequired,
   handleDeleteUrl: PropTypes.func.isRequired,
+  disabled: PropTypes.bool,
 };
 
 export default UrlsSection;

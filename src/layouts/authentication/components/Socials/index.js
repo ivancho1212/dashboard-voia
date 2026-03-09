@@ -5,10 +5,8 @@ import TermsModal from "../TermsModal";
 
 // 👉 aquí iría tu lógica real de login con Firebase o backend
 const loginWithGoogle = () => {
-  console.log("Login con Google ejecutado ✅");
 };
 const loginWithMicrosoft = () => {
-  console.log("Login con Microsoft ejecutado ✅");
 };
 
 function Socials() {

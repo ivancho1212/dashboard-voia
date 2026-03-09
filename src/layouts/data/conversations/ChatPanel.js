@@ -29,6 +29,10 @@ import BlockIcon from "@mui/icons-material/Block";
 import TextField from "@mui/material/TextField";
 import { Box, Tooltip, Typography } from "@mui/material";
 import Button from "@mui/material/Button";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
 import Loader from "../../../components/Loader";
 
 import TagChip from "components/TagChip";
@@ -38,7 +42,7 @@ import {
   updateConversationTag,
   deleteConversationTag,
 } from "services/conversationTagsService";
-import { updateConversationIsWithAI } from "services/conversationsService";
+import { updateConversationIsWithAI, moveConversationToTrash } from "services/conversationsService";
 
 // Runtime debug toggle. Set `window.__VOIA_DEBUG = true` in the browser console
 // to enable verbose ChatPanel debug logging without changing source.
@@ -68,10 +72,12 @@ const ChatPanel = forwardRef(
       highlightedMessageId,
       onAdminTyping,
       onAdminStopTyping,
+      onMovedToTrash,
     },
     ref
   ) => {
     const [anchorEl, setAnchorEl] = useState(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
     const [inputValue, setInputValue] = useState("");
     const bottomRef = useRef(null);
     const typingRef = useRef(null);
@@ -175,7 +181,8 @@ const ChatPanel = forwardRef(
             }
             // ✅ NO suscribirse a eventos de mensajes aquí - ya se manejan en index.js
             // Esto evita la duplicación de imágenes y problemas de scroll
-            console.log("📡 [ChatPanel] SignalR conectado, usando mensajes del estado global");
+          }).catch((err) => {
+            console.warn("[SignalR] ChatPanel: no se pudo conectar:", err?.message || err);
           });
         }
         return () => {
@@ -307,8 +314,6 @@ const ChatPanel = forwardRef(
     };
 
     const handleSendMessage = async () => {
-      console.log("📝 Mensaje enviado:", inputValue);
-      console.log("📎 Respondiendo a:", replyTo);
 
       if (inputValue.trim()) {
         const messageId = crypto.randomUUID();
@@ -321,8 +326,10 @@ const ChatPanel = forwardRef(
           : null;
 
         try {
-          // 1. Pausar IA en backend
-          await updateConversationIsWithAI(conversationId, false); // 👈 función que debes implementar
+          // 1. Pausar IA en backend solo si no está ya pausada
+          if (!iaPaused) {
+            await updateConversationIsWithAI(conversationId, false);
+          }
 
           // 2. Enviar mensaje
           onSendAdminMessage(
@@ -399,7 +406,6 @@ const ChatPanel = forwardRef(
     const getBlockedIcon = () => <BlockIcon />;
     const processedMessages = useMemo(() => {
       // 🔍 DEBUG: Log mensajes recibidos en ChatPanel
-      console.log(`🎯 [ChatPanel] Procesando ${messages.length} mensajes para conversación ${conversationId}`);
       
       // ✅ Deduplicación inteligente para evitar imágenes duplicadas
       const msgMap = new Map();
@@ -412,16 +418,6 @@ const ChatPanel = forwardRef(
         const hasFiles = (Array.isArray(msg.files) && msg.files.length > 0) || 
                          (Array.isArray(msg.images) && msg.images.length > 0) ||
                          (!!(msg.file?.fileUrl || msg.fileUrl));
-        
-        // 🔍 DEBUG: Log mensajes con archivos
-        if (hasFiles) {
-          console.log(`📎 [ChatPanel] Mensaje ${messageId} tiene archivos:`, {
-            files: msg.files?.length || 0,
-            images: msg.images?.length || 0,
-            file: !!msg.file,
-            fileUrl: !!msg.fileUrl
-          });
-        }
         
         // 🚫 FIX: Detectar si este mensaje con archivos ya está representado en el mapa
         // Caso especial: SignalR envía 1 evento con files:[{img1},{img2}] pero el historial
@@ -469,16 +465,6 @@ const ChatPanel = forwardRef(
         msgMap.set(messageId, msg);
       });
       
-      // 📊 LOG: Resumen de deduplicación 
-      console.log(`🎯 [ChatPanel] Deduplicación completada:`, {
-        original: messages.length,
-        deduplicados: msgMap.size,
-        eliminados: messages.length - msgMap.size,
-        conArchivos: Array.from(msgMap.values()).filter(m => 
-          (m.files?.length > 0) || (m.images?.length > 0) || m.file?.fileUrl || m.fileUrl
-        ).length
-      });
-      
       // Normalizar timestamps ANTES de ordenar (soporta todas las variantes del backend)
       const messagesWithNormalizedTimestamps = Array.from(msgMap.values()).map((msg, idx) => {
         const originalTimestamp = msg.timestamp || msg.Timestamp || msg.createdAt || msg.CreatedAt;
@@ -489,20 +475,6 @@ const ChatPanel = forwardRef(
           if (!normalized.endsWith('Z') && !normalized.includes('+') && !normalized.includes('-', 10)) {
             normalized = normalized + 'Z';
           }
-        }
-        
-        // 🔍 DEBUG: Log primeros 5 mensajes con timestamps RAW
-        if (idx < 5 && (DEBUG || (typeof window !== 'undefined' && window.__VOIA_DEBUG_SORT === true))) {
-          console.log(`🔍 [ChatPanel] Mensaje ${idx} timestamps RAW:`, {
-            id: msg.id,
-            text: (msg.text || '').substring(0, 30),
-            timestamp: msg.timestamp,
-            Timestamp: msg.Timestamp,
-            createdAt: msg.createdAt,
-            CreatedAt: msg.CreatedAt,
-            normalized,
-            fromRole: msg.fromRole
-          });
         }
         
         return {
@@ -608,12 +580,7 @@ const ChatPanel = forwardRef(
           fileType: f.fileType || f.FileType || f.type || "application/octet-stream",
         }));
 
-        // ✅ DEBUG: Log file messages to help diagnose visibility issues
-        if (normalizedFiles.length > 0) {
-          console.log(`📎 [ChatPanel RENDER] Mensaje ${msg.id} tiene ${normalizedFiles.length} archivo(s):`, 
-            normalizedFiles.map(f => ({ fileName: f.fileName, fileType: f.fileType, fileUrl: f.fileUrl }))
-          );
-        }
+
 
         return {
           ...msg,
@@ -1061,10 +1028,10 @@ const ChatPanel = forwardRef(
                         setConversationTags(updatedTags || []);
                         setExpandedTagIndex(null);
 
-                        // Si no quedan etiquetas, marcar conversación como resuelta
+                        // Si no quedan etiquetas de pendiente, volver a estado activo
+                        // (no marcar como resuelta para no perder el estado online/heartbeat)
                         if (!updatedTags || updatedTags.length === 0) {
-                          console.log('🏷️ No quedan etiquetas, marcando como resuelta...');
-                          onStatusChange("resuelta");
+                          onStatusChange("active");
                         }
                       } catch (error) {
                         console.error('Error eliminando etiqueta:', error);
@@ -1113,8 +1080,6 @@ const ChatPanel = forwardRef(
               </IconButton>
 
               <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
-                <MenuItem disabled>Estado actual: {status}</MenuItem>
-
                 <Tooltip
                   title={
                     isTagLimitReached
@@ -1143,7 +1108,29 @@ const ChatPanel = forwardRef(
                 <MenuItem onClick={handleToggleBlock}>
                   {blocked ? "Desbloquear Usuario" : "Bloquear Usuario"}
                 </MenuItem>
+
+                <MenuItem
+                  onClick={() => {
+                    setConfirmOpen(true);
+                    handleCloseMenu();
+                  }}
+                >
+                  Eliminar conversación
+                </MenuItem>
               </Menu>
+
+              <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+                <DialogTitle>¿Estás seguro?</DialogTitle>
+                <DialogContent>¿Deseas eliminar esta conversación? Se moverá a la papelera.</DialogContent>
+                <DialogActions>
+                  <Button onClick={() => setConfirmOpen(false)} color="primary">Cancelar</Button>
+                  <Button onClick={async () => {
+                    setConfirmOpen(false);
+                    const result = await moveConversationToTrash(conversationId);
+                    if (result !== null && onMovedToTrash) onMovedToTrash(conversationId);
+                  }} color="error">Eliminar</Button>
+                </DialogActions>
+              </Dialog>
             </Box>
           </Box>
         </Box>
@@ -1406,6 +1393,7 @@ const ChatPanel = forwardRef(
                     }}
                     isHighlighted={highlightedMessageId === msg.id}
                     isAIActive={!iaPaused}
+                    conversationId={conversationId}
                   />
                 </React.Fragment>
               );
@@ -1502,6 +1490,7 @@ ChatPanel.propTypes = {
   onAdminStopTyping: PropTypes.func, // ✅ agregado
     typingConversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // ✅ agregar
   onLoadMoreOlderMessages: PropTypes.func, // (conversationId) => Promise<number>
+  onMovedToTrash: PropTypes.func,
 };
 
 // Wrap with React.memo to avoid re-renders when props are referentially stable.

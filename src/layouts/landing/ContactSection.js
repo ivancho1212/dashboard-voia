@@ -5,7 +5,6 @@ import { FaPhoneAlt, FaEnvelope, FaMapMarkerAlt } from "react-icons/fa";
 
 const ContactSection = () => {
   useEffect(() => {
-    console.log("ContactSection montada / visible");
   }, []);
 
   const [formData, setFormData] = useState({

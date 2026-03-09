@@ -11,6 +11,7 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
     api_endpoint: "",
     api_key: "",
     status: "active",
+    api_format: "openai",
   });
 
   const handleChange = (e) => {
@@ -26,6 +27,7 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
       apiEndpoint: form.api_endpoint.trim(),
       apiKey: form.api_key.trim(),
       status: form.status,
+      apiFormat: form.api_format,
     };
 
     if (!payload.name || !payload.apiEndpoint) {
@@ -83,6 +85,23 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
         />
       </SoftBox>
 
+      {/* Formato de API */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Formato de API
+        </SoftTypography>
+        <select
+          name="api_format"
+          value={form.api_format}
+          onChange={handleChange}
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", marginTop: "6px" }}
+        >
+          <option value="openai">OpenAI compatible (OpenAI, DeepSeek, Groq, Mistral, etc.)</option>
+          <option value="gemini">Google Gemini</option>
+          <option value="anthropic">Anthropic (Claude)</option>
+        </select>
+      </SoftBox>
+
       {/* Estado */}
       <SoftBox mb={2}>
         <SoftTypography variant="caption" color="text">
@@ -92,13 +111,7 @@ function IaProviderCreateForm({ onSubmit, onCancel }) {
           name="status"
           value={form.status}
           onChange={handleChange}
-          style={{
-            width: "100%",
-            padding: "10px",
-            borderRadius: "8px",
-            border: "1px solid #ccc",
-            marginTop: "6px",
-          }}
+          style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #ccc", marginTop: "6px" }}
         >
           <option value="active">Activo</option>
           <option value="inactive">Inactivo</option>

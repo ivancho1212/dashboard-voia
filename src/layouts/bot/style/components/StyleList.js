@@ -6,8 +6,9 @@ import SoftButton from "components/SoftButton";
 import Tooltip from '@mui/material/Tooltip';
 import { Visibility, CheckCircle, PlayArrow, Edit, Delete } from "@mui/icons-material";
 
-function StyleList({ styles, botStyleId, userBots, onViewStyle, onApplyStyle, onEditStyle, onDeleteStyle }) {
+function StyleList({ styles, botStyleId, userBots, allowCustomTheme, onViewStyle, onApplyStyle, onEditStyle, onDeleteStyle }) {
   if (!styles.length) return <SoftTypography>No hay estilos guardados.</SoftTypography>;
+
 
   return (
     <SoftBox display="flex" flexDirection="column" gap={2}>
@@ -64,33 +65,37 @@ function StyleList({ styles, botStyleId, userBots, onViewStyle, onApplyStyle, on
                 </span>
               </Tooltip>
 
-              <Tooltip title="Editar" arrow>
-                <span>
-                  <SoftButton
-                    color="success"
-                    variant="outlined"
-                    size="medium"
-                    onClick={() => onEditStyle(style)}
-                    aria-label={`Editar estilo ${style.name || style.id}`}
-                  >
-                    <Edit fontSize="medium" />
-                  </SoftButton>
-                </span>
-              </Tooltip>
+              {(allowCustomTheme || !style.isBase) && (
+                <Tooltip title="Editar" arrow>
+                  <span>
+                    <SoftButton
+                      color="success"
+                      variant="outlined"
+                      size="medium"
+                      onClick={() => onEditStyle(style)}
+                      aria-label={`Editar estilo ${style.name || style.id}`}
+                    >
+                      <Edit fontSize="medium" />
+                    </SoftButton>
+                  </span>
+                </Tooltip>
+              )}
 
-              <Tooltip title="Eliminar" arrow>
-                <span>
-                  <SoftButton
-                    color="error"
-                    variant="outlined"
-                    size="medium"
-                    onClick={() => onDeleteStyle(style)}
-                    aria-label={`Eliminar estilo ${style.name || style.id}`}
-                  >
-                    <Delete fontSize="medium" />
-                  </SoftButton>
-                </span>
-              </Tooltip>
+              {!style.isBase && (
+                <Tooltip title="Eliminar" arrow>
+                  <span>
+                    <SoftButton
+                      color="error"
+                      variant="outlined"
+                      size="medium"
+                      onClick={() => onDeleteStyle(style)}
+                      aria-label={`Eliminar estilo ${style.name || style.id}`}
+                    >
+                      <Delete fontSize="medium" />
+                    </SoftButton>
+                  </span>
+                </Tooltip>
+              )}
 
               {/* Siempre mostrar aplicar, el modal permitirá seleccionar el bot */}
               <Tooltip title="Asignar a un bot" arrow>
@@ -117,7 +122,8 @@ function StyleList({ styles, botStyleId, userBots, onViewStyle, onApplyStyle, on
 StyleList.propTypes = {
   styles: PropTypes.arrayOf(PropTypes.object).isRequired,
   botStyleId: PropTypes.number,
-  userBots: PropTypes.arrayOf(PropTypes.object), // ✅ lista de bots del usuario
+  userBots: PropTypes.arrayOf(PropTypes.object),
+  allowCustomTheme: PropTypes.bool,
   onViewStyle: PropTypes.func.isRequired,
   onApplyStyle: PropTypes.func.isRequired,
   onEditStyle: PropTypes.func.isRequired,

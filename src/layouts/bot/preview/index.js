@@ -3,14 +3,15 @@ import Grid from "@mui/material/Grid";
 import PropTypes from "prop-types";
 import MyBotCard from "../components/MyBotCard";
 
-function BotPreview({ templates, onSelectTemplate }) {
+function BotPreview({ templates, onSelectTemplate, locked }) {
   return (
     <Grid container spacing={2}>
       {templates.map((template) => (
         <Grid item xs={12} sm={6} md={4} key={template.id}>
-          <MyBotCard 
-            template={template} 
-            onSelectTemplate={onSelectTemplate} 
+          <MyBotCard
+            template={template}
+            onSelectTemplate={onSelectTemplate}
+            locked={locked}
           />
         </Grid>
       ))}
@@ -20,7 +21,8 @@ function BotPreview({ templates, onSelectTemplate }) {
 
 BotPreview.propTypes = {
   templates: PropTypes.array,
-  onSelectTemplate: PropTypes.func, // Ahora es opcional
+  onSelectTemplate: PropTypes.func,
+  locked: PropTypes.bool,
 };
 
 export default BotPreview;

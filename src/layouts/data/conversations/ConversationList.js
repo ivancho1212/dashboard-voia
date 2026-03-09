@@ -19,6 +19,8 @@ import { format, startOfDay, differenceInDays, isSameDay, parseISO, isWithinInte
 import { es } from "date-fns/locale";
 import ClearIcon from '@mui/icons-material/Clear';
 import ConversationActions from "./ConversationActions";
+import { useAuth } from "contexts/AuthContext";
+import { hasPermission } from "utils/permissions";
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import Loader from "components/Loader";
 import Button from "@mui/material/Button";
@@ -88,6 +90,8 @@ function ConversationList({
   error = null,
   onRetry = () => {}
 }) {
+  const { user } = useAuth();
+  const canViewTrash = hasPermission(user, "CanDeleteConversations");
   const [anchorEl, setAnchorEl] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
   const [search, setSearch] = React.useState("");
@@ -111,8 +115,17 @@ function ConversationList({
     handleCloseMenu();
   };
 
+  // Usar sessionNumber calculado por bot en el padre (index.js); fallback al id si no viene
+  const sessionNumberMap = useMemo(() => {
+    const map = {};
+    conversations.forEach((conv) => { map[conv.id] = conv.sessionNumber ?? Number(conv.id); });
+    return map;
+  }, [conversations]);
+
   const filtered = useMemo(() => {
     const result = conversations
+      // Nunca mostrar conversaciones que están en la papelera
+      .filter((conv) => conv.status?.toLowerCase() !== "trash")
       // Mostrar correctamente conversaciones expiradas/cerradas
       .filter((conv) => {
         if (filter === "active") return conv.status === "activa";
@@ -124,7 +137,7 @@ function ConversationList({
       })
       .filter((conv) => {
         const convId = `${conv.id}`;
-        const textToSearch = `Sesión ${conv.id} ${conv.lastMessage || ""}`;
+        const textToSearch = `Sesión ${sessionNumberMap[conv.id] ?? conv.id} ${conv.lastMessage || ""}`;
         const fullMessages = (messagesMap[convId] || []).map((msg) => msg.text || "").join(" ");
         return `${textToSearch} ${fullMessages}`.toLowerCase().includes(search.toLowerCase());
       })
@@ -209,11 +222,13 @@ function ConversationList({
           <IconButton onClick={handleOpenMenu} color="info">
             <FilterListIcon />
           </IconButton>
-          <Tooltip title="Ver papelera">
-            <IconButton onClick={onShowTrash} sx={{ color: '#b0b0b0' }}>
-              <DeleteOutlineIcon />
-            </IconButton>
-          </Tooltip>
+          {canViewTrash && (
+            <Tooltip title="Ver papelera">
+              <IconButton onClick={onShowTrash} sx={{ color: '#b0b0b0' }}>
+                <DeleteOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          )}
         </Box>
         <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
           <MenuItem onClick={() => handleFilterChange("all")}>Todas</MenuItem>
@@ -399,19 +414,22 @@ function ConversationList({
             
             // ✅ Calcular estado visual para el borde
             const HEARTBEAT_INACTIVITY_THRESHOLD = 45 * 1000;
-            const isHeartbeatActive = conv.lastHeartbeatTime 
+            const _closedOrInactiveStatuses = ["inactiva", "inactive", "cerrada", "closed", "resuelta", "resolved", "expired", "expirada"];
+            const isHeartbeatActive = conv.lastHeartbeatTime
               && (Date.now() - new Date(conv.lastHeartbeatTime) < HEARTBEAT_INACTIVITY_THRESHOLD)
-              && conv.status !== "inactiva" && conv.status !== "cerrada" && conv.status !== "resuelta";
+              && !_closedOrInactiveStatuses.includes(conv.status?.toLowerCase());
             const isPending = conv.status === "pendiente";
-            const isBlocked = conv.blocked === true;
-            const isClosed = ["cerrada", "closed", "resuelta", "expired", "expirada"].includes(conv.status?.toLowerCase());
-            const isInactive = conv.status === "inactiva";
+            // blocked=true por sesión móvil activa NO debe mostrarse como usuario bloqueado
+            const isBlocked = conv.blocked === true && !conv.activeMobileSession;
+            const isClosed = ["cerrada", "closed", "resuelta", "resolved", "expired", "expirada"].includes(conv.status?.toLowerCase());
+            const isInactive = ["inactiva", "inactive"].includes(conv.status?.toLowerCase());
 
             // Determinar color y estilo del borde
             let borderColor = '#d0d0d0'; // default: gris suave
             let borderShadow = '0 1px 3px rgba(0,0,0,0.05)';
             let borderAnimation = 'none';
-            let statusLabel = conv.status || 'activa';
+            const statusNormalized = conv.status?.toLowerCase();
+            let statusLabel = statusNormalized === 'active' ? 'activa' : (conv.status || 'activa');
 
             if (isBlocked) {
               borderColor = '#f44336';
@@ -501,7 +519,7 @@ function ConversationList({
                         noWrap
                         sx={{ fontSize: "12px" }}
                       >
-                        Sesión {conv.id}
+                        Sesión {sessionNumberMap[conv.id] ?? conv.id}
                       </Typography>
                     </Box>
                     {/* Último mensaje */}

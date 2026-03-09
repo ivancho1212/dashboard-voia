@@ -44,17 +44,13 @@ export const useActivityTracker = () => {
             
             // Si al token le quedan menos de 60 minutos Y el usuario está activo → refrescar
             if (timeUntilExpiry < 60 * 60 && timeUntilExpiry > 0) {
-              console.log('🔄 [ActivityTracker] Usuario activo, extendiendo sesión...');
               await refreshAccessToken();
-              console.log('✅ [ActivityTracker] Sesión extendida por actividad');
             } else if (timeUntilExpiry > 0) {
-              console.log(`ℹ️ [ActivityTracker] Token válido por ${Math.floor(timeUntilExpiry/3600)}h ${Math.floor((timeUntilExpiry%3600)/60)}min más`);
             } else {
               // Token expirado — intentar refresh
               console.warn('⚠️ [ActivityTracker] Token expirado, intentando renovar...');
               try {
                 await refreshAccessToken();
-                console.log('✅ [ActivityTracker] Token renovado después de expiración');
               } catch (e) {
                 console.error('❌ [ActivityTracker] No se pudo renovar token expirado:', e?.message);
               }
@@ -63,7 +59,6 @@ export const useActivityTracker = () => {
             console.warn('⚠️ [ActivityTracker] Error verificando token:', e);
           }
         } else {
-          console.log('😴 [ActivityTracker] Usuario inactivo por más de 30 minutos');
         }
       }, 10 * 60 * 1000); // Cada 10 minutos
     };

@@ -57,10 +57,15 @@ function Sidenav({ color, brand, brandName, routes, ...rest }) {
   }, [dispatch, location]);
 
   // Render all the routes from the routes.js (All the visible items on the Sidenav)
-  const renderRoutes = routes.map(({ type, name, icon, title, noCollapse, key, route, href }) => {
+  const renderRoutes = routes.map(({ type, name, icon, title, noCollapse, key, route, href, exactMatch, activePaths }) => {
     let returnValue;
-    // Detectar activo por path, no solo por key
-    const isActive = route && pathname.startsWith(route);
+    // exactMatch: solo activo si el path es exacto
+    // activePaths: array de prefijos adicionales que también activan este item
+    const isActive = route && (
+      exactMatch
+        ? pathname === route
+        : pathname === route || pathname.startsWith(route + "/")
+    ) || activePaths?.some(p => pathname.startsWith(p));
 
     if (type === "collapse") {
       returnValue = href ? (

@@ -27,13 +27,6 @@ export const uploadFile = async (file, botId, botTemplateId, userId, templateTra
 
   const token = localStorage.getItem("token");
 
-  console.log('Enviando archivo con datos:', {
-    fileName: file.name,
-    botId,
-    botTemplateId,
-    userId,
-    templateTrainingSessionId
-  });
 
   try {
     const config = {

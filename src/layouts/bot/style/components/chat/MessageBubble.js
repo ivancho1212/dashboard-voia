@@ -4,12 +4,49 @@ import { sanitizeMessage } from "../../../../../utils/sanitizeUtils";
 import { FaExclamationCircle } from "react-icons/fa";
 import { getSenderColor } from "utils/colors";
 
-function MessageBubble({ message, index, messageRef, fontFamily, openImageModal, isMobileView }) {
+const IMAGE_EXTS = /\.(jpg|jpeg|png|gif|webp|bmp|svg|heic|heif)$/i;
+
+// Limpia cualquier prefijo emoji al inicio (con flag u para Unicode correcto)
+function stripEmojiPrefix(text) {
+  if (!text) return text;
+  return text.replace(/^(?:📎|📷|🖼️|🖼)\s*/u, "").trim();
+}
+
+function MessageBubble({ message, index, messageRef, fontFamily, openImageModal, isMobileView, onJumpToReply, highlightedMessageId, resolvedReplyTo, conversationId }) {
   const isUser = message.from === "user";
   const isAI = message.from === "ai" || message.from === "bot";
   const isAdmin = message.from === "admin";
   const isSending = isUser && message.status === "sending";
   const isError = isUser && message.status === "error";
+
+  // Fetch miniatura de imagen de respuesta con credenciales (funciona tras recarga)
+  const [replyThumbBlobUrl, setReplyThumbBlobUrl] = useState(null);
+  useEffect(() => {
+    const imageUrl = resolvedReplyTo?.imageUrl;
+    if (!imageUrl) { setReplyThumbBlobUrl(null); return; }
+    let cancelled = false;
+    let objectUrl = null;
+    (async () => {
+      try {
+        const base = getBackendUrl ? getBackendUrl() : "";
+        const cid = conversationId || message.conversationId || "";
+        let fullUrl = imageUrl.startsWith("http") ? imageUrl
+          : imageUrl.includes("/api/files/chat/") && !imageUrl.includes("/inline")
+          ? base + imageUrl + "/inline?cid=" + cid
+          : base + imageUrl;
+        const res = await fetch(fullUrl, { credentials: "include" });
+        if (cancelled || !res.ok) return;
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (!cancelled) setReplyThumbBlobUrl(objectUrl);
+      } catch { /* ignorar */ }
+    })();
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedReplyTo?.imageUrl]);
 
   let backgroundColor = "#f5f5f5";
   let textColor = "#1a1a1a";
@@ -56,7 +93,10 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
     flexDirection: "column",
     boxSizing: "border-box",
     opacity: isSending ? 0.95 : 1,
-    boxShadow: "0 1px 4px rgba(0, 0, 0, 0.06)",
+    boxShadow: String(message.id) === highlightedMessageId
+      ? "0 0 0 2px #21f3ad"
+      : "0 1px 4px rgba(0, 0, 0, 0.06)",
+    transition: "box-shadow 0.3s ease",
     marginBottom: "4px",
     marginLeft: isUser ? "8px" : "0px",
     marginRight: isUser ? "0px" : "8px",
@@ -127,7 +167,11 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
       // Build full URL
       let fullUrl = fileUrl;
       if (!fileUrl.startsWith("http")) {
-        fullUrl = `${getBackendUrl()}${fileUrl.includes("/api/files/chat/") && !fileUrl.includes("/inline") ? fileUrl + "/inline" : fileUrl}`;
+        const cid = conversationId || message.conversationId || "";
+        const resolved = fileUrl.includes("/api/files/chat/") && !fileUrl.includes("/inline")
+          ? fileUrl + "/inline?cid=" + cid
+          : fileUrl;
+        fullUrl = getBackendUrl() + resolved;
       }
       
       
@@ -186,7 +230,8 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
       setBlobsLoading(false);
     };
     loadImages();
-  }, [message.multipleFiles?.map((f) => f.fileUrl).join(",")]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.multipleFiles?.map((f) => f.fileUrl).join(","), conversationId]);
 
   blobUrlsRef.current = imageBlobUrls;
 
@@ -207,7 +252,8 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
     if (url.startsWith("http")) return url;
     if (url.startsWith("/api/") || url.startsWith("/uploads/")) {
       if (url.includes("/api/files/chat/") && !url.includes("/inline")) {
-        return `${getBackendUrl()}${url}/inline`;
+        const cid = conversationId || message.conversationId || "";
+        return getBackendUrl() + url + "/inline?cid=" + cid;
       }
       return `${getBackendUrl()}${url}`;
     }
@@ -458,11 +504,95 @@ function MessageBubble({ message, index, messageRef, fontFamily, openImageModal,
       })()}
 
       {/* Reply preview */}
-      {message.replyToText && (
-        <div style={{ padding: "8px", margin: "4px -2px 2px -2px", backgroundColor: "rgba(0,0,0,0.05)", borderRadius: "6px", borderLeft: `3px solid ${isUser ? "#88a8c4" : "#b0b0b0"}`, fontSize: "13px", opacity: 0.9 }}>
-          <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }} dangerouslySetInnerHTML={{ __html: sanitizeMessage(message.replyToText) }} />
-        </div>
-      )}
+      {(message.replyToText || resolvedReplyTo) && (() => {
+        const canJump = Boolean(message.replyToMessageId && onJumpToReply);
+        const borderColor = isUser ? "#88a8c4" : "#b0b0b0";
+
+        // Si tenemos el mensaje original resuelto, usarlo para mostrar miniatura o info precisa
+        if (resolvedReplyTo) {
+          const thumbUrl = resolvedReplyTo.imageUrl ? buildUrl(resolvedReplyTo.imageUrl) : null;
+          const labelText = resolvedReplyTo.text
+            ? stripEmojiPrefix(resolvedReplyTo.text).slice(0, 80)
+            : resolvedReplyTo.fileName
+            ? stripEmojiPrefix(resolvedReplyTo.fileName)
+            : stripEmojiPrefix(message.replyToText || "");
+
+          return (
+            <div
+              onClick={canJump ? () => onJumpToReply(message.replyToMessageId) : undefined}
+              style={{
+                margin: "4px -2px 2px -2px",
+                backgroundColor: "rgba(0,0,0,0.07)",
+                borderRadius: "6px",
+                borderLeft: `3px solid ${borderColor}`,
+                fontSize: "12px",
+                opacity: 0.9,
+                cursor: canJump ? "pointer" : "default",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                overflow: "hidden",
+                padding: thumbUrl ? "4px 8px 4px 4px" : "6px 8px",
+              }}
+            >
+              {(replyThumbBlobUrl || thumbUrl) ? (
+                <img
+                  src={replyThumbBlobUrl || thumbUrl}
+                  alt="imagen respondida"
+                  style={{
+                    width: "60px",
+                    height: "60px",
+                    objectFit: "cover",
+                    borderRadius: "6px",
+                    flexShrink: 0,
+                  }}
+                />
+              ) : (
+                <>
+                  {resolvedReplyTo.fileType && !resolvedReplyTo.fileType.startsWith("image/") && (
+                    <span style={{ flexShrink: 0 }}>📎</span>
+                  )}
+                  <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontSize: "12px" }}>
+                    {labelText}
+                  </span>
+                </>
+              )}
+            </div>
+          );
+        }
+
+        // Fallback: solo replyToText (sin mensaje original resuelto)
+        const cleanText = stripEmojiPrefix(message.replyToText || "");
+        const isImg = IMAGE_EXTS.test(cleanText);
+        const isFile = !isImg && /\.\w{2,6}$/.test(cleanText);
+        return (
+          <div
+            onClick={canJump ? () => onJumpToReply(message.replyToMessageId) : undefined}
+            style={{
+              padding: "6px 8px",
+              margin: "4px -2px 2px -2px",
+              backgroundColor: "rgba(0,0,0,0.07)",
+              borderRadius: "6px",
+              borderLeft: `3px solid ${borderColor}`,
+              fontSize: "12px",
+              opacity: 0.9,
+              cursor: canJump ? "pointer" : "default",
+              display: "flex",
+              alignItems: "center",
+              gap: "5px",
+              overflow: "hidden",
+            }}
+          >
+            {isImg && <span style={{ flexShrink: 0 }}>📷</span>}
+            {isFile && <span style={{ flexShrink: 0 }}>📎</span>}
+            <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" }}>
+              {isImg || isFile
+                ? cleanText
+                : <span dangerouslySetInnerHTML={{ __html: sanitizeMessage(message.replyToText) }} />}
+            </span>
+          </div>
+        );
+      })()}
 
       {message.text && <span style={{ paddingRight: isUser ? "45px" : "0px", paddingLeft: isUser ? "0px" : "0px" }} dangerouslySetInnerHTML={{ __html: sanitizeMessage(message.text) }} />}
 
@@ -484,11 +614,13 @@ MessageBubble.propTypes = {
   message: PropTypes.shape({
     id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     tempId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    conversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]), // fallback si viene en el mensaje
     from: PropTypes.string,
     status: PropTypes.string,
     text: PropTypes.string,
     timestamp: PropTypes.string,
     replyToText: PropTypes.string,
+    replyToMessageId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
     file: PropTypes.shape({
       fileType: PropTypes.string,
       fileUrl: PropTypes.string,
@@ -512,6 +644,16 @@ MessageBubble.propTypes = {
   fontFamily: PropTypes.string,
   openImageModal: PropTypes.func.isRequired,
   isMobileView: PropTypes.bool,
+  onJumpToReply: PropTypes.func,
+  highlightedMessageId: PropTypes.string,
+  conversationId: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+  resolvedReplyTo: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    text: PropTypes.string,
+    imageUrl: PropTypes.string,
+    fileName: PropTypes.string,
+    fileType: PropTypes.string,
+  }),
 };
 
 export default MessageBubble;

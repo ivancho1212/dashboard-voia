@@ -5,6 +5,7 @@ import DashboardNavbar from "examples/Navbars/DashboardNavbar";
 import Footer from "examples/Footer";
 
 import SoftBox from "components/SoftBox";
+import SoftButton from "components/SoftButton";
 import SoftTypography from "components/SoftTypography";
 import Card from "@mui/material/Card";
 import Divider from "@mui/material/Divider";
@@ -26,7 +27,7 @@ import CancelIcon from "@mui/icons-material/Cancel";
 
 import { getBotsByUserId } from "services/botService";
 import integracionWidgetImg from "assets/images/integracion-widget.png";
-import { createBotIntegration, getBotIntegrationByBotId, deleteBotIntegrationByBotId, getBotsWithScript } from "services/botIntegrationService";
+import { createBotIntegration, getBotIntegrationByBotId, deleteBotIntegrationByBotId, getBotsWithScript, checkDomainAvailability } from "services/botIntegrationService";
 import { getBotDataCaptureFields } from "services/botDataCaptureService";
 import { useAuth } from "contexts/AuthContext";
 import widgetAuthService from "services/widgetAuthService";
@@ -162,7 +163,6 @@ function BotAdminDashboard() {
       try {
         const integration = await getBotIntegrationByBotId(bot.id);
         if (integration) {
-          console.log(`📦 Integración encontrada para bot ${bot.id}:`, integration);
           const allowedDomain = integration.allowedDomain || '';
 
           // Generate framework-aware scripts using saved integration config
@@ -184,14 +184,12 @@ function BotAdminDashboard() {
           // Keep the selected framework in UI state so copy/generation prefer it
           setSelectedFrameworks(prev => ({ ...prev, [bot.id]: (integration.framework || 'html').toLowerCase() }));
         } else {
-          console.log(`ℹ️ No hay integración para bot ${bot.id}`);
         }
       } catch (error) {
         console.log(`ℹ️ No hay integración existente para bot ${bot.id} (error capturado)`);
       }
     }
 
-    console.log(`📊 Scripts finales antes de setScripts:`, existingScripts);
     setScripts(existingScripts);
     setAllowedUrls(existingUrls);
     setIntegrationIds(existingIds);
@@ -199,7 +197,6 @@ function BotAdminDashboard() {
     // Cargar client secrets para todos los bots
     await loadBotApiSettings(botsList);
 
-    console.log("✅ Integraciones cargadas para", Object.keys(existingScripts).length, "bots");
   };
 
   const showModal = (message, color = 'info', timeout = 3500) => {
@@ -232,6 +229,21 @@ function BotAdminDashboard() {
     const widgetUrl = getWidgetFrameUrl();
     
       try {
+      // Validar que la URL no esté en uso (mismo usuario otro bot, o diferente usuario)
+      try {
+        const domainCheck = await checkDomainAvailability(allowedUrl, botId);
+        if (domainCheck?.taken) {
+          const msg = domainCheck.sameUser
+            ? `Esta URL ya está integrada en tu bot "${domainCheck.botName || 'otro bot'}". Elimina esa integración primero si deseas reutilizarla.`
+            : `Esta URL ya está asociada al usuario "${domainCheck.ownerName || 'otro usuario'}". Si crees que es un error comunícate a soporte@voia.ai`;
+          showModal(msg, 'error', 8000);
+          setLoading && setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.warn('No se pudo verificar disponibilidad del dominio (non-blocking)', err);
+      }
+
       // Attempt to create integration; some backends return the created integration object
       let created = null;
       try {
@@ -303,14 +315,11 @@ function BotAdminDashboard() {
     if (!confirmed || !botId) return;
 
     try {
-      console.log(`🗑️ Eliminando integración para bot ${botId}...`);
       await deleteBotIntegrationByBotId(botId);
-      console.log(`✅ Backend confirmó eliminación para bot ${botId}`);
 
       setScripts(prev => {
         const newScripts = { ...prev };
         delete newScripts[botId];
-        console.log(`🧹 Script eliminado del estado local para bot ${botId}`, newScripts);
         return newScripts;
       });
       setAllowedUrls(prev => {
@@ -330,14 +339,11 @@ function BotAdminDashboard() {
       setShowFullScript(prev => { const n={...prev}; delete n[botId]; return n; });
       setClientSecrets(prev => { const n={...prev}; delete n[botId]; return n; });
       
-      console.log(`✅ Todos los estados limpiados para bot ${botId}`);
       showModal("✅ Integración eliminada correctamente", "success");
       
       // Re-sync integrations to ensure UI reflects backend state (hide previews)
       try {
-        console.log(`🔄 Recargando integraciones para verificar eliminación...`);
         await loadIntegrationsForBots(eligibleBots);
-        console.log(`✅ Integraciones recargadas correctamente`);
       } catch (err) {
         console.warn('Error reloading integrations after delete', err);
       }
@@ -822,78 +828,93 @@ function BotAdminDashboard() {
 
           <Divider sx={{ my: 4 }} />
 
-          {/* INSTRUCCIONES */}
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <SoftTypography variant="h6" gutterBottom>
-                📋 Cómo Integrar Tu Widget
-              </SoftTypography>
-              
-              <SoftBox mb={3}>
-                <SoftBox p={2} sx={{ backgroundColor: '#f8fafc', borderRadius: '8px', mb: 2, border: '1px solid #e2e8f0' }}>
-                  <SoftTypography variant="body2" fontWeight="bold" color="info" sx={{ mb: 1 }}>
-                    1️⃣ Configura la URL permitida
-                  </SoftTypography>
-                  <SoftTypography variant="caption" color="text">
-                    Ingresa la URL exacta donde quieres usar el widget (ej: https://tusitio.com)
-                  </SoftTypography>
-                </SoftBox>
+          {/* INSTRUCCIONES DINÁMICAS */}
+          {(() => {
+            const activeFramework = Object.values(selectedFrameworks)[0] || 'html';
+            const fwDocs = {
+              html: {
+                step3: 'Copia el script y pégalo antes del cierre del tag </body> en tu archivo HTML',
+                step3detail: 'Funciona en cualquier sitio estático, WordPress, Webflow, etc.',
+                where: 'Pega el script antes del cierre del tag </body> en tu HTML',
+                code: `<!-- Tu HTML -->\n<body>\n  ...\n\n  <!-- Pega aquí el script de VOIA -->\n</body>`,
+              },
+              react: {
+                step3: 'Pega el código dentro de un useEffect en tu componente principal (App.jsx o LandingPage.jsx)',
+                step3detail: 'El widget se carga una sola vez al montar el componente raíz.',
+                where: 'Pega el código en el useEffect de tu componente principal',
+                code: `import { useEffect } from 'react';\n\nexport default function App() {\n  useEffect(() => {\n    // Pega aquí el snippet de VOIA\n  }, []);\n  return <div>...</div>;\n}`,
+              },
+              angular: {
+                step3: 'Pega el código en el método ngAfterViewInit() de tu AppComponent (app.component.ts)',
+                step3detail: 'El widget se inicializa después de que Angular renderiza la vista.',
+                where: 'Pega el código en ngAfterViewInit() de tu AppComponent',
+                code: `import { AfterViewInit } from '@angular/core';\n\nexport class AppComponent implements AfterViewInit {\n  ngAfterViewInit() {\n    // Pega aquí el snippet de VOIA\n  }\n}`,
+              },
+              vue: {
+                step3: 'Pega el código en el hook mounted() de tu componente raíz (Options API) o en onMounted() (Composition API)',
+                step3detail: 'El widget se carga cuando el componente termina de montarse.',
+                where: 'Pega el código en mounted() o onMounted() de tu componente raíz',
+                code: `export default {\n  mounted() {\n    // Pega aquí el snippet de VOIA (Options API)\n  }\n}\n\n// Composition API:\nonMounted(() => {\n  // Pega aquí el snippet de VOIA\n});`,
+              },
+            };
+            const doc = fwDocs[activeFramework] || fwDocs.html;
 
-                <SoftBox p={2} sx={{ backgroundColor: '#f0f9ff', borderRadius: '8px', mb: 2, border: '1px solid #bae6fd' }}>
-                  <SoftTypography variant="body2" fontWeight="bold" color="info" sx={{ mb: 1 }}>
-                    2️⃣ Genera el script
+            return (
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <SoftTypography variant="h6" gutterBottom>
+                    📋 Cómo Integrar Tu Widget
                   </SoftTypography>
-                  <SoftTypography variant="caption" color="text">
-                    Haz clic en el botón + para generar tu código de integración personalizado
-                  </SoftTypography>
-                </SoftBox>
+                  <SoftBox mb={3}>
+                    <SoftBox p={2} sx={{ backgroundColor: '#f8fafc', borderRadius: '8px', mb: 2, border: '1px solid #e2e8f0' }}>
+                      <SoftTypography variant="body2" fontWeight="bold" color="info" sx={{ mb: 1 }}>1️⃣ Configura la URL permitida</SoftTypography>
+                      <SoftTypography variant="caption" color="text">Ingresa la URL exacta donde quieres usar el widget (ej: https://tusitio.com)</SoftTypography>
+                    </SoftBox>
+                    <SoftBox p={2} sx={{ backgroundColor: '#f0f9ff', borderRadius: '8px', mb: 2, border: '1px solid #bae6fd' }}>
+                      <SoftTypography variant="body2" fontWeight="bold" color="info" sx={{ mb: 1 }}>2️⃣ Selecciona tu framework y genera el script</SoftTypography>
+                      <SoftTypography variant="caption" color="text">Elige <strong>{activeFramework.toUpperCase()}</strong> y haz clic en el botón + para generar tu código personalizado</SoftTypography>
+                    </SoftBox>
+                    <SoftBox p={2} sx={{ backgroundColor: '#f0fff0', borderRadius: '8px', mb: 2, border: '1px solid #bbf7d0' }}>
+                      <SoftTypography variant="body2" fontWeight="bold" color="success" sx={{ mb: 1 }}>3️⃣ Copia e integra</SoftTypography>
+                      <SoftTypography variant="caption" color="text">{doc.step3}</SoftTypography>
+                      <SoftTypography variant="caption" color="text" sx={{ display: 'block', mt: 0.5, fontStyle: 'italic' }}>{doc.step3detail}</SoftTypography>
+                    </SoftBox>
+                    <SoftBox p={2} sx={{ backgroundColor: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
+                      <SoftTypography variant="body2" fontWeight="bold" color="warning" sx={{ mb: 1 }}>⚠️ Importante</SoftTypography>
+                      <SoftTypography variant="caption" color="text">El widget solo funcionará en la URL que hayas configurado por seguridad</SoftTypography>
+                    </SoftBox>
+                  </SoftBox>
+                </Grid>
 
-                <SoftBox p={2} sx={{ backgroundColor: '#f0fff0', borderRadius: '8px', mb: 2, border: '1px solid #bbf7d0' }}>
-                  <SoftTypography variant="body2" fontWeight="bold" color="success" sx={{ mb: 1 }}>
-                    3️⃣ Copia e integra
+                <Grid item xs={12} md={6}>
+                  <SoftTypography variant="h6" gutterBottom>
+                    📍 Dónde Pegar el Código
+                    <SoftTypography component="span" variant="caption" color="info" ml={1}>({activeFramework.toUpperCase()})</SoftTypography>
                   </SoftTypography>
-                  <SoftTypography variant="caption" color="text">
-                    Copia el script y pégalo antes del cierre del tag &lt;/body&gt; en tu HTML
-                  </SoftTypography>
-                </SoftBox>
-
-                <SoftBox p={2} sx={{ backgroundColor: '#fff7ed', borderRadius: '8px', border: '1px solid #fed7aa' }}>
-                  <SoftTypography variant="body2" fontWeight="bold" color="warning" sx={{ mb: 1 }}>
-                    ⚠️ Importante
-                  </SoftTypography>
-                  <SoftTypography variant="caption" color="text">
-                    El widget solo funcionará en la URL que hayas configurado por seguridad
-                  </SoftTypography>
-                </SoftBox>
-              </SoftBox>
-            </Grid>
-
-            <Grid item xs={12} md={6}>
-              <SoftTypography variant="h6" gutterBottom>
-                📍 Dónde Pegar el Código
-              </SoftTypography>
-              <img
-                src={integracionWidgetImg}
-                alt="Dónde pegar el script antes del cierre del body"
-                style={{ width: "100%", borderRadius: "8px", border: "2px solid #e5e7eb" }}
-              />
-              <SoftTypography variant="caption" color="text" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>
-                Pega el script antes del cierre del tag &lt;/body&gt; en tu HTML
-              </SoftTypography>
-            </Grid>
-          </Grid>
-          <SoftBox sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
-            <Box component="button" onClick={() => navigate('/profile')} sx={{
-              background: (theme) => `linear-gradient(90deg, ${theme.palette.info.main} 0%, ${theme.palette.info.dark} 100%)`,
-              color: '#fff',
-              border: 'none',
-              padding: '10px 18px',
-              borderRadius: 8,
-              cursor: 'pointer',
-              fontWeight: 600,
-            }}>
+                  {activeFramework === 'html' ? (
+                    <>
+                      <img src={integracionWidgetImg} alt="Dónde pegar el script" style={{ width: "100%", borderRadius: "8px", border: "2px solid #e5e7eb" }} />
+                      <SoftTypography variant="caption" color="text" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>{doc.where}</SoftTypography>
+                    </>
+                  ) : (
+                    <Box sx={{ backgroundColor: '#1f2937', borderRadius: '8px', p: 2, border: '2px solid #374151' }}>
+                      <Box component="pre" sx={{ color: '#e5e7eb', fontFamily: "'Fira Code', monospace", fontSize: '0.78rem', margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
+                        {doc.code}
+                      </Box>
+                      <SoftTypography variant="caption" sx={{ color: '#9ca3af', mt: 1, display: 'block' }}>{doc.where}</SoftTypography>
+                    </Box>
+                  )}
+                </Grid>
+              </Grid>
+            );
+          })()}
+          <SoftBox mt={4} display="flex" justifyContent="flex-end" gap={2}>
+            <SoftButton variant="outlined" color="error" sx={{ fontWeight: "bold", px: 3 }} onClick={() => navigate('/profile')}>
+              Cancelar
+            </SoftButton>
+            <SoftButton variant="gradient" color="info" sx={{ fontWeight: "bold", px: 3 }} onClick={() => navigate('/profile')}>
               Finalizar
-            </Box>
+            </SoftButton>
           </SoftBox>
         </Card>
       </SoftBox>

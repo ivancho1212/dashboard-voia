@@ -14,6 +14,8 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
     frequencyPenalty: "0.00",
     presencePenalty: "0.00",
     iaProviderId: "",
+    maxTokens: "1024",
+    topP: "1.00",
   });
 
   const [providers, setProviders] = useState([]);
@@ -47,6 +49,8 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
       frequencyPenalty: parseFloat(form.frequencyPenalty) || 0.0,
       presencePenalty: parseFloat(form.presencePenalty) || 0.0,
       iaProviderId: parseInt(form.iaProviderId),
+      maxTokens: parseInt(form.maxTokens) || 1024,
+      topP: parseFloat(form.topP) || 1.0,
     };
 
     if (!payload.modelName || isNaN(payload.iaProviderId)) {
@@ -153,6 +157,37 @@ function ModelConfigCreateForm({ onSubmit, onCancel }) {
           name="presencePenalty"
           placeholder="Ej: 0.00"
           value={form.presencePenalty}
+          onChange={handleChange}
+          type="number"
+          step="0.01"
+          fullWidth
+        />
+      </SoftBox>
+
+      {/* Max Tokens */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Max Tokens (tokens máximos en la respuesta)
+        </SoftTypography>
+        <SoftInput
+          name="maxTokens"
+          placeholder="Ej: 1024"
+          value={form.maxTokens}
+          onChange={handleChange}
+          type="number"
+          fullWidth
+        />
+      </SoftBox>
+
+      {/* Top P */}
+      <SoftBox mb={2}>
+        <SoftTypography variant="caption" color="text">
+          Top P (0.0 - 1.0)
+        </SoftTypography>
+        <SoftInput
+          name="topP"
+          placeholder="Ej: 1.00"
+          value={form.topP}
           onChange={handleChange}
           type="number"
           step="0.01"

@@ -6,7 +6,6 @@ import NeuralBackground from "../../components/NeuralBackground";
 
 const ClientsSection = () => {
   useEffect(() => {
-    console.log("ClientsSection montada / visible");
   }, []);
 
   return (

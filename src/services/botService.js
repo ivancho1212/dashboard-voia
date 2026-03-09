@@ -150,3 +150,16 @@ export async function getBotPhases(botId) {
     throw error;
   }
 }
+
+// Get training sub-channel counts for a bot
+export async function getBotTrainingSummary(botId) {
+  try {
+    const token = localStorage.getItem("token");
+    const response = await axios.get(`${API_BASE}/Bots/${botId}/training-summary`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data; // { documents, urls, texts, interactions }
+  } catch (error) {
+    return null;
+  }
+}
